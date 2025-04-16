@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const lib = @import("mehustin2_lib");
 const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -10,9 +11,16 @@ const c = @cImport({
 
 const sdl_log = std.log.scoped(.sdl);
 
+const AppState = struct {
+    window: ?*c.SDL_Window = null,
+    device: ?*c.SDL_GPUDevice = null,
+};
+
+var app: AppState = .{};
+
 fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
-    _ = argv;
     _ = appstate;
+    _ = argv;
 
     sdl_log.debug("SDL build time version: {d}.{d}.{d}", .{
         c.SDL_MAJOR_VERSION,
@@ -31,8 +39,14 @@ fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
         sdl_log.debug("SDL runtime revision: {s}", .{revision});
     }
 
+    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
+    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
+    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_SCALING, "stretch");
     try errify(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try errify(c.SDL_Init(c.SDL_INIT_VIDEO));
+
+    app.window = try errify(c.SDL_CreateWindow("Mehu Demo", lib.config.width, lib.config.height, c.SDL_WINDOW_RESIZABLE));
+    app.device = try errify(c.SDL_CreateGPUDevice(c.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null));
 
     return c.SDL_APP_CONTINUE;
 }
@@ -113,8 +127,6 @@ fn sdlAppQuitC(appstate: ?*anyopaque, result: c.SDL_AppResult) callconv(.c) void
     sdlAppQuit(appstate, app_err.load() orelse result);
 }
 
-var app_err: ErrorStore = .{};
-
 const ErrorStore = struct {
     const status_not_stored = 0;
     const status_storing = 1;
@@ -152,3 +164,5 @@ const ErrorStore = struct {
         return es.err;
     }
 };
+
+var app_err: ErrorStore = .{};
