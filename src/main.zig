@@ -1,19 +1,21 @@
 const std = @import("std");
-const builtin = @import("builtin");
-const lib = @import("mehustin2_lib");
-const c = @cImport({
+pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
 });
+pub const render = @import("render.zig");
+pub const config: struct {
+    width: u32,
+    height: u32,
+} = @import("config.zon");
 
 const sdl_log = std.log.scoped(.sdl);
 
 const AppState = struct {
-    window: ?*c.SDL_Window = null,
-    device: ?*c.SDL_GPUDevice = null,
+    renderer: ?render.Renderer = null,
 };
 
 var app: AppState = .{};
@@ -42,11 +44,11 @@ fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_SCALING, "stretch");
-    try errify(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
-    try errify(c.SDL_Init(c.SDL_INIT_VIDEO));
+    try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
+    try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
 
-    app.window = try errify(c.SDL_CreateWindow("Mehu Demo", lib.config.width, lib.config.height, c.SDL_WINDOW_RESIZABLE));
-    app.device = try errify(c.SDL_CreateGPUDevice(c.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null));
+    const window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
+    app.renderer = try render.Renderer.init(window);
 
     return c.SDL_APP_CONTINUE;
 }
@@ -62,8 +64,16 @@ fn sdlAppIterate(appstate: ?*anyopaque) !c.SDL_AppResult {
 fn sdlAppEvent(appstate: ?*anyopaque, event: *c.SDL_Event) !c.SDL_AppResult {
     _ = appstate;
 
-    if (event.type == c.SDL_EVENT_QUIT) {
-        return c.SDL_APP_SUCCESS;
+    switch (event.type) {
+        c.SDL_EVENT_QUIT => {
+            return c.SDL_APP_SUCCESS;
+        },
+        c.SDL_EVENT_KEY_DOWN => {
+            if (event.key.key == c.SDLK_ESCAPE) {
+                return c.SDL_APP_SUCCESS;
+            }
+        },
+        else => {},
     }
 
     return c.SDL_APP_CONTINUE;
@@ -76,11 +86,13 @@ fn sdlAppQuit(appstate: ?*anyopaque, result: anyerror!c.SDL_AppResult) void {
         sdl_log.err("{s}", .{c.SDL_GetError()});
     };
 
-    // TODO: deinit code here
+    if (app.renderer) |renderer| {
+        renderer.deinit();
+    }
 }
 
 /// Converts the return value of an SDL function to an error union.
-inline fn errify(value: anytype) error{SdlError}!switch (@typeInfo(@TypeOf(value))) {
+pub inline fn sdlerr(value: anytype) error{SdlError}!switch (@typeInfo(@TypeOf(value))) {
     .bool => void,
     .pointer, .optional => @TypeOf(value.?),
     .int => |info| switch (info.signedness) {
