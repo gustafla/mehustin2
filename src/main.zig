@@ -15,7 +15,8 @@ pub const config: struct {
 const sdl_log = std.log.scoped(.sdl);
 
 const AppState = struct {
-    renderer: ?render.Renderer = null,
+    renderer: render.Renderer = undefined,
+    renderer_initialized: bool = false,
 };
 
 var app: AppState = .{};
@@ -24,22 +25,8 @@ fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
     _ = appstate;
     _ = argv;
 
-    sdl_log.debug("SDL build time version: {d}.{d}.{d}", .{
-        c.SDL_MAJOR_VERSION,
-        c.SDL_MINOR_VERSION,
-        c.SDL_MICRO_VERSION,
-    });
-    sdl_log.debug("SDL build time revision: {s}", .{c.SDL_REVISION});
-    {
-        const version = c.SDL_GetVersion();
-        sdl_log.debug("SDL runtime version: {d}.{d}.{d}", .{
-            c.SDL_VERSIONNUM_MAJOR(version),
-            c.SDL_VERSIONNUM_MINOR(version),
-            c.SDL_VERSIONNUM_MICRO(version),
-        });
-        const revision: [*:0]const u8 = c.SDL_GetRevision();
-        sdl_log.debug("SDL runtime revision: {s}", .{revision});
-    }
+    const revision: [*:0]const u8 = c.SDL_GetRevision();
+    sdl_log.debug("SDL runtime revision: {s}", .{revision});
 
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
@@ -49,6 +36,7 @@ fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
 
     const window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
     app.renderer = try render.Renderer.init(window);
+    app.renderer_initialized = true;
 
     return c.SDL_APP_CONTINUE;
 }
@@ -56,7 +44,7 @@ fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
 fn sdlAppIterate(appstate: ?*anyopaque) !c.SDL_AppResult {
     _ = appstate;
 
-    // TODO: main render code here
+    try app.renderer.render();
 
     return c.SDL_APP_CONTINUE;
 }
@@ -69,8 +57,9 @@ fn sdlAppEvent(appstate: ?*anyopaque, event: *c.SDL_Event) !c.SDL_AppResult {
             return c.SDL_APP_SUCCESS;
         },
         c.SDL_EVENT_KEY_DOWN => {
-            if (event.key.key == c.SDLK_ESCAPE) {
-                return c.SDL_APP_SUCCESS;
+            switch (event.key.key) {
+                c.SDLK_ESCAPE, c.SDLK_Q => return c.SDL_APP_SUCCESS,
+                else => {},
             }
         },
         else => {},
@@ -86,8 +75,8 @@ fn sdlAppQuit(appstate: ?*anyopaque, result: anyerror!c.SDL_AppResult) void {
         sdl_log.err("{s}", .{c.SDL_GetError()});
     };
 
-    if (app.renderer) |renderer| {
-        renderer.deinit();
+    if (app.renderer_initialized) {
+        app.renderer.deinit();
     }
 }
 

@@ -22,7 +22,7 @@ pub const Renderer = struct {
         c.SDL_DestroyWindow(self.window);
     }
 
-    pub fn render(self: Renderer) void {
+    pub fn render(self: Renderer) !void {
         const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(self.device));
         var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
         var width: u32 = 0;
