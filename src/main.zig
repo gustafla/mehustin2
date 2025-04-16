@@ -1,46 +1,154 @@
-//! By convention, main.zig is where your main function lives in the case that
-//! you are building an executable. If you are making a library, the convention
-//! is to delete this file and start with root.zig instead.
-
-pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
-
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // Don't forget to flush!
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
-
-test "use other module" {
-    try std.testing.expectEqual(@as(i32, 150), lib.add(100, 50));
-}
-
-test "fuzz example" {
-    const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
-            _ = context;
-            // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", input));
-        }
-    };
-    try std.testing.fuzz(Context{}, Context.testOne, .{});
-}
-
 const std = @import("std");
-
-/// This imports the separate module containing `root.zig`. Take a look in `build.zig` for details.
 const lib = @import("mehustin2_lib");
+const c = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cInclude("SDL3/SDL.h");
+    @cInclude("SDL3/SDL_revision.h");
+    @cDefine("SDL_MAIN_HANDLED", {});
+    @cInclude("SDL3/SDL_main.h");
+});
+
+const sdl_log = std.log.scoped(.sdl);
+
+fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
+    _ = argv;
+    _ = appstate;
+
+    sdl_log.debug("SDL build time version: {d}.{d}.{d}", .{
+        c.SDL_MAJOR_VERSION,
+        c.SDL_MINOR_VERSION,
+        c.SDL_MICRO_VERSION,
+    });
+    sdl_log.debug("SDL build time revision: {s}", .{c.SDL_REVISION});
+    {
+        const version = c.SDL_GetVersion();
+        sdl_log.debug("SDL runtime version: {d}.{d}.{d}", .{
+            c.SDL_VERSIONNUM_MAJOR(version),
+            c.SDL_VERSIONNUM_MINOR(version),
+            c.SDL_VERSIONNUM_MICRO(version),
+        });
+        const revision: [*:0]const u8 = c.SDL_GetRevision();
+        sdl_log.debug("SDL runtime revision: {s}", .{revision});
+    }
+
+    try errify(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
+    try errify(c.SDL_Init(c.SDL_INIT_VIDEO));
+
+    return c.SDL_APP_CONTINUE;
+}
+
+fn sdlAppIterate(appstate: ?*anyopaque) !c.SDL_AppResult {
+    _ = appstate;
+
+    // TODO: main render code here
+
+    return c.SDL_APP_CONTINUE;
+}
+
+fn sdlAppEvent(appstate: ?*anyopaque, event: *c.SDL_Event) !c.SDL_AppResult {
+    _ = appstate;
+
+    if (event.type == c.SDL_EVENT_QUIT) {
+        return c.SDL_APP_SUCCESS;
+    }
+
+    return c.SDL_APP_CONTINUE;
+}
+
+fn sdlAppQuit(appstate: ?*anyopaque, result: anyerror!c.SDL_AppResult) void {
+    _ = appstate;
+
+    _ = result catch |err| if (err == error.SdlError) {
+        sdl_log.err("{s}", .{c.SDL_GetError()});
+    };
+
+    // TODO: deinit code here
+}
+
+/// Converts the return value of an SDL function to an error union.
+inline fn errify(value: anytype) error{SdlError}!switch (@typeInfo(@TypeOf(value))) {
+    .bool => void,
+    .pointer, .optional => @TypeOf(value.?),
+    .int => |info| switch (info.signedness) {
+        .signed => @TypeOf(@max(0, value)),
+        .unsigned => @TypeOf(value),
+    },
+    else => @compileError("unerrifiable type: " ++ @typeName(@TypeOf(value))),
+} {
+    return switch (@typeInfo(@TypeOf(value))) {
+        .bool => if (!value) error.SdlError,
+        .pointer, .optional => value orelse error.SdlError,
+        .int => |info| switch (info.signedness) {
+            .signed => if (value >= 0) @max(0, value) else error.SdlError,
+            .unsigned => if (value != 0) value else error.SdlError,
+        },
+        else => comptime unreachable,
+    };
+}
+
+pub fn main() !u8 {
+    app_err.reset();
+    var empty_argv: [0:null]?[*:0]u8 = .{};
+    const status: u8 = @truncate(@as(c_uint, @bitCast(c.SDL_RunApp(empty_argv.len, @ptrCast(&empty_argv), sdlMainC, null))));
+    return app_err.load() orelse status;
+}
+
+fn sdlMainC(argc: c_int, argv: ?[*:null]?[*:0]u8) callconv(.c) c_int {
+    return c.SDL_EnterAppMainCallbacks(argc, @ptrCast(argv), sdlAppInitC, sdlAppIterateC, sdlAppEventC, sdlAppQuitC);
+}
+
+fn sdlAppInitC(appstate: ?*?*anyopaque, argc: c_int, argv: ?[*:null]?[*:0]u8) callconv(.c) c.SDL_AppResult {
+    return sdlAppInit(appstate.?, @ptrCast(argv.?[0..@intCast(argc)])) catch |err| app_err.store(err);
+}
+
+fn sdlAppIterateC(appstate: ?*anyopaque) callconv(.c) c.SDL_AppResult {
+    return sdlAppIterate(appstate) catch |err| app_err.store(err);
+}
+
+fn sdlAppEventC(appstate: ?*anyopaque, event: ?*c.SDL_Event) callconv(.c) c.SDL_AppResult {
+    return sdlAppEvent(appstate, event.?) catch |err| app_err.store(err);
+}
+
+fn sdlAppQuitC(appstate: ?*anyopaque, result: c.SDL_AppResult) callconv(.c) void {
+    sdlAppQuit(appstate, app_err.load() orelse result);
+}
+
+var app_err: ErrorStore = .{};
+
+const ErrorStore = struct {
+    const status_not_stored = 0;
+    const status_storing = 1;
+    const status_stored = 2;
+
+    status: c.SDL_AtomicInt = .{},
+    err: anyerror = undefined,
+    trace_index: usize = undefined,
+    trace_addrs: [32]usize = undefined,
+
+    fn reset(es: *ErrorStore) void {
+        _ = c.SDL_SetAtomicInt(&es.status, status_not_stored);
+    }
+
+    fn store(es: *ErrorStore, err: anyerror) c.SDL_AppResult {
+        if (c.SDL_CompareAndSwapAtomicInt(&es.status, status_not_stored, status_storing)) {
+            es.err = err;
+            if (@errorReturnTrace()) |src_trace| {
+                es.trace_index = src_trace.index;
+                const len = @min(es.trace_addrs.len, src_trace.instruction_addresses.len);
+                @memcpy(es.trace_addrs[0..len], src_trace.instruction_addresses[0..len]);
+            }
+            _ = c.SDL_SetAtomicInt(&es.status, status_stored);
+        }
+        return c.SDL_APP_FAILURE;
+    }
+
+    fn load(es: *ErrorStore) ?anyerror {
+        if (c.SDL_GetAtomicInt(&es.status) != status_stored) return null;
+        if (@errorReturnTrace()) |dst_trace| {
+            dst_trace.index = es.trace_index;
+            const len = @min(dst_trace.instruction_addresses.len, es.trace_addrs.len);
+            @memcpy(dst_trace.instruction_addresses[0..len], es.trace_addrs[0..len]);
+        }
+        return es.err;
+    }
+};

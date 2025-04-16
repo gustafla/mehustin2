@@ -15,6 +15,9 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    // Create variable for release setting
+    const release_build = optimize != .Debug;
+
     // This creates a "module", which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Every executable or library we compile will be based on one or more modules.
@@ -26,7 +29,19 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .strip = release_build,
     });
+
+    // SDL3 dependency
+    const sdl_dep = b.dependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .preferred_linkage = .static,
+        .strip = release_build,
+        //.install_build_config_h = false,
+    });
+    const sdl_lib = sdl_dep.artifact("SDL3");
+    sdl_lib.lto = if (release_build) .full else null;
 
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
@@ -37,7 +52,11 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .strip = release_build,
     });
+
+    // Link SDL
+    exe_mod.linkLibrary(sdl_lib);
 
     // Modules can depend on one another using the `std.Build.Module.addImport` function.
     // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
@@ -52,6 +71,7 @@ pub fn build(b: *std.Build) void {
         .name = "mehustin2",
         .root_module = lib_mod,
     });
+    lib.lto = if (release_build) .full else null;
 
     // This declares intent for the library to be installed into the standard
     // location when the user invokes the "install" step (the default step when
@@ -64,6 +84,7 @@ pub fn build(b: *std.Build) void {
         .name = "mehustin2",
         .root_module = exe_mod,
     });
+    exe.lto = if (release_build) .full else null;
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
