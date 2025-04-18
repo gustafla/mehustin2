@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
@@ -10,19 +11,23 @@ pub const render = @import("render.zig");
 pub const config: struct {
     width: u32,
     height: u32,
+    data_dir: []const u8,
+    shader_dir: []const u8,
 } = @import("config.zon");
+const Allocator = std.mem.Allocator;
 
-const sdl_log = std.log.scoped(.sdl);
+pub const sdl_log = std.log.scoped(.sdl);
+pub const res_log = std.log.scoped(.res);
 
 const AppState = struct {
+    allocator: Allocator = undefined,
     renderer: render.Renderer = undefined,
     renderer_initialized: bool = false,
 };
 
 var app: AppState = .{};
 
-fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
-    _ = appstate;
+fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
 
     const revision: [*:0]const u8 = c.SDL_GetRevision();
@@ -34,24 +39,25 @@ fn sdlAppInit(appstate: ?*?*anyopaque, argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
 
+    const alloc = if (builtin.mode == .Debug) blk: {
+        var da = std.heap.DebugAllocator(.{}).init;
+        break :blk da.allocator();
+    } else std.heap.raw_c_allocator;
+
     const window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
-    app.renderer = try render.Renderer.init(window);
+    app.renderer = try render.Renderer.init(alloc, window);
     app.renderer_initialized = true;
 
     return c.SDL_APP_CONTINUE;
 }
 
-fn sdlAppIterate(appstate: ?*anyopaque) !c.SDL_AppResult {
-    _ = appstate;
-
+fn sdlAppIterate() !c.SDL_AppResult {
     try app.renderer.render();
 
     return c.SDL_APP_CONTINUE;
 }
 
-fn sdlAppEvent(appstate: ?*anyopaque, event: *c.SDL_Event) !c.SDL_AppResult {
-    _ = appstate;
-
+fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
     switch (event.type) {
         c.SDL_EVENT_QUIT => {
             return c.SDL_APP_SUCCESS;
@@ -68,9 +74,7 @@ fn sdlAppEvent(appstate: ?*anyopaque, event: *c.SDL_Event) !c.SDL_AppResult {
     return c.SDL_APP_CONTINUE;
 }
 
-fn sdlAppQuit(appstate: ?*anyopaque, result: anyerror!c.SDL_AppResult) void {
-    _ = appstate;
-
+fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     _ = result catch |err| if (err == error.SdlError) {
         sdl_log.err("{s}", .{c.SDL_GetError()});
     };
@@ -113,19 +117,23 @@ fn sdlMainC(argc: c_int, argv: ?[*:null]?[*:0]u8) callconv(.c) c_int {
 }
 
 fn sdlAppInitC(appstate: ?*?*anyopaque, argc: c_int, argv: ?[*:null]?[*:0]u8) callconv(.c) c.SDL_AppResult {
-    return sdlAppInit(appstate.?, @ptrCast(argv.?[0..@intCast(argc)])) catch |err| app_err.store(err);
+    _ = appstate;
+    return sdlAppInit(@ptrCast(argv.?[0..@intCast(argc)])) catch |err| app_err.store(err);
 }
 
 fn sdlAppIterateC(appstate: ?*anyopaque) callconv(.c) c.SDL_AppResult {
-    return sdlAppIterate(appstate) catch |err| app_err.store(err);
+    _ = appstate;
+    return sdlAppIterate() catch |err| app_err.store(err);
 }
 
 fn sdlAppEventC(appstate: ?*anyopaque, event: ?*c.SDL_Event) callconv(.c) c.SDL_AppResult {
-    return sdlAppEvent(appstate, event.?) catch |err| app_err.store(err);
+    _ = appstate;
+    return sdlAppEvent(event.?) catch |err| app_err.store(err);
 }
 
 fn sdlAppQuitC(appstate: ?*anyopaque, result: c.SDL_AppResult) callconv(.c) void {
-    sdlAppQuit(appstate, app_err.load() orelse result);
+    _ = appstate;
+    sdlAppQuit(app_err.load() orelse result);
 }
 
 const ErrorStore = struct {

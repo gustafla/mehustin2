@@ -1,4 +1,6 @@
 .{
     .width = 800,
     .height = 600,
+    .data_dir = "data",
+    .shader_dir = "shaders",
 }
