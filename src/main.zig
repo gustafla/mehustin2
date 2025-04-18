@@ -20,7 +20,7 @@ pub const sdl_log = std.log.scoped(.sdl);
 pub const res_log = std.log.scoped(.res);
 
 const AppState = struct {
-    allocator: Allocator = undefined,
+    alloc: Allocator = undefined,
     renderer: render.Renderer = undefined,
     renderer_initialized: bool = false,
 };
@@ -39,13 +39,8 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
 
-    const alloc = if (builtin.mode == .Debug) blk: {
-        var da = std.heap.DebugAllocator(.{}).init;
-        break :blk da.allocator();
-    } else std.heap.raw_c_allocator;
-
     const window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
-    app.renderer = try render.Renderer.init(alloc, window);
+    app.renderer = try render.Renderer.init(app.alloc, window);
     app.renderer_initialized = true;
 
     return c.SDL_APP_CONTINUE;
@@ -106,9 +101,23 @@ pub inline fn sdlerr(value: anytype) error{SdlError}!switch (@typeInfo(@TypeOf(v
 }
 
 pub fn main() !u8 {
+    // Initialize error store
     app_err.reset();
+
+    // Initialize allocator
+    var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
+    app.alloc = if (builtin.mode == .Debug) blk: {
+        debug_allocator = std.heap.DebugAllocator(.{}).init;
+        break :blk debug_allocator.allocator();
+    } else std.heap.raw_c_allocator;
+    defer if (builtin.mode == .Debug) {
+        _ = debug_allocator.detectLeaks();
+    };
+
+    // Start SDL
     var empty_argv: [0:null]?[*:0]u8 = .{};
     const status: u8 = @truncate(@as(c_uint, @bitCast(c.SDL_RunApp(empty_argv.len, @ptrCast(&empty_argv), sdlMainC, null))));
+
     return app_err.load() orelse status;
 }
 
