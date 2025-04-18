@@ -1,20 +1,16 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const root = @import("root");
+const sdlerr = root.sdlerr;
 const config = root.config;
 const c = root.c;
 
-const Stage = enum(c_int) {
+const Stage = enum(c_uint) {
     vert = c.SDL_GPU_SHADERSTAGE_VERTEX,
     frag = c.SDL_GPU_SHADERSTAGE_FRAGMENT,
 };
 
-pub const ShaderData = struct {
-    data: []const u8,
-    stage: c_int,
-};
-
-pub fn loadShader(alloc: Allocator, name: []const u8) !ShaderData {
+pub fn loadShader(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8) !*c.SDL_GPUShader {
     // Determine shader stage from extension
     const extension = std.fs.path.extension(name);
     if (extension.len == 0) return error.NoStageExtension;
@@ -30,9 +26,19 @@ pub fn loadShader(alloc: Allocator, name: []const u8) !ShaderData {
     root.res_log.info("Loading {s}\n", .{path});
     const file = try std.fs.cwd().openFile(name, .{});
     const data = try file.readToEndAlloc(alloc, 1024 * 1024);
+    defer alloc.free(data);
 
-    return .{
-        .data = data,
+    // Load into SDL GPU
+    return try sdlerr(c.SDL_CreateGPUShader(device, &.{
+        .code_size = data.len,
+        .code = data.ptr,
+        .entrypoint = "main",
+        .format = c.SDL_GPU_SHADERFORMAT_SPIRV,
         .stage = @intFromEnum(stage),
-    };
+        .num_samplers = 0,
+        .num_storage_textures = 0,
+        .num_storage_buffers = 0,
+        .num_uniform_buffers = 0,
+        .props = 0,
+    }));
 }
