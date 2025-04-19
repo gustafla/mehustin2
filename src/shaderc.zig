@@ -1,0 +1,74 @@
+const std = @import("std");
+const log = std.log.scoped(.shaderc);
+const c = @cImport({
+    @cInclude("shaderc/shaderc.h");
+});
+const Allocator = std.mem.Allocator;
+
+const ShaderKind = enum(c_uint) {
+    vert = c.shaderc_glsl_vertex_shader,
+    frag = c.shaderc_glsl_fragment_shader,
+};
+
+pub fn loadFileNullTerminated(alloc: Allocator, path: []const u8) ![:0]u8 {
+    const file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+    const stat = try file.stat();
+    const buffer = try alloc.allocSentinel(u8, stat.size, 0);
+    std.debug.assert(try file.readAll(buffer[0..]) == stat.size);
+    return buffer;
+}
+
+pub fn compileShader(alloc: Allocator, glsl: []const u8, source_name: [:0]const u8) ![]u8 {
+    // Initialize shaderc
+    const compiler = c.shaderc_compiler_initialize() orelse return error.ShadercInitialize;
+    defer c.shaderc_compiler_release(compiler);
+    const options = c.shaderc_compile_options_initialize() orelse return error.ShadercInitialize;
+    defer c.shaderc_compile_options_release(options);
+    c.shaderc_compile_options_set_optimization_level(options, c.shaderc_optimization_level_size);
+    c.shaderc_compile_options_set_source_language(options, c.shaderc_source_language_glsl);
+    c.shaderc_compile_options_set_target_env(options, c.shaderc_target_env_vulkan, c.shaderc_env_version_vulkan_1_0);
+    c.shaderc_compile_options_set_target_spirv(options, c.shaderc_spirv_version_1_0);
+
+    // Determine shader stage/kind from file extension
+    const extension = std.fs.path.extension(source_name);
+    if (extension.len == 0) return error.NoStageExtension;
+    const kind = @intFromEnum(std.meta.stringToEnum(ShaderKind, extension[1..]) orelse return error.NoStageExtension);
+
+    // Compile
+    const result = c.shaderc_compile_into_spv(compiler, glsl.ptr, glsl.len, kind, source_name, "main", options);
+    defer c.shaderc_result_release(result);
+
+    // Handle and store errors
+    if (c.shaderc_result_get_compilation_status(result) != c.shaderc_compilation_status_success) {
+        const err = c.shaderc_result_get_error_message(result);
+        shader_err.store(err);
+        return error.ShaderCompilation;
+    }
+
+    // Take output
+    const len = c.shaderc_result_get_length(result);
+    const bytes = c.shaderc_result_get_bytes(result);
+    const spv = try alloc.alloc(u8, len);
+    @memcpy(spv, bytes[0..len]);
+
+    return spv;
+}
+
+const ErrorStore = struct {
+    message_buf: [1024 * 8]u8 = undefined,
+    message_len: usize = 0,
+
+    pub fn store(es: *ErrorStore, message: [*c]const u8) void {
+        const slice = std.mem.span(message);
+        const minlen = @min(slice.len, es.message_buf.len);
+        @memcpy(es.message_buf[0..minlen], slice[0..minlen]);
+        es.message_len = minlen;
+    }
+
+    pub fn load(es: *ErrorStore) []const u8 {
+        return es.message_buf[0..es.message_len];
+    }
+};
+
+pub threadlocal var shader_err: ErrorStore = .{};
