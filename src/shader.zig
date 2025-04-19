@@ -23,8 +23,8 @@ pub fn loadShader(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8) 
     defer alloc.free(path);
 
     // Load SPIR-V binary
-    root.res_log.info("Loading {s}\n", .{path});
-    const file = try std.fs.cwd().openFile(name, .{});
+    root.res_log.info("Loading {s}", .{path});
+    const file = try std.fs.cwd().openFile(path, .{});
     const data = try file.readToEndAlloc(alloc, 1024 * 1024);
     defer alloc.free(data);
 

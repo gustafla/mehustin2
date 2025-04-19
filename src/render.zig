@@ -53,6 +53,7 @@ pub const Renderer = struct {
     }
 
     pub fn deinit(self: Renderer) void {
+        c.SDL_ReleaseGPUGraphicsPipeline(self.device, self.pipeline);
         c.SDL_DestroyGPUDevice(self.device);
         c.SDL_DestroyWindow(self.window);
     }
@@ -63,8 +64,17 @@ pub const Renderer = struct {
         var width: u32 = 0;
         var height: u32 = 0;
         try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(cmdbuf, self.window, &swapchain_texture, &width, &height));
-        if (swapchain_texture) |_| {
-            // TODO: Render pass here
+        if (swapchain_texture) |texture| {
+            const color_target_info = std.mem.zeroInit(c.SDL_GPUColorTargetInfo, .{
+                .texture = texture,
+                .clear_color = .{ 0.0, 0.0, 0.0, 1.0 },
+                .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                .store_op = c.SDL_GPU_STOREOP_STORE,
+            });
+            const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &color_target_info, 1, null);
+            c.SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline);
+            c.SDL_DrawGPUPrimitives(render_pass, 4, 1, 0, 0);
+            c.SDL_EndGPURenderPass(render_pass);
         }
 
         try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
