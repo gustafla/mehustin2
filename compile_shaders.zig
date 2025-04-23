@@ -1,5 +1,5 @@
 const std = @import("std");
-const shaderc = @import("src/shaderc.zig");
+const shaderc = @import("src/shader/compiler.zig");
 const log = std.log.scoped(.shaders);
 const config_path = "src/config.zon";
 const Config = struct {

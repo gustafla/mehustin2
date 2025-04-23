@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "use_shaderc", use_shaderc);
 
     if (!compile_shaders and !use_shaderc) {
-        std.log.warn("Not using runtime shaderc but also compile_shaders is disabled. Shaders won't be built.", .{});
+        std.log.warn("-Dcompile-shaders is disabled and -Duse-shaderc is disabled. Shaders will not be compiled.", .{});
     }
 
     // Add SDL3 dependency

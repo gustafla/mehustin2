@@ -58,7 +58,7 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8)
 }
 
 fn loadShaderGlsl(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8) !*c.SDL_GPUShader {
-    const shaderc = @import("shaderc.zig");
+    const shaderc = @import("shader/compiler.zig");
 
     // Determine shader stage from extension
     const stage = try stageFromExtension(name);
