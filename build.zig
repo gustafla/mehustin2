@@ -19,12 +19,8 @@ const Config = struct {
 };
 
 pub fn build(b: *std.Build) void {
-    // Init allocator
-    var dba = std.heap.DebugAllocator(.{}).init;
-    const alloc = dba.allocator();
-
     // Load config
-    const config = Config.init(alloc) catch @panic("Can't load " ++ Config.PATH);
+    const config = Config.init(b.allocator) catch @panic("Can't load " ++ Config.PATH);
 
     // Use standard target options
     const target = b.standardTargetOptions(.{});
@@ -109,7 +105,7 @@ pub fn build(b: *std.Build) void {
         while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
             if (entry.kind != .file) continue;
             //Define input and output paths
-            const input_path = std.fs.path.join(alloc, &[_][]const u8{ config.shader_dir, entry.name }) catch @panic("OOM");
+            const input_path = std.fs.path.join(b.allocator, &[_][]const u8{ config.shader_dir, entry.name }) catch @panic("OOM");
             const compile_shaders_run = b.addRunArtifact(compile_shaders_exe);
             const compile_shaders_output = compile_shaders_run.addPrefixedOutputDirectoryArg("-o", config.shader_dir);
             compile_shaders_run.addFileArg(b.path(input_path));
