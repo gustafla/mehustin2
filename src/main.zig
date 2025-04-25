@@ -8,13 +8,31 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL_main.h");
 });
 pub const render = @import("render.zig");
+const Allocator = std.mem.Allocator;
+const File = std.fs.File;
+
 pub const config: struct {
     width: u32,
     height: u32,
     data_dir: []const u8,
     shader_dir: []const u8,
+
+    pub fn openDataFile(self: @This(), alloc: Allocator, name: []const u8) !File {
+        // Try to open data file from executable directory
+        const rel_path = try std.fs.path.join(alloc, &[_][]const u8{ self.data_dir, name });
+        defer alloc.free(rel_path);
+        const self_path = try std.fs.selfExeDirPathAlloc(alloc);
+        defer alloc.free(self_path);
+        const abs_path = try std.fs.path.join(alloc, &[_][]const u8{ self_path, rel_path });
+        defer alloc.free(abs_path);
+        if (std.fs.openFileAbsolute(abs_path, .{}) catch null) |file| {
+            return file;
+        }
+
+        // Fallback to relative path open
+        return std.fs.cwd().openFile(rel_path, .{});
+    }
 } = @import("config.zon");
-const Allocator = std.mem.Allocator;
 
 pub const sdl_log = std.log.scoped(.sdl);
 pub const res_log = std.log.scoped(.res);

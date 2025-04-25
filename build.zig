@@ -1,6 +1,31 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const Config = struct {
+    const PATH = "src/config.zon";
+
+    data_dir: []const u8,
+    shader_dir: []const u8,
+
+    fn init(alloc: Allocator) !Config {
+        std.log.info("Loading {s}", .{PATH});
+        const file = try std.fs.cwd().openFile(PATH, .{});
+        defer file.close();
+        const stat = try file.stat();
+        const buffer = try alloc.allocSentinel(u8, stat.size, 0);
+        std.debug.assert(try file.readAll(buffer[0..]) == stat.size);
+        return try std.zon.parse.fromSlice(Config, alloc, buffer, null, .{ .ignore_unknown_fields = true });
+    }
+};
 
 pub fn build(b: *std.Build) void {
+    // Init allocator
+    var dba = std.heap.DebugAllocator(.{}).init;
+    const alloc = dba.allocator();
+
+    // Load config
+    const config = Config.init(alloc) catch @panic("Can't load " ++ Config.PATH);
+
     // Use standard target options
     const target = b.standardTargetOptions(.{});
 
@@ -66,18 +91,35 @@ pub fn build(b: *std.Build) void {
     // Add shader compilation to the build graph if requested
     if (compile_shaders) {
         const compile_shaders_mod = b.createModule(.{
-            .root_source_file = b.path("./compile_shaders.zig"),
+            .root_source_file = b.path("src/shader/compiler.zig"),
             .target = b.resolveTargetQuery(.{}), // Native
             .optimize = .Debug,
         });
         compile_shaders_mod.linkSystemLibrary("shaderc", .{});
         const compile_shaders_exe = b.addExecutable(.{
-            .name = "compile_shaders",
+            .name = "shader_compiler",
             .root_module = compile_shaders_mod,
         });
         compile_shaders_exe.linkLibC();
-        const compile_shaders_run = b.addRunArtifact(compile_shaders_exe);
-        b.getInstallStep().dependOn(&compile_shaders_run.step);
+
+        // Create compiler run step for each shader
+        var source_dir = std.fs.cwd().openDir(config.shader_dir, .{ .iterate = true }) catch @panic("Can't open shader dir");
+        defer source_dir.close();
+        var iter = source_dir.iterate();
+        while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
+            if (entry.kind != .file) continue;
+            //Define input and output paths
+            const input_path = std.fs.path.join(alloc, &[_][]const u8{ config.shader_dir, entry.name }) catch @panic("OOM");
+            const compile_shaders_run = b.addRunArtifact(compile_shaders_exe);
+            const compile_shaders_output = compile_shaders_run.addPrefixedOutputDirectoryArg("-o", config.shader_dir);
+            compile_shaders_run.addFileArg(b.path(input_path));
+            b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+                .source_dir = compile_shaders_output,
+                .install_dir = .bin,
+                .install_subdir = config.data_dir,
+            }).step);
+            b.getInstallStep().dependOn(&compile_shaders_run.step);
+        }
     }
 
     // Create a Run step in the build graph

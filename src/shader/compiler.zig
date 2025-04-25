@@ -1,5 +1,5 @@
 const std = @import("std");
-const log = std.log.scoped(.shaderc);
+const log = std.log.scoped(.shaders);
 const c = @cImport({
     @cInclude("shaderc/shaderc.h");
 });
@@ -72,3 +72,69 @@ const ErrorStore = struct {
 };
 
 pub threadlocal var shader_err: ErrorStore = .{};
+
+// Build-time compiler binary:
+
+const Args = struct {
+    output_dir: [:0]const u8,
+    input_file: [:0]const u8,
+
+    fn init() !Args {
+        var args = std.process.args();
+        std.debug.assert(args.skip());
+
+        var output_dir: ?[:0]const u8 = null;
+        var input_file: ?[:0]const u8 = null;
+
+        while (args.next()) |arg| {
+            if (std.mem.startsWith(u8, arg, "-o")) {
+                output_dir = arg[2..];
+            }
+            input_file = arg;
+        }
+
+        return .{
+            .output_dir = output_dir orelse {
+                log.err("Missing output directory (-o./dir)", .{});
+                return error.NoOutputDir;
+            },
+            .input_file = input_file orelse {
+                log.err("Missing input file", .{});
+                return error.NoInputFile;
+            },
+        };
+    }
+};
+
+fn compileFile(alloc: Allocator, input_path: [:0]const u8, output_path: []const u8) !void {
+    const glsl = try loadFileNullTerminated(alloc, input_path);
+    defer alloc.free(glsl);
+
+    const file = try std.fs.cwd().createFile(output_path, .{ .truncate = true });
+    defer file.close();
+
+    const spirv = compileShader(alloc, glsl, input_path) catch |err| {
+        log.err("{s}", .{shader_err.load()});
+        return err;
+    };
+    defer alloc.free(spirv);
+
+    try file.writeAll(spirv);
+}
+
+pub fn main() !void {
+    const args = try Args.init();
+
+    // Initialize allocator
+    var allocator = std.heap.DebugAllocator(.{}).init;
+    var arena = std.heap.ArenaAllocator.init(allocator.allocator());
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    const basename = std.fs.path.basename(args.input_file);
+    const output_file = try std.mem.join(alloc, ".", &[_][]const u8{ basename, "spv" });
+    const output_path = try std.fs.path.join(alloc, &[_][]const u8{ args.output_dir, output_file });
+
+    // Invoke shaderc
+    try compileFile(alloc, args.input_file, output_path);
+}

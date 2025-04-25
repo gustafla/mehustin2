@@ -32,12 +32,10 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8)
     // Allocate relative path to SPIR-V file
     const spirv_name = try std.mem.concat(alloc, u8, &[_][]const u8{ name, ".spv" });
     defer alloc.free(spirv_name);
-    const path = try std.fs.path.join(alloc, &[_][]const u8{ config.data_dir, config.shader_dir, spirv_name });
-    defer alloc.free(path);
 
     // Load SPIR-V binary
-    root.res_log.info("Loading {s}", .{path});
-    const file = try std.fs.cwd().openFile(path, .{});
+    root.res_log.info("Loading {s}", .{spirv_name});
+    const file = try config.openDataFile(alloc, spirv_name);
     defer file.close();
     const data = try file.readToEndAlloc(alloc, 1024 * 1024);
     defer alloc.free(data);
