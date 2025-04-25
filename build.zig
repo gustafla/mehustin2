@@ -113,14 +113,27 @@ pub fn build(b: *std.Build) void {
             const compile_shaders_run = b.addRunArtifact(compile_shaders_exe);
             const compile_shaders_output = compile_shaders_run.addPrefixedOutputDirectoryArg("-o", config.shader_dir);
             compile_shaders_run.addFileArg(b.path(input_path));
-            b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+
+            // Create install step
+            const shader_install = b.addInstallDirectory(.{
                 .source_dir = compile_shaders_output,
                 .install_dir = .bin,
                 .install_subdir = config.data_dir,
-            }).step);
-            b.getInstallStep().dependOn(&compile_shaders_run.step);
+            });
+            shader_install.step.dependOn(&compile_shaders_run.step);
+            b.getInstallStep().dependOn(&shader_install.step);
         }
     }
+
+    // Add data files to bin
+    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path(config.data_dir),
+        .install_dir = .bin,
+        .install_subdir = config.data_dir,
+    }).step);
+
+    // Add README to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(b.path("README-RELEASE.md"), "README.md").step);
 
     // Create a Run step in the build graph
     const run_cmd = b.addRunArtifact(exe);
