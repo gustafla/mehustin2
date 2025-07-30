@@ -35,7 +35,7 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8)
 
     // Load SPIR-V binary
     root.res_log.info("Loading {s}", .{spirv_name});
-    const file = try config.openDataFile(alloc, spirv_name);
+    const file = try config.openDataFile(spirv_name);
     defer file.close();
     const data = try file.readToEndAlloc(alloc, 1024 * 1024);
     defer alloc.free(data);

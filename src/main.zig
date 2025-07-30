@@ -17,10 +17,17 @@ pub const config: struct {
     data_dir: []const u8,
     shader_dir: []const u8,
 
-    pub fn openDataFile(self: @This(), alloc: Allocator, name: []const u8) !File {
-        const rel_path = try std.fs.path.join(alloc, &[_][]const u8{ self.data_dir, name });
-        defer alloc.free(rel_path);
-        return std.fs.cwd().openFile(rel_path, .{});
+    pub fn openDataFile(self: @This(), name: []const u8) !File {
+        const BUF_SIZE = 64;
+        var path_buf: [BUF_SIZE]u8 = undefined;
+        const path_len = self.data_dir.len + 1 + name.len;
+        if (path_len > BUF_SIZE) {
+            return error.DataFilePathTooLong;
+        }
+        @memcpy(&path_buf, self.data_dir);
+        path_buf[self.data_dir.len] = std.fs.path.sep;
+        @memcpy(path_buf[self.data_dir.len + 1 .. path_len], name);
+        return std.fs.cwd().openFile(path_buf[0..path_len], .{});
     }
 } = @import("config.zon");
 
