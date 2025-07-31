@@ -7,12 +7,17 @@ const c = root.c;
 const sdlerr = root.sdlerr;
 
 pub const Renderer = struct {
-    window: *c.SDL_Window,
     device: *c.SDL_GPUDevice,
     pipeline: *c.SDL_GPUGraphicsPipeline,
 
+    pub fn deinit(self: Renderer) void {
+        c.SDL_ReleaseGPUGraphicsPipeline(self.device, self.pipeline);
+        c.SDL_DestroyGPUDevice(self.device);
+    }
+
     pub fn init(alloc: Allocator, window: *c.SDL_Window) !Renderer {
         const device = try sdlerr(c.SDL_CreateGPUDevice(c.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null));
+        errdefer c.SDL_DestroyGPUDevice(device);
         try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window));
 
         const vert = try shader.loadShader(alloc, device, "quad.vert");
@@ -44,38 +49,39 @@ pub const Renderer = struct {
                 .color_target_descriptions = &[_]c.SDL_GPUColorTargetDescription{.{ .format = swapchain_format }},
             },
         })));
+        errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
 
         return .{
-            .window = window,
             .device = device,
             .pipeline = pipeline,
         };
     }
 
-    pub fn deinit(self: Renderer) void {
-        c.SDL_ReleaseGPUGraphicsPipeline(self.device, self.pipeline);
-        c.SDL_DestroyGPUDevice(self.device);
-        c.SDL_DestroyWindow(self.window);
-    }
-
     pub fn render(self: Renderer) !void {
         const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(self.device));
-        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+        errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
         var width: u32 = 0;
         var height: u32 = 0;
-        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(cmdbuf, self.window, &swapchain_texture, &width, &height));
-        if (swapchain_texture) |texture| {
-            const color_target_info = std.mem.zeroInit(c.SDL_GPUColorTargetInfo, .{
-                .texture = texture,
-                .clear_color = .{ 0.0, 0.0, 0.0, 1.0 },
-                .load_op = c.SDL_GPU_LOADOP_CLEAR,
-                .store_op = c.SDL_GPU_STOREOP_STORE,
-            });
-            const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &color_target_info, 1, null);
-            c.SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline);
-            c.SDL_DrawGPUPrimitives(render_pass, 4, 1, 0, 0);
-            c.SDL_EndGPURenderPass(render_pass);
-        }
+
+        const swapchain_texture = blk: {
+            var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+            try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(cmdbuf, root.window, &swapchain_texture, &width, &height));
+            break :blk swapchain_texture orelse {
+                try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
+                return;
+            };
+        };
+
+        const color_target_info = std.mem.zeroInit(c.SDL_GPUColorTargetInfo, .{
+            .texture = swapchain_texture,
+            .clear_color = .{ 0.0, 0.0, 0.0, 1.0 },
+            .load_op = c.SDL_GPU_LOADOP_CLEAR,
+            .store_op = c.SDL_GPU_STOREOP_STORE,
+        });
+        const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &color_target_info, 1, null);
+        c.SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline);
+        c.SDL_DrawGPUPrimitives(render_pass, 4, 1, 0, 0);
+        c.SDL_EndGPURenderPass(render_pass);
 
         try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
     }

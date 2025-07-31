@@ -34,13 +34,11 @@ pub const config: struct {
 pub const sdl_log = std.log.scoped(.sdl);
 pub const res_log = std.log.scoped(.res);
 
-const AppState = struct {
-    alloc: Allocator = undefined,
-    renderer: render.Renderer = undefined,
-    renderer_initialized: bool = false,
-};
-
-var app: AppState = .{};
+// Root globals
+var initialized: bool = false;
+pub var alloc: Allocator = undefined;
+pub var window: *c.SDL_Window = undefined;
+var renderer: render.Renderer = undefined;
 
 fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
@@ -54,15 +52,16 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
 
-    const window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
-    app.renderer = try render.Renderer.init(app.alloc, window);
-    app.renderer_initialized = true;
+    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
+    renderer = try render.Renderer.init(alloc, window);
+
+    initialized = true;
 
     return c.SDL_APP_CONTINUE;
 }
 
 fn sdlAppIterate() !c.SDL_AppResult {
-    try app.renderer.render();
+    try renderer.render();
 
     return c.SDL_APP_CONTINUE;
 }
@@ -89,9 +88,10 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
         sdl_log.err("{s}", .{c.SDL_GetError()});
     };
 
-    if (app.renderer_initialized) {
-        app.renderer.deinit();
-    }
+    if (initialized) {
+        renderer.deinit();
+        c.SDL_DestroyWindow(window);
+    } else @panic("sdlAppQuit called before sdlAppInit");
 }
 
 /// Converts the return value of an SDL function to an error union.
@@ -121,7 +121,7 @@ pub fn main() !u8 {
 
     // Initialize allocator
     var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
-    app.alloc = if (builtin.mode == .Debug) blk: {
+    alloc = if (builtin.mode == .Debug) blk: {
         debug_allocator = std.heap.DebugAllocator(.{}).init;
         break :blk debug_allocator.allocator();
     } else std.heap.raw_c_allocator;
