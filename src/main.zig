@@ -27,7 +27,7 @@ pub const config: struct {
         if (path_len + 1 > BUF_SIZE) {
             return error.DataFilePathTooLong;
         }
-        @memset(path_buf, 0);
+        @memset(&path_buf, 0);
         @memcpy(&path_buf, self.data_dir);
         path_buf[self.data_dir.len] = std.fs.path.sep;
         @memcpy(path_buf[self.data_dir.len + 1 .. path_len], name);
@@ -35,7 +35,7 @@ pub const config: struct {
     }
 
     pub fn openDataFile(self: @This(), name: []const u8) !File {
-        return std.fs.cwd().openFile(self.dataFilePath(name), .{});
+        return std.fs.cwd().openFile(try self.dataFilePath(name), .{});
     }
 } = @import("config.zon");
 
