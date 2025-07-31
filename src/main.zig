@@ -9,44 +9,17 @@ pub const c = @cImport({
     @cDefine("STB_VORBIS_HEADER_ONLY", {});
     @cInclude("stb_vorbis.c");
 });
+const util = @import("util.zig");
 pub const render = @import("render.zig");
 pub const audio = @import("audio.zig");
-const Allocator = std.mem.Allocator;
-const File = std.fs.File;
-
-pub const config: struct {
-    width: u32,
-    height: u32,
-    data_dir: []const u8,
-    shader_dir: []const u8,
-
-    pub fn dataFilePath(self: @This(), name: []const u8) ![]const u8 {
-        const BUF_SIZE = 64;
-        var path_buf: [BUF_SIZE]u8 = undefined;
-        const path_len = self.data_dir.len + 1 + name.len;
-        if (path_len + 1 > BUF_SIZE) {
-            return error.DataFilePathTooLong;
-        }
-        @memset(&path_buf, 0);
-        @memcpy(&path_buf, self.data_dir);
-        path_buf[self.data_dir.len] = std.fs.path.sep;
-        @memcpy(path_buf[self.data_dir.len + 1 .. path_len], name);
-        return path_buf[0..path_len];
-    }
-
-    pub fn openDataFile(self: @This(), name: []const u8) !File {
-        return std.fs.cwd().openFile(try self.dataFilePath(name), .{});
-    }
-} = @import("config.zon");
 
 pub const sdl_log = std.log.scoped(.sdl);
-pub const res_log = std.log.scoped(.res);
 
-// Deinitialization with a stack
+// Track deinitialization with a stack
 const Resource = enum {
     window,
     renderer,
-    player,
+    audio,
 
     const N = @typeInfo(@This()).@"enum".fields.len;
     var buffer = [_]Resource{undefined} ** N;
@@ -59,10 +32,9 @@ const Resource = enum {
 };
 
 // Root globals
-pub var alloc: Allocator = undefined;
+pub var alloc: std.mem.Allocator = undefined;
 pub var window: *c.SDL_Window = undefined;
 var renderer: render.Renderer = undefined;
-var player: audio.Player = undefined;
 
 fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
@@ -76,10 +48,12 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
 
-    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
+    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", util.conf.width, util.conf.height, c.SDL_WINDOW_RESIZABLE));
     Resource.window.initialized();
     renderer = try render.Renderer.init(alloc, window);
     Resource.renderer.initialized();
+    try audio.init("music.ogg");
+    Resource.audio.initialized();
 
     return c.SDL_APP_CONTINUE;
 }
@@ -116,7 +90,7 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
         switch (res) {
             .window => c.SDL_DestroyWindow(window),
             .renderer => renderer.deinit(),
-            .player => player.deinit(),
+            .audio => audio.deinit(),
         }
     }
 }

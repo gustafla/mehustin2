@@ -1,25 +1,17 @@
 const std = @import("std");
-const log = std.log.scoped(.shaders);
+const util = @import("util.zig");
 const c = @cImport({
     @cInclude("shaderc/shaderc.h");
 });
-const Allocator = std.mem.Allocator;
+
+const log = std.log.scoped(.shaders);
 
 const ShaderKind = enum(c_uint) {
     vert = c.shaderc_glsl_vertex_shader,
     frag = c.shaderc_glsl_fragment_shader,
 };
 
-pub fn loadFileNullTerminated(alloc: Allocator, path: []const u8) ![:0]u8 {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
-    const stat = try file.stat();
-    const buffer = try alloc.allocSentinel(u8, stat.size, 0);
-    std.debug.assert(try file.readAll(buffer[0..]) == stat.size);
-    return buffer;
-}
-
-pub fn compileShader(alloc: Allocator, glsl: []const u8, source_name: [:0]const u8) ![]u8 {
+pub fn compileShader(alloc: std.mem.Allocator, glsl: []const u8, source_name: [:0]const u8) ![]u8 {
     // Initialize shaderc
     const compiler = c.shaderc_compiler_initialize() orelse return error.ShadercInitialize;
     defer c.shaderc_compiler_release(compiler);
@@ -106,8 +98,8 @@ const Args = struct {
     }
 };
 
-fn compileFile(alloc: Allocator, input_path: [:0]const u8, output_path: []const u8) !void {
-    const glsl = try loadFileNullTerminated(alloc, input_path);
+fn compileFile(alloc: std.mem.Allocator, input_path: [:0]const u8, output_path: []const u8) !void {
+    const glsl = try util.loadFileZ(alloc, input_path);
     defer alloc.free(glsl);
 
     const file = try std.fs.cwd().createFile(output_path, .{ .truncate = true });
@@ -126,8 +118,7 @@ pub fn main() !void {
     const args = try Args.init();
 
     // Initialize allocator
-    var allocator = std.heap.DebugAllocator(.{}).init;
-    var arena = std.heap.ArenaAllocator.init(allocator.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.heap.raw_c_allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
 

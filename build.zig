@@ -122,7 +122,7 @@ pub fn build(b: *std.Build) void {
 
 fn compileShaders(b: *std.Build) void {
     const compile_shaders_mod = b.createModule(.{
-        .root_source_file = b.path("src/shader/compiler.zig"),
+        .root_source_file = b.path("src/shader_compiler.zig"),
         .target = b.resolveTargetQuery(.{}), // Native
         .optimize = .Debug,
     });

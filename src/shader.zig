@@ -1,9 +1,9 @@
 const std = @import("std");
 const options = @import("options");
+const util = @import("util.zig");
 const Allocator = std.mem.Allocator;
 const root = @import("root");
 const sdlerr = root.sdlerr;
-const config = root.config;
 const c = root.c;
 
 pub const Stage = enum(c_uint) {
@@ -34,10 +34,10 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8)
     defer alloc.free(spirv_name);
 
     // Load SPIR-V binary
-    root.res_log.info("Loading {s}", .{spirv_name});
-    const file = try config.openDataFile(spirv_name);
-    defer file.close();
-    const data = try file.readToEndAlloc(alloc, 1024 * 1024);
+    // const file = try std.fs.cwd().openFile(try util.dataFilePath(name), .{});
+    // defer file.close();
+    // const data = try file.readToEndAlloc(alloc, 1024 * 1024);
+    const data = try util.loadFileZ(alloc, try util.dataFilePath(spirv_name));
     defer alloc.free(data);
 
     // Load into SDL GPU
@@ -56,18 +56,16 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8)
 }
 
 fn loadShaderGlsl(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8) !*c.SDL_GPUShader {
-    const shaderc = @import("shader/compiler.zig");
+    const shaderc = @import("shader_compiler.zig");
 
     // Determine shader stage from extension
     const stage = try stageFromExtension(name);
 
     // Allocate full file path
-    const path = try std.fs.path.joinZ(alloc, &[_][]const u8{ config.shader_dir, name });
-    defer alloc.free(path);
+    const path = try util.shaderFilePath(name);
 
     // Read file and compile to SPIR-V
-    root.res_log.info("Loading {s}", .{path});
-    const glsl = try shaderc.loadFileNullTerminated(alloc, path);
+    const glsl = try util.loadFileZ(alloc, path);
     defer alloc.free(glsl);
     const data = try shaderc.compileShader(alloc, glsl, path);
     defer alloc.free(data);
