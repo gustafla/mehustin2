@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const root = @import("root");
 const shader = @import("shader.zig");
+const util = @import("util.zig");
 const Allocator = std.mem.Allocator;
 const c = root.c;
 const sdlerr = root.sdlerr;
@@ -73,9 +74,36 @@ pub fn render() !void {
         .store_op = c.SDL_GPU_STOREOP_STORE,
     });
     const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &color_target_info, 1, null);
+    c.SDL_SetGPUViewport(render_pass, &viewport(width, height));
     c.SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
     c.SDL_DrawGPUPrimitives(render_pass, 4, 1, 0, 0);
     c.SDL_EndGPURenderPass(render_pass);
 
     try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+}
+
+fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
+    const width_f32: f32 = @floatFromInt(width);
+    const height_f32: f32 = @floatFromInt(height);
+    const target_width: f32 = @floatFromInt(util.conf.width);
+    const target_height: f32 = @floatFromInt(util.conf.height);
+    const aspect_ratio = width_f32 / height_f32;
+    const target_ratio = target_width / target_height;
+
+    var viewport_width = width_f32;
+    var viewport_height = height_f32;
+    if (aspect_ratio > target_ratio) {
+        viewport_width = height_f32 * target_ratio;
+    } else {
+        viewport_height = width_f32 / target_ratio;
+    }
+
+    return .{
+        .x = if (aspect_ratio > target_ratio) (width_f32 - viewport_width) / 2 else 0,
+        .y = if (aspect_ratio > target_ratio) 0 else (height_f32 - viewport_height) / 2,
+        .w = viewport_width,
+        .h = viewport_height,
+        .min_depth = 0,
+        .max_depth = 1,
+    };
 }

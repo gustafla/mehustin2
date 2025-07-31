@@ -36,6 +36,43 @@ const Resource = enum {
 pub var alloc: std.mem.Allocator = undefined;
 pub var window: *c.SDL_Window = undefined;
 
+// Private SDL symbols for hacking wayland mode emulation
+pub extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
+pub extern fn SDL_AddFullscreenDisplayMode(display: *anyopaque, mode: *const c.SDL_DisplayMode) bool;
+
+fn fullscreen() !void {
+    try sdlerr(c.SDL_HideCursor());
+
+    if (std.mem.eql(u8, std.mem.span(c.SDL_GetCurrentVideoDriver()), "wayland")) {
+        const display = c.SDL_GetDisplayForWindow(window);
+        const mode = c.SDL_GetDesktopDisplayMode(display);
+        const display_width: f32 = @floatFromInt(mode.*.w);
+        const display_height: f32 = @floatFromInt(mode.*.h);
+        const display_aspect = display_width / display_height;
+        var width = util.conf.width;
+        var height = util.conf.height;
+        const render_width: f32 = @floatFromInt(width);
+        const render_height: f32 = @floatFromInt(height);
+        const render_aspect = render_width / render_height;
+
+        if (display_aspect > render_aspect) {
+            width = @intFromFloat(render_height * display_aspect + 0.5);
+        } else {
+            height = @intFromFloat(render_width / display_aspect + 0.5);
+        }
+
+        var hack_mode: c.SDL_DisplayMode = mode.*;
+        hack_mode.w = @intCast(width);
+        hack_mode.h = @intCast(height);
+
+        const videodisplay = SDL_GetVideoDisplay(display) orelse return error.FullscreenHackFailed;
+        _ = SDL_AddFullscreenDisplayMode(videodisplay, &hack_mode);
+        try sdlerr(c.SDL_SetWindowFullscreenMode(window, &hack_mode));
+    }
+
+    try sdlerr(c.SDL_SetWindowFullscreen(window, true));
+}
+
 fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
 
@@ -54,6 +91,11 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     Resource.renderer.initialized();
     try audio.init("music.ogg");
     Resource.audio.initialized();
+
+    // Go fullscreen if release build
+    if (builtin.mode != .Debug) {
+        try fullscreen();
+    }
 
     // Start audio and timer
     try audio.play();
@@ -77,6 +119,14 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
         c.SDL_EVENT_KEY_DOWN => {
             switch (event.key.key) {
                 c.SDLK_ESCAPE, c.SDLK_Q => return c.SDL_APP_SUCCESS,
+                c.SDLK_F => if (builtin.mode == .Debug) {
+                    const flags = c.SDL_GetWindowFlags(window);
+                    if (flags & c.SDL_WINDOW_FULLSCREEN != 0) {
+                        try sdlerr(c.SDL_SetWindowFullscreen(window, false));
+                    } else {
+                        try fullscreen();
+                    }
+                },
                 else => {},
             }
         },
