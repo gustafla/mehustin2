@@ -6,7 +6,7 @@ const sdlerr = root.sdlerr;
 var vorbis: *c.stb_vorbis = undefined;
 var audio: *c.SDL_AudioStream = undefined;
 var info: c.stb_vorbis_info = undefined;
-var at_end = false;
+pub var at_end = false;
 
 const bufsize = 1024 * 1024;
 var buffer = [_]c_short{0} ** bufsize;
