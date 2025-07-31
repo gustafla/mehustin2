@@ -10,8 +10,9 @@ pub const c = @cImport({
     @cInclude("stb_vorbis.c");
 });
 const util = @import("util.zig");
-pub const render = @import("render.zig");
-pub const audio = @import("audio.zig");
+const render = @import("render.zig");
+const audio = @import("audio.zig");
+const time = @import("time.zig");
 
 pub const sdl_log = std.log.scoped(.sdl);
 
@@ -53,6 +54,10 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     Resource.renderer.initialized();
     try audio.init("music.ogg");
     Resource.audio.initialized();
+
+    // Start audio and timer
+    try audio.play();
+    time.seek(0);
 
     return c.SDL_APP_CONTINUE;
 }
