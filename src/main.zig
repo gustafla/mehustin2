@@ -42,8 +42,23 @@ pub const config: struct {
 pub const sdl_log = std.log.scoped(.sdl);
 pub const res_log = std.log.scoped(.res);
 
+// Deinitialization with a stack
+const Resource = enum {
+    window,
+    renderer,
+    player,
+
+    const N = @typeInfo(@This()).@"enum".fields.len;
+    var buffer = [_]Resource{undefined} ** N;
+    var stack: []Resource = buffer[N..N];
+
+    fn initialized(res: Resource) void {
+        stack = buffer[N - stack.len - 1 ..];
+        stack[0] = res;
+    }
+};
+
 // Root globals
-var initialized: bool = false;
 pub var alloc: Allocator = undefined;
 pub var window: *c.SDL_Window = undefined;
 var renderer: render.Renderer = undefined;
@@ -62,9 +77,9 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
 
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
+    Resource.window.initialized();
     renderer = try render.Renderer.init(alloc, window);
-
-    initialized = true;
+    Resource.renderer.initialized();
 
     return c.SDL_APP_CONTINUE;
 }
@@ -97,10 +112,13 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
         sdl_log.err("{s}", .{c.SDL_GetError()});
     };
 
-    if (initialized) {
-        renderer.deinit();
-        c.SDL_DestroyWindow(window);
-    } else @panic("sdlAppQuit called before sdlAppInit");
+    for (Resource.stack) |res| {
+        switch (res) {
+            .window => c.SDL_DestroyWindow(window),
+            .renderer => renderer.deinit(),
+            .player => player.deinit(),
+        }
+    }
 }
 
 /// Converts the return value of an SDL function to an error union.
