@@ -34,7 +34,6 @@ const Resource = enum {
 // Root globals
 pub var alloc: std.mem.Allocator = undefined;
 pub var window: *c.SDL_Window = undefined;
-var renderer: render.Renderer = undefined;
 
 fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
@@ -46,11 +45,11 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_SCALING, "stretch");
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
-    try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO));
+    try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO));
 
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", util.conf.width, util.conf.height, c.SDL_WINDOW_RESIZABLE));
     Resource.window.initialized();
-    renderer = try render.Renderer.init(alloc, window);
+    try render.init(alloc, window);
     Resource.renderer.initialized();
     try audio.init("music.ogg");
     Resource.audio.initialized();
@@ -59,7 +58,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 }
 
 fn sdlAppIterate() !c.SDL_AppResult {
-    try renderer.render();
+    try render.render();
 
     return c.SDL_APP_CONTINUE;
 }
@@ -89,10 +88,12 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     for (Resource.stack) |res| {
         switch (res) {
             .window => c.SDL_DestroyWindow(window),
-            .renderer => renderer.deinit(),
+            .renderer => render.deinit(),
             .audio => audio.deinit(),
         }
     }
+
+    c.SDL_Quit();
 }
 
 /// Converts the return value of an SDL function to an error union.
