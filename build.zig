@@ -74,6 +74,11 @@ pub fn build(b: *std.Build) void {
         exe_mod.linkSystemLibrary("shaderc", .{});
     }
 
+    // Get the stb dependency from build.zig.zon
+    const stb_dep = b.dependency("stb", .{});
+    exe_mod.addIncludePath(stb_dep.path("."));
+    exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
+
     // Build the main.zig exe
     const exe = b.addExecutable(.{
         .name = "mehustin2",

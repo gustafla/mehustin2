@@ -6,8 +6,11 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL_revision.h");
     @cDefine("SDL_MAIN_HANDLED", {});
     @cInclude("SDL3/SDL_main.h");
+    @cDefine("STB_VORBIS_HEADER_ONLY", {});
+    @cInclude("stb_vorbis.c");
 });
 pub const render = @import("render.zig");
+pub const audio = @import("audio.zig");
 const Allocator = std.mem.Allocator;
 const File = std.fs.File;
 
@@ -17,17 +20,22 @@ pub const config: struct {
     data_dir: []const u8,
     shader_dir: []const u8,
 
-    pub fn openDataFile(self: @This(), name: []const u8) !File {
+    pub fn dataFilePath(self: @This(), name: []const u8) ![]const u8 {
         const BUF_SIZE = 64;
         var path_buf: [BUF_SIZE]u8 = undefined;
         const path_len = self.data_dir.len + 1 + name.len;
-        if (path_len > BUF_SIZE) {
+        if (path_len + 1 > BUF_SIZE) {
             return error.DataFilePathTooLong;
         }
+        @memset(path_buf, 0);
         @memcpy(&path_buf, self.data_dir);
         path_buf[self.data_dir.len] = std.fs.path.sep;
         @memcpy(path_buf[self.data_dir.len + 1 .. path_len], name);
-        return std.fs.cwd().openFile(path_buf[0..path_len], .{});
+        return path_buf[0..path_len];
+    }
+
+    pub fn openDataFile(self: @This(), name: []const u8) !File {
+        return std.fs.cwd().openFile(self.dataFilePath(name), .{});
     }
 } = @import("config.zon");
 
@@ -39,6 +47,7 @@ var initialized: bool = false;
 pub var alloc: Allocator = undefined;
 pub var window: *c.SDL_Window = undefined;
 var renderer: render.Renderer = undefined;
+var player: audio.Player = undefined;
 
 fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
