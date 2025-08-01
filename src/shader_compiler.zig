@@ -1,17 +1,63 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const util = @import("util.zig");
 const c = @cImport({
     @cInclude("shaderc/shaderc.h");
 });
 
-const log = std.log.scoped(.shaders);
+const log = std.log.scoped(.shader);
 
 const ShaderKind = enum(c_uint) {
     vert = c.shaderc_glsl_vertex_shader,
     frag = c.shaderc_glsl_fragment_shader,
 };
 
-pub fn compileShader(alloc: std.mem.Allocator, glsl: []const u8, source_name: [:0]const u8) ![]u8 {
+pub fn includeResolve(data: ?*const anyopaque, source: [*c]const u8, typ: c_int, in_file: [*c]const u8, depth: usize) callconv(.c) ?*c.shaderc_include_result {
+    const alloc: *const Allocator = @ptrCast(@alignCast(data));
+    const name = std.mem.span(source);
+    log.debug("Include request for {s} in file {s}, type = {}, depth = {}", .{ name, in_file, typ, depth });
+
+    const default_msg = "Include request failed";
+    const result = alloc.create(c.shaderc_include_result) catch @panic("OOM");
+    result.* = std.mem.zeroInit(c.shaderc_include_result, .{
+        .content = default_msg.ptr,
+        .content_length = default_msg.len,
+        .user_data = @constCast(data),
+    });
+
+    _ = blk: {
+        const path_raw = util.shaderFilePath(name) catch |err| break :blk err;
+        const path = alloc.dupe(u8, path_raw) catch |err| break :blk err;
+        // TODO: https://github.com/ziglang/zig/issues/5610
+        defer if (result.source_name == null) {
+            alloc.free(path);
+        };
+        const content = util.loadFileZ(alloc.*, path) catch |err| break :blk err;
+
+        result.source_name = path.ptr;
+        result.source_name_length = path.len;
+        result.content = content.ptr;
+        result.content_length = content.len;
+    } catch |err| {
+        log.err("Include request for {s} failed: {}", .{ name, err });
+        return result;
+    };
+
+    return result;
+}
+
+pub fn includeRelease(data: ?*const anyopaque, result: [*c]c.shaderc_include_result) callconv(.c) void {
+    const alloc: *const Allocator = @ptrCast(@alignCast(data));
+    if (result.*.source_name) |source_name| {
+        const name = source_name[0..result.*.source_name_length];
+        alloc.free(name);
+        const content = result.*.content[0..result.*.content_length :0];
+        alloc.free(content);
+    }
+    alloc.destroy(@as(*c.shaderc_include_result, result));
+}
+
+pub fn compileShader(alloc: Allocator, glsl: []const u8, source_name: [:0]const u8) ![]u8 {
     // Initialize shaderc
     const compiler = c.shaderc_compiler_initialize() orelse return error.ShadercInitialize;
     defer c.shaderc_compiler_release(compiler);
@@ -21,6 +67,7 @@ pub fn compileShader(alloc: std.mem.Allocator, glsl: []const u8, source_name: [:
     c.shaderc_compile_options_set_source_language(options, c.shaderc_source_language_glsl);
     c.shaderc_compile_options_set_target_env(options, c.shaderc_target_env_vulkan, c.shaderc_env_version_vulkan_1_0);
     c.shaderc_compile_options_set_target_spirv(options, c.shaderc_spirv_version_1_0);
+    c.shaderc_compile_options_set_include_callbacks(options, includeResolve, includeRelease, @constCast(&alloc));
 
     // Determine shader stage/kind from file extension
     const extension = std.fs.path.extension(source_name);
@@ -98,7 +145,7 @@ const Args = struct {
     }
 };
 
-fn compileFile(alloc: std.mem.Allocator, input_path: [:0]const u8, output_path: []const u8) !void {
+fn compileFile(alloc: Allocator, input_path: [:0]const u8, output_path: []const u8) !void {
     const glsl = try util.loadFileZ(alloc, input_path);
     defer alloc.free(glsl);
 

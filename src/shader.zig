@@ -6,6 +6,8 @@ const root = @import("root");
 const sdlerr = root.sdlerr;
 const c = root.c;
 
+const log = std.log.scoped(.shader);
+
 pub const Stage = enum(c_uint) {
     vert = c.SDL_GPU_SHADERSTAGE_VERTEX,
     frag = c.SDL_GPU_SHADERSTAGE_FRAGMENT,
@@ -67,7 +69,10 @@ fn loadShaderGlsl(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8) 
     // Read file and compile to SPIR-V
     const glsl = try util.loadFileZ(alloc, path);
     defer alloc.free(glsl);
-    const data = try shaderc.compileShader(alloc, glsl, path);
+    const data = shaderc.compileShader(alloc, glsl, path) catch |err| {
+        log.err("{s}\n", .{shaderc.shader_err.load()});
+        return err;
+    };
     defer alloc.free(data);
 
     // Load into SDL GPU

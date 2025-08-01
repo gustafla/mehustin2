@@ -15,17 +15,17 @@ pub fn deinit() void {
     c.SDL_DestroyGPUDevice(device);
 }
 
-pub fn init(alloc: Allocator, window: *c.SDL_Window) !void {
+pub fn init(alloc: Allocator) !void {
     device = try sdlerr(c.SDL_CreateGPUDevice(c.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null));
     errdefer c.SDL_DestroyGPUDevice(device);
-    try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window));
+    try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, root.window));
 
     const vert = try shader.loadShader(alloc, device, "quad.vert");
     defer c.SDL_ReleaseGPUShader(device, vert);
     const frag = try shader.loadShader(alloc, device, "shader.frag");
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    const swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(device, window);
+    const swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(device, root.window);
     pipeline = try sdlerr(c.SDL_CreateGPUGraphicsPipeline(device, &std.mem.zeroInit(c.SDL_GPUGraphicsPipelineCreateInfo, .{
         .vertex_shader = vert,
         .fragment_shader = frag,

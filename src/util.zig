@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const res_log = std.log.scoped(.res);
+pub const log = std.log.scoped(.res);
 
 const BUF_SIZE = 64;
 var path_buf: [BUF_SIZE]u8 = undefined;
@@ -21,7 +21,7 @@ fn pathZ(a: []const u8, b: []const u8) ![:0]const u8 {
     @memcpy(path_buf[0..a.len], a);
     path_buf[a.len] = std.fs.path.sep;
     @memcpy(path_buf[a.len + 1 .. path_len], b);
-    res_log.info("Loading {s}", .{path_buf[0..path_len]});
+    log.info("Loading {s}", .{path_buf[0..path_len]});
     return @ptrCast(path_buf[0..path_len]);
 }
 

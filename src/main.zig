@@ -14,7 +14,7 @@ const render = @import("render.zig");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
 
-pub const sdl_log = std.log.scoped(.sdl);
+pub const log = std.log.scoped(.sdl);
 
 // Track deinitialization with a stack
 const Resource = enum {
@@ -77,7 +77,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     _ = argv;
 
     const revision: [*:0]const u8 = c.SDL_GetRevision();
-    sdl_log.debug("SDL runtime revision: {s}", .{revision});
+    log.debug("SDL runtime revision: {s}", .{revision});
 
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
     _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
@@ -87,7 +87,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", util.conf.width, util.conf.height, c.SDL_WINDOW_RESIZABLE));
     Resource.window.initialized();
-    try render.init(alloc, window);
+    try render.init(alloc);
     Resource.renderer.initialized();
     try audio.init("music.ogg");
     Resource.audio.initialized();
@@ -138,7 +138,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
 
 fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     _ = result catch |err| if (err == error.SdlError) {
-        sdl_log.err("{s}", .{c.SDL_GetError()});
+        log.err("{s}", .{c.SDL_GetError()});
     };
 
     for (Resource.stack) |res| {
