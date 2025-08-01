@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const root = @import("root");
 const shader = @import("shader.zig");
 const util = @import("util.zig");
+const math = @import("math.zig");
 const Allocator = std.mem.Allocator;
 const c = root.c;
 const sdlerr = root.sdlerr;
@@ -22,10 +23,17 @@ const shape = [_]f32{
 };
 // zig fmt: on
 
+const render_width: f32 = @floatFromInt(util.conf.width);
+const render_height: f32 = @floatFromInt(util.conf.height);
+const render_aspect = render_width / render_height;
+
 var device: *c.SDL_GPUDevice = undefined;
 var pipeline: *c.SDL_GPUGraphicsPipeline = undefined;
 var pipeline3d: *c.SDL_GPUGraphicsPipeline = undefined;
 var vertex_buffer: *c.SDL_GPUBuffer = undefined;
+
+var perspective: math.Mat4 = undefined;
+var view: math.Mat4 = undefined;
 
 pub fn deinit() void {
     c.SDL_ReleaseGPUBuffer(device, vertex_buffer);
@@ -135,6 +143,7 @@ pub fn init(alloc: Allocator) !void {
         .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
         .props = 0,
     });
+    defer c.SDL_ReleaseGPUTransferBuffer(device, transferbuf);
     const data: [*]f32 = @ptrCast(@alignCast(c.SDL_MapGPUTransferBuffer(device, transferbuf, false)));
     @memcpy(data, &shape);
     c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
@@ -202,22 +211,19 @@ pub fn render() !void {
 fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
     const width_f32: f32 = @floatFromInt(width);
     const height_f32: f32 = @floatFromInt(height);
-    const target_width: f32 = @floatFromInt(util.conf.width);
-    const target_height: f32 = @floatFromInt(util.conf.height);
     const aspect_ratio = width_f32 / height_f32;
-    const target_ratio = target_width / target_height;
 
     var viewport_width = width_f32;
     var viewport_height = height_f32;
-    if (aspect_ratio > target_ratio) {
-        viewport_width = height_f32 * target_ratio;
+    if (aspect_ratio > render_aspect) {
+        viewport_width = height_f32 * render_aspect;
     } else {
-        viewport_height = width_f32 / target_ratio;
+        viewport_height = width_f32 / render_aspect;
     }
 
     return .{
-        .x = if (aspect_ratio > target_ratio) (width_f32 - viewport_width) / 2 else 0,
-        .y = if (aspect_ratio > target_ratio) 0 else (height_f32 - viewport_height) / 2,
+        .x = if (aspect_ratio > render_aspect) (width_f32 - viewport_width) / 2 else 0,
+        .y = if (aspect_ratio > render_aspect) 0 else (height_f32 - viewport_height) / 2,
         .w = viewport_width,
         .h = viewport_height,
         .min_depth = 0,
