@@ -11,16 +11,27 @@ const sdlerr = root.sdlerr;
 
 // zig fmt: off
 const shape = [_]f32{
-    // position1    color1           position2    color2          position3    color3
-     0, -1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // lower front
-     0, -1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // lower right
-     0, -1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // lower back
-     0, -1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // lower left
+    // position1          position2            position3
+     0.0, -1.0,  0.0,     0.66,  0.0,  0.66,    -0.66,  0.0,  0.66, // lower front
+     0.0, -1.0,  0.0,     0.66,  0.0, -0.66,     0.66,  0.0,  0.66, // lower right
+     0.0, -1.0,  0.0,    -0.66,  0.0, -0.66,     0.66,  0.0, -0.66, // lower back
+     0.0, -1.0,  0.0,    -0.66,  0.0,  0.66,    -0.66,  0.0, -0.66, // lower left
 
-     0,  1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // upper front
-     0,  1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // upper right
-     0,  1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // upper back
-     0,  1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // upper left
+     0.0,  1.0,  0.0,    -0.66,  0.0,  0.66,     0.66,  0.0,  0.66, // upper front
+     0.0,  1.0,  0.0,     0.66,  0.0,  0.66,     0.66,  0.0, -0.66, // upper right
+     0.0,  1.0,  0.0,     0.66,  0.0, -0.66,    -0.66,  0.0, -0.66, // upper back
+     0.0,  1.0,  0.0,    -0.66,  0.0, -0.66,    -0.66,  0.0,  0.66, // upper left
+};
+const color = [_]f32{
+    0.3,0.3,0.3, 0.3,0.3,0.3, 0.3,0.3,0.3,
+    0.1,0.1,0.1, 0.1,0.1,0.1, 0.1,0.1,0.1,
+    0.3,0.3,0.3, 0.3,0.3,0.3, 0.3,0.3,0.3,
+    0.1,0.1,0.1, 0.1,0.1,0.1, 0.1,0.1,0.1,
+
+    0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,0.5,
+    0.7,0.7,0.7, 0.7,0.7,0.7, 0.7,0.7,0.7,
+    0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,0.5,
+    0.7,0.7,0.7, 0.7,0.7,0.7, 0.7,0.7,0.7,
 };
 // zig fmt: on
 
@@ -89,7 +100,7 @@ pub fn init(alloc: Allocator) !void {
                 .vertex_buffer_descriptions = &[_]c.SDL_GPUVertexBufferDescription{
                     .{
                         .slot = 0,
-                        .pitch = @sizeOf(f32) * 6,
+                        .pitch = @sizeOf(f32) * 3,
                         .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
                         .instance_step_rate = 0,
                     },
@@ -108,7 +119,7 @@ pub fn init(alloc: Allocator) !void {
                         .location = 1,
                         .buffer_slot = 0,
                         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-                        .offset = @sizeOf(f32) * 3,
+                        .offset = @sizeOf(@TypeOf(shape)),
                     },
                 },
                 .num_vertex_attributes = 2,
@@ -139,13 +150,14 @@ pub fn init(alloc: Allocator) !void {
     }));
 
     const transferbuf = c.SDL_CreateGPUTransferBuffer(device, &c.SDL_GPUTransferBufferCreateInfo{
-        .size = @sizeOf(@TypeOf(shape)),
+        .size = @sizeOf(@TypeOf(shape)) * 2,
         .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
         .props = 0,
     });
     defer c.SDL_ReleaseGPUTransferBuffer(device, transferbuf);
     const data: [*]f32 = @ptrCast(@alignCast(c.SDL_MapGPUTransferBuffer(device, transferbuf, false)));
     @memcpy(data, &shape);
+    @memcpy(data[shape.len..], &color);
     c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
 
     const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
@@ -157,7 +169,7 @@ pub fn init(alloc: Allocator) !void {
             .transfer_buffer = transferbuf,
         },
         &c.SDL_GPUBufferRegion{
-            .size = @sizeOf(@TypeOf(shape)),
+            .size = @sizeOf(@TypeOf(shape)) * 2,
             .offset = 0,
             .buffer = vertex_buffer,
         },
@@ -205,7 +217,7 @@ pub fn render() !void {
         .view = math.Mat4.lookAt(
             .{
                 @sin(t / 3) * 3,
-                @sin(t / 6) * 1,
+                @sin(t / 5) * 2,
                 @cos(t / 3) * 3,
             },
             math.vec3.ZERO,
@@ -218,7 +230,7 @@ pub fn render() !void {
         .buffer = vertex_buffer,
         .offset = 0,
     }}, 1);
-    c.SDL_DrawGPUPrimitives(render_pass, shape.len / 6, 1, 0, 0);
+    c.SDL_DrawGPUPrimitives(render_pass, shape.len / 3, 1, 0, 0);
 
     c.SDL_EndGPURenderPass(render_pass);
 
