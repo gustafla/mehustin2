@@ -12,15 +12,15 @@ const sdlerr = root.sdlerr;
 // zig fmt: off
 const shape = [_]f32{
     // position1    color1           position2    color2          position3    color3
-     0, -1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // lower front
-     0, -1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // lower right
-     0, -1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // lower back
-     0, -1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // lower left
+     0, -1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // lower front
+     0, -1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // lower right
+     0, -1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // lower back
+     0, -1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // lower left
 
-     0,  1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // upper front
-     0,  1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // upper right
-     0,  1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // upper back
-     0,  1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // upper left
+     0,  1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // upper front
+     0,  1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // upper right
+     0,  1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // upper back
+     0,  1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // upper left
 };
 // zig fmt: on
 
@@ -59,7 +59,7 @@ pub fn init(alloc: Allocator) !void {
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,
             .rasterizer_state = .{
                 .fill_mode = c.SDL_GPU_FILLMODE_FILL,
-                .cull_mode = c.SDL_GPU_CULLMODE_BACK,
+                .cull_mode = c.SDL_GPU_CULLMODE_NONE,
                 .front_face = c.SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
             },
             .multisample_state = .{
@@ -113,7 +113,7 @@ pub fn init(alloc: Allocator) !void {
                 },
                 .num_vertex_attributes = 2,
             },
-            .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,
+            .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
             .rasterizer_state = .{
                 .fill_mode = c.SDL_GPU_FILLMODE_FILL,
                 .cull_mode = c.SDL_GPU_CULLMODE_BACK,
@@ -197,24 +197,28 @@ pub fn render() !void {
 
     // 3D scene
     const t = time.getTime();
-    const projection = math.Mat4.perspective(math.radians(90), render_aspect, 1, 4096);
-    const view = math.Mat4.lookAt(
-        .{
-            @sin(t / 5) * 2,
-            @sin(t / 6),
-            @cos(t / 4) * 2,
-        },
-        math.vec3.ZERO,
-        math.vec3.YUP,
-    );
-    const matrices = .{ projection, view };
+    const matrices = extern struct {
+        projection: math.Mat4,
+        view: math.Mat4,
+    }{
+        .projection = math.Mat4.perspective(math.radians(90), render_aspect, 1, 4096),
+        .view = math.Mat4.lookAt(
+            .{
+                @sin(t / 3) * 3,
+                @sin(t / 6) * 1,
+                @cos(t / 3) * 3,
+            },
+            math.vec3.ZERO,
+            math.vec3.YUP,
+        ),
+    };
     c.SDL_PushGPUVertexUniformData(cmdbuf, 0, @ptrCast(&matrices), @sizeOf(@TypeOf(matrices)));
     c.SDL_BindGPUGraphicsPipeline(render_pass, pipeline3d);
     c.SDL_BindGPUVertexBuffers(render_pass, 0, &[_]c.SDL_GPUBufferBinding{.{
         .buffer = vertex_buffer,
         .offset = 0,
     }}, 1);
-    c.SDL_DrawGPUPrimitives(render_pass, shape.len / 3, 1, 0, 0);
+    c.SDL_DrawGPUPrimitives(render_pass, shape.len / 6, 1, 0, 0);
 
     c.SDL_EndGPURenderPass(render_pass);
 
