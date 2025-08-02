@@ -51,14 +51,11 @@ fn fullscreen() !void {
         const display_aspect = display_width / display_height;
         var width = util.conf.width;
         var height = util.conf.height;
-        const render_width: f32 = @floatFromInt(width);
-        const render_height: f32 = @floatFromInt(height);
-        const render_aspect = render_width / render_height;
 
-        if (display_aspect > render_aspect) {
-            width = @intFromFloat(render_height * display_aspect + 0.5);
+        if (display_aspect > render.render_aspect) {
+            width = @intFromFloat(render.render_height * display_aspect + 0.5);
         } else {
-            height = @intFromFloat(render_width / display_aspect + 0.5);
+            height = @intFromFloat(render.render_width / display_aspect + 0.5);
         }
 
         var hack_mode: c.SDL_DisplayMode = mode.*;

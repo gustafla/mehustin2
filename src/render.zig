@@ -4,36 +4,34 @@ const root = @import("root");
 const shader = @import("shader.zig");
 const util = @import("util.zig");
 const math = @import("math.zig");
+const time = @import("time.zig");
 const Allocator = std.mem.Allocator;
 const c = root.c;
 const sdlerr = root.sdlerr;
 
 // zig fmt: off
 const shape = [_]f32{
-    // position1    position2      position3
-     0, -1,  0,     1,  0,  1,    -1,  0,  1, // lower front
-     0, -1,  0,     1,  0, -1,     1,  0,  1, // lower right
-     0, -1,  0,    -1,  0, -1,     1,  0, -1, // lower back
-     0, -1,  0,    -1,  0, -1,    -1,  0,  1, // lower left
+    // position1    color1           position2    color2          position3    color3
+     0, -1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // lower front
+     0, -1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // lower right
+     0, -1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // lower back
+     0, -1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // lower left
 
-     0,  1,  0,    -1,  0,  1,     1,  0,  1, // upper front
-     0,  1,  0,     1,  0,  1,     1,  0, -1, // upper right
-     0,  1,  0,     1,  0, -1,    -1,  0, -1, // upper back
-     0,  1,  0,    -1,  0, -1,    -1,  0,  1, // upper left
+     0,  1,  0,     0.5,0.5,0.5,    -1,  0,  1,   0.2,0.2,0.2,    1,  0,  1,   1.0,1.0,1.0, // upper front
+     0,  1,  0,     0.5,0.5,0.5,     1,  0,  1,   0.2,0.2,0.2,    1,  0, -1,   1.0,1.0,1.0, // upper right
+     0,  1,  0,     0.5,0.5,0.5,     1,  0, -1,   0.2,0.2,0.2,   -1,  0, -1,   1.0,1.0,1.0, // upper back
+     0,  1,  0,     0.5,0.5,0.5,    -1,  0, -1,   0.2,0.2,0.2,   -1,  0,  1,   1.0,1.0,1.0, // upper left
 };
 // zig fmt: on
 
-const render_width: f32 = @floatFromInt(util.conf.width);
-const render_height: f32 = @floatFromInt(util.conf.height);
-const render_aspect = render_width / render_height;
+pub const render_width: f32 = @floatFromInt(util.conf.width);
+pub const render_height: f32 = @floatFromInt(util.conf.height);
+pub const render_aspect = render_width / render_height;
 
 var device: *c.SDL_GPUDevice = undefined;
 var pipeline: *c.SDL_GPUGraphicsPipeline = undefined;
 var pipeline3d: *c.SDL_GPUGraphicsPipeline = undefined;
 var vertex_buffer: *c.SDL_GPUBuffer = undefined;
-
-var perspective: math.Mat4 = undefined;
-var view: math.Mat4 = undefined;
 
 pub fn deinit() void {
     c.SDL_ReleaseGPUBuffer(device, vertex_buffer);
@@ -47,9 +45,9 @@ pub fn init(alloc: Allocator) !void {
     errdefer c.SDL_DestroyGPUDevice(device);
     try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, root.window));
 
-    const vert = try shader.loadShader(alloc, device, "quad.vert");
+    const vert = try shader.loadShader(alloc, device, "quad.vert", .{});
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(alloc, device, "shader.frag");
+    const frag = try shader.loadShader(alloc, device, "shader.frag", .{});
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     const swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(device, root.window);
@@ -58,12 +56,6 @@ pub fn init(alloc: Allocator) !void {
         &std.mem.zeroInit(c.SDL_GPUGraphicsPipelineCreateInfo, .{
             .vertex_shader = vert,
             .fragment_shader = frag,
-            // .vertex_input_state = .{
-            //     .vertex_buffer_descriptions = 0,
-            //     .num_vertex_buffers = 0,
-            //     .vertex_attributes = .{},
-            //     .num_vertex_attributes = 0
-            // },
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,
             .rasterizer_state = .{
                 .fill_mode = c.SDL_GPU_FILLMODE_FILL,
@@ -83,9 +75,9 @@ pub fn init(alloc: Allocator) !void {
     ));
     errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
 
-    const vert3d = try shader.loadShader(alloc, device, "3d.vert");
+    const vert3d = try shader.loadShader(alloc, device, "3d.vert", .{ .num_uniform_buffers = 1 });
     defer c.SDL_ReleaseGPUShader(device, vert3d);
-    const frag3d = try shader.loadShader(alloc, device, "3d.frag");
+    const frag3d = try shader.loadShader(alloc, device, "3d.frag", .{});
     defer c.SDL_ReleaseGPUShader(device, frag3d);
 
     pipeline3d = try sdlerr(c.SDL_CreateGPUGraphicsPipeline(
@@ -97,7 +89,7 @@ pub fn init(alloc: Allocator) !void {
                 .vertex_buffer_descriptions = &[_]c.SDL_GPUVertexBufferDescription{
                     .{
                         .slot = 0,
-                        .pitch = @sizeOf(f32) * 3,
+                        .pitch = @sizeOf(f32) * 6,
                         .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
                         .instance_step_rate = 0,
                     },
@@ -105,13 +97,21 @@ pub fn init(alloc: Allocator) !void {
                 .num_vertex_buffers = 1,
                 .vertex_attributes = &[_]c.SDL_GPUVertexAttribute{
                     .{
+                        // a_Position
                         .location = 0,
                         .buffer_slot = 0,
                         .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
                         .offset = 0,
                     },
+                    .{
+                        // a_Color
+                        .location = 1,
+                        .buffer_slot = 0,
+                        .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                        .offset = @sizeOf(f32) * 3,
+                    },
                 },
-                .num_vertex_attributes = 1,
+                .num_vertex_attributes = 2,
             },
             .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,
             .rasterizer_state = .{
@@ -196,6 +196,19 @@ pub fn render() !void {
     c.SDL_DrawGPUPrimitives(render_pass, 4, 1, 0, 0);
 
     // 3D scene
+    const t = time.getTime();
+    const projection = math.Mat4.perspective(math.radians(90), render_aspect, 1, 4096);
+    const view = math.Mat4.lookAt(
+        .{
+            @sin(t / 5) * 2,
+            @sin(t / 6),
+            @cos(t / 4) * 2,
+        },
+        math.vec3.ZERO,
+        math.vec3.YUP,
+    );
+    const matrices = .{ projection, view };
+    c.SDL_PushGPUVertexUniformData(cmdbuf, 0, @ptrCast(&matrices), @sizeOf(@TypeOf(matrices)));
     c.SDL_BindGPUGraphicsPipeline(render_pass, pipeline3d);
     c.SDL_BindGPUVertexBuffers(render_pass, 0, &[_]c.SDL_GPUBufferBinding{.{
         .buffer = vertex_buffer,
