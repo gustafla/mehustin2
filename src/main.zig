@@ -120,6 +120,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                     const flags = c.SDL_GetWindowFlags(window);
                     if (flags & c.SDL_WINDOW_FULLSCREEN != 0) {
                         try sdlerr(c.SDL_SetWindowFullscreen(window, false));
+                        try sdlerr(c.SDL_ShowCursor());
                     } else {
                         try fullscreen();
                     }
