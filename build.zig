@@ -97,9 +97,20 @@ pub fn build(b: *std.Build) void {
     exe_mod.addIncludePath(stb_dep.path("."));
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
 
+    // Add target triple to executable name if target isn't native
+    const exe_name_base = "demo";
+    const exe_name = if (!target.query.isNative()) blk: {
+        const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
+        break :blk std.mem.concat(b.allocator, u8, &[_][]const u8{
+            exe_name_base,
+            "-",
+            triple,
+        }) catch @panic("OOM");
+    } else exe_name_base;
+
     // Build the main.zig exe
     const exe = b.addExecutable(.{
-        .name = "mehustin2",
+        .name = exe_name,
         .root_module = exe_mod,
     });
     exe.linkLibC();
