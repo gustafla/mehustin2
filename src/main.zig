@@ -105,7 +105,11 @@ fn sdlAppIterate() !c.SDL_AppResult {
     try render.render();
 
     // Quit if done
-    return if (audio.at_end) c.SDL_APP_SUCCESS else c.SDL_APP_CONTINUE;
+    if (builtin.mode != .Debug and audio.at_end) {
+        return c.SDL_APP_SUCCESS;
+    }
+
+    return c.SDL_APP_CONTINUE;
 }
 
 fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
