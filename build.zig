@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Build = std.Build;
+const Step = Build.Step;
 
 const Config = struct {
-    const PATH = "src/config.zon";
-
     data_dir: []const u8,
     shader_dir: []const u8,
+
+    const PATH = "src/config.zon";
 
     fn init(alloc: Allocator) !Config {
         std.log.info("Loading {s}", .{PATH});
@@ -14,7 +16,13 @@ const Config = struct {
         const stat = try file.stat();
         const buffer = try alloc.allocSentinel(u8, stat.size, 0);
         std.debug.assert(try file.readAll(buffer[0..]) == stat.size);
-        return try std.zon.parse.fromSlice(Config, alloc, buffer, null, .{ .ignore_unknown_fields = true });
+        return try std.zon.parse.fromSlice(
+            Config,
+            alloc,
+            buffer,
+            null,
+            .{ .ignore_unknown_fields = true },
+        );
     }
 };
 
@@ -35,12 +43,22 @@ pub fn build(b: *std.Build) void {
 
     // Define build options
     const options = b.addOptions();
-    const compile_shaders = b.option(bool, "compile-shaders", "Compile shaders at build time (requires shaderc)") orelse false;
-    const use_shaderc = b.option(bool, "use-shaderc", "Compile shaders at runtime (requires shaderc)") orelse !release_build;
+    const use_shaderc = b.option(
+        bool,
+        "use-shaderc",
+        "Compile shaders at runtime (requires shaderc)",
+    ) orelse !release_build;
     options.addOption(bool, "use_shaderc", use_shaderc);
 
-    if (!compile_shaders and !use_shaderc) {
-        std.log.warn("-Dcompile-shaders is disabled and -Duse-shaderc is disabled. Shaders will not be compiled.", .{});
+    if (!use_shaderc) {
+        std.log.warn(
+            \\
+            \\.----------------------------------------------.
+            \\| Runtime shaderc (-Duse-shaderc) is disabled. |
+            \\| Shaders are not automatically compiled!      |
+            \\| Run `zig build shaders` after this build.    |
+            \\`----------------------------------------------'
+        , .{});
     }
 
     // Get SDL3 dependency from build.zig.zon
@@ -91,11 +109,6 @@ pub fn build(b: *std.Build) void {
     // Configure the executable to be installed
     b.installArtifact(exe);
 
-    // Add shader compilation to the build graph if requested
-    if (compile_shaders) {
-        compileShaders(b);
-    }
-
     // Add data files to bin
     b.getInstallStep().dependOn(&b.addInstallDirectory(.{
         .source_dir = b.path(config.data_dir),
@@ -104,10 +117,15 @@ pub fn build(b: *std.Build) void {
     }).step);
 
     // Add README to bin
-    b.getInstallStep().dependOn(&b.addInstallBinFile(b.path("README-RELEASE.md"), "README.md").step);
+    const readme_install = b.addInstallBinFile(
+        b.path("README-RELEASE.md"),
+        "README.md",
+    );
+    b.getInstallStep().dependOn(&readme_install.step);
 
     // Create a Run step in the build graph
     const run_cmd = b.addRunArtifact(exe);
+    // Install the build artifacts when `zig build run`
     run_cmd.step.dependOn(b.getInstallStep());
 
     // Allow the user to pass arguments to the application
@@ -115,43 +133,65 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    // This creates a build step. It will be visible in the `zig build --help` menu.
-    const run_step = b.step("run", "Run the app");
+    // This creates a build step (`zig build run`).
+    // It will be visible in the `zig build --help` menu.
+    const run_step = b.step("run", "Run the demo");
     run_step.dependOn(&run_cmd.step);
+
+    // Create a shader compilation build step.
+    const shaders_step = b.step(
+        "shaders",
+        "Compile shaders (requires shaderc)",
+    );
+    compileShaders(b, shaders_step);
 }
 
-fn compileShaders(b: *std.Build) void {
-    const compile_shaders_mod = b.createModule(.{
+fn shaderExe(b: *Build) *Step.Compile {
+    const shader_mod = b.createModule(.{
         .root_source_file = b.path("src/shader_compiler.zig"),
         .target = b.resolveTargetQuery(.{}), // Native
-        .optimize = .Debug,
+        .optimize = .ReleaseSafe,
     });
-    compile_shaders_mod.linkSystemLibrary("shaderc", .{});
-    const compile_shaders_exe = b.addExecutable(.{
+    shader_mod.linkSystemLibrary("shaderc", .{});
+    const shader_exe = b.addExecutable(.{
         .name = "shader_compiler",
-        .root_module = compile_shaders_mod,
+        .root_module = shader_mod,
     });
-    compile_shaders_exe.linkLibC();
+    shader_exe.linkLibC();
+    return shader_exe;
+}
+
+fn compileShaders(b: *Build, depend: *Step) void {
+    const shader_exe = shaderExe(b);
 
     // Create compiler run step for each shader
-    var source_dir = std.fs.cwd().openDir(config.shader_dir, .{ .iterate = true }) catch @panic("Can't open shader dir");
+    var source_dir = std.fs.cwd().openDir(
+        config.shader_dir,
+        .{ .iterate = true },
+    ) catch @panic("Can't open shader dir");
     defer source_dir.close();
     var iter = source_dir.iterate();
     while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
         if (entry.kind != .file) continue;
         //Define input and output paths
-        const input_path = std.fs.path.join(b.allocator, &[_][]const u8{ config.shader_dir, entry.name }) catch @panic("OOM");
-        const compile_shaders_run = b.addRunArtifact(compile_shaders_exe);
-        const compile_shaders_output = compile_shaders_run.addPrefixedOutputDirectoryArg("-o", config.shader_dir);
-        compile_shaders_run.addFileArg(b.path(input_path));
+        const input_path = std.fs.path.join(
+            b.allocator,
+            &[_][]const u8{ config.shader_dir, entry.name },
+        ) catch @panic("OOM");
+        const shader_run = b.addRunArtifact(shader_exe);
+        const shader_output = shader_run.addPrefixedOutputDirectoryArg(
+            "-o",
+            config.shader_dir,
+        );
+        shader_run.addFileArg(b.path(input_path));
 
         // Create install step
         const shader_install = b.addInstallDirectory(.{
-            .source_dir = compile_shaders_output,
+            .source_dir = shader_output,
             .install_dir = .bin,
             .install_subdir = config.data_dir,
         });
-        shader_install.step.dependOn(&compile_shaders_run.step);
-        b.getInstallStep().dependOn(&shader_install.step);
+        shader_install.step.dependOn(&shader_run.step);
+        depend.dependOn(&shader_install.step);
     }
 }
