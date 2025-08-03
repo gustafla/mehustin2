@@ -3,6 +3,18 @@
   - [ ] Text renderer
     - [ ] Texture loader
 - [ ] Music player
-- [ ] Rocket support
+- [ ] Developer controls
+  - [ ] Time
+  - [ ] Cameras
+- [ ] Sync system
+  - [ ] Parameter tracks
+  - [ ] Camera tracks
 - [ ] Post processing
   - [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
+- [ ] Use games-by-mason libraries?
+  - [ ] Zex
+  - [ ] shader_compiler
+  - [ ] tracy_zig
+  - [ ] Tween
+  - [ ] dear_imgui_zig
+  - [ ] gbms
