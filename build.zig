@@ -161,7 +161,7 @@ fn shaderExe(b: *Build) *Step.Compile {
     const shader_mod = b.createModule(.{
         .root_source_file = b.path("src/shader_compiler.zig"),
         .target = b.resolveTargetQuery(.{}), // Native
-        .optimize = .ReleaseSafe,
+        .optimize = .Debug,
     });
     shader_mod.linkSystemLibrary("shaderc", .{});
     const shader_exe = b.addExecutable(.{
