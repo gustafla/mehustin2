@@ -52,7 +52,11 @@ pub fn deinit() void {
 }
 
 pub fn init(alloc: Allocator) !void {
-    device = try sdlerr(c.SDL_CreateGPUDevice(c.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null));
+    device = try sdlerr(c.SDL_CreateGPUDevice(
+        c.SDL_GPU_SHADERFORMAT_SPIRV,
+        builtin.mode == .Debug,
+        null,
+    ));
     errdefer c.SDL_DestroyGPUDevice(device);
     try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, root.window));
 
@@ -61,7 +65,10 @@ pub fn init(alloc: Allocator) !void {
     const frag = try shader.loadShader(alloc, device, "shader.frag", .{});
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    const swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(device, root.window);
+    const swapchain_format = c.SDL_GetGPUSwapchainTextureFormat(
+        device,
+        root.window,
+    );
     pipeline = try sdlerr(c.SDL_CreateGPUGraphicsPipeline(
         device,
         &std.mem.zeroInit(c.SDL_GPUGraphicsPipelineCreateInfo, .{
@@ -86,7 +93,12 @@ pub fn init(alloc: Allocator) !void {
     ));
     errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
 
-    const vert3d = try shader.loadShader(alloc, device, "3d.vert", .{ .num_uniform_buffers = 1 });
+    const vert3d = try shader.loadShader(
+        alloc,
+        device,
+        "3d.vert",
+        .{ .num_uniform_buffers = 1 },
+    );
     defer c.SDL_ReleaseGPUShader(device, vert3d);
     const frag3d = try shader.loadShader(alloc, device, "3d.frag", .{});
     defer c.SDL_ReleaseGPUShader(device, frag3d);
@@ -143,19 +155,29 @@ pub fn init(alloc: Allocator) !void {
     ));
     errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline3d);
 
-    vertex_buffer = try sdlerr(c.SDL_CreateGPUBuffer(device, &c.SDL_GPUBufferCreateInfo{
-        .size = @sizeOf(@TypeOf(shape)),
-        .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
-        .props = 0,
-    }));
+    vertex_buffer = try sdlerr(c.SDL_CreateGPUBuffer(
+        device,
+        &.{
+            .size = @sizeOf(@TypeOf(shape)),
+            .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
+            .props = 0,
+        },
+    ));
 
-    const transferbuf = c.SDL_CreateGPUTransferBuffer(device, &c.SDL_GPUTransferBufferCreateInfo{
-        .size = @sizeOf(@TypeOf(shape)) * 2,
-        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .props = 0,
-    });
+    const transferbuf = c.SDL_CreateGPUTransferBuffer(
+        device,
+        &.{
+            .size = @sizeOf(@TypeOf(shape)) * 2,
+            .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .props = 0,
+        },
+    );
     defer c.SDL_ReleaseGPUTransferBuffer(device, transferbuf);
-    const data: [*]f32 = @ptrCast(@alignCast(c.SDL_MapGPUTransferBuffer(device, transferbuf, false)));
+    const data: [*]f32 = @ptrCast(@alignCast(c.SDL_MapGPUTransferBuffer(
+        device,
+        transferbuf,
+        false,
+    )));
     @memcpy(data, &shape);
     @memcpy(data[shape.len..], &color);
     c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
@@ -164,11 +186,11 @@ pub fn init(alloc: Allocator) !void {
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
     c.SDL_UploadToGPUBuffer(
         copy_pass,
-        &c.SDL_GPUTransferBufferLocation{
+        &.{
             .offset = 0,
             .transfer_buffer = transferbuf,
         },
-        &c.SDL_GPUBufferRegion{
+        &.{
             .size = @sizeOf(@TypeOf(shape)) * 2,
             .offset = 0,
             .buffer = vertex_buffer,
@@ -187,7 +209,13 @@ pub fn render() !void {
 
     const swapchain_texture = blk: {
         var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(cmdbuf, root.window, &swapchain_texture, &width, &height));
+        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
+            cmdbuf,
+            root.window,
+            &swapchain_texture,
+            &width,
+            &height,
+        ));
         break :blk swapchain_texture orelse {
             try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
             return;
@@ -200,7 +228,12 @@ pub fn render() !void {
         .load_op = c.SDL_GPU_LOADOP_CLEAR,
         .store_op = c.SDL_GPU_STOREOP_STORE,
     });
-    const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &color_target_info, 1, null);
+    const render_pass = c.SDL_BeginGPURenderPass(
+        cmdbuf,
+        &color_target_info,
+        1,
+        null,
+    );
     c.SDL_SetGPUViewport(render_pass, &viewport(width, height));
 
     // Background
@@ -213,7 +246,12 @@ pub fn render() !void {
         projection: math.Mat4,
         view: math.Mat4,
     }{
-        .projection = math.Mat4.perspective(math.radians(90), render_aspect, 1, 4096),
+        .projection = math.Mat4.perspective(
+            math.radians(90),
+            render_aspect,
+            1,
+            4096,
+        ),
         .view = math.Mat4.lookAt(
             .{
                 @sin(t / 3) * 3,
@@ -224,7 +262,12 @@ pub fn render() !void {
             math.vec3.YUP,
         ),
     };
-    c.SDL_PushGPUVertexUniformData(cmdbuf, 0, @ptrCast(&matrices), @sizeOf(@TypeOf(matrices)));
+    c.SDL_PushGPUVertexUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&matrices),
+        @sizeOf(@TypeOf(matrices)),
+    );
     c.SDL_BindGPUGraphicsPipeline(render_pass, pipeline3d);
     c.SDL_BindGPUVertexBuffers(render_pass, 0, &[_]c.SDL_GPUBufferBinding{.{
         .buffer = vertex_buffer,
@@ -242,19 +285,19 @@ fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
     const height_f32: f32 = @floatFromInt(height);
     const aspect_ratio = width_f32 / height_f32;
 
-    var viewport_width = width_f32;
-    var viewport_height = height_f32;
+    var w = width_f32;
+    var h = height_f32;
     if (aspect_ratio > render_aspect) {
-        viewport_width = height_f32 * render_aspect;
+        w = height_f32 * render_aspect;
     } else {
-        viewport_height = width_f32 / render_aspect;
+        h = width_f32 / render_aspect;
     }
 
     return .{
-        .x = if (aspect_ratio > render_aspect) (width_f32 - viewport_width) / 2 else 0,
-        .y = if (aspect_ratio > render_aspect) 0 else (height_f32 - viewport_height) / 2,
-        .w = viewport_width,
-        .h = viewport_height,
+        .x = if (aspect_ratio > render_aspect) (width_f32 - w) / 2 else 0,
+        .y = if (aspect_ratio > render_aspect) 0 else (height_f32 - h) / 2,
+        .w = w,
+        .h = h,
         .min_depth = 0,
         .max_depth = 1,
     };

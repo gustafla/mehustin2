@@ -43,7 +43,7 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8,
     const stage = try stageFromExtension(name);
 
     // Allocate relative path to SPIR-V file
-    const spirv_name = try std.mem.concat(alloc, u8, &[_][]const u8{ name, ".spv" });
+    const spirv_name = try std.mem.concat(alloc, u8, &.{ name, ".spv" });
     defer alloc.free(spirv_name);
 
     // Load SPIR-V binary

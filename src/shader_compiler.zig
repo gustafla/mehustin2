@@ -170,8 +170,8 @@ pub fn main() !void {
     const alloc = arena.allocator();
 
     const basename = std.fs.path.basename(args.input_file);
-    const output_file = try std.mem.join(alloc, ".", &[_][]const u8{ basename, "spv" });
-    const output_path = try std.fs.path.join(alloc, &[_][]const u8{ args.output_dir, output_file });
+    const output_file = try std.mem.join(alloc, ".", &.{ basename, "spv" });
+    const output_path = try std.fs.path.join(alloc, &.{ args.output_dir, output_file });
 
     // Invoke shaderc
     try compileFile(alloc, args.input_file, output_path);

@@ -101,7 +101,7 @@ pub fn build(b: *Build) void {
     const exe_name_base = "demo";
     const exe_name = if (!target.query.isNative()) blk: {
         const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
-        break :blk std.mem.concat(b.allocator, u8, &[_][]const u8{
+        break :blk std.mem.concat(b.allocator, u8, &.{
             exe_name_base,
             "-",
             triple,
@@ -187,7 +187,7 @@ fn compileShaders(b: *Build, depend: *Step) void {
         //Define input and output paths
         const input_path = std.fs.path.join(
             b.allocator,
-            &[_][]const u8{ config.shader_dir, entry.name },
+            &.{ config.shader_dir, entry.name },
         ) catch @panic("OOM");
         const shader_run = b.addRunArtifact(shader_exe);
         const shader_output = shader_run.addPrefixedOutputDirectoryArg(
