@@ -9,16 +9,16 @@ const Config = struct {
 
     const PATH = "src/config.zon";
 
-    fn init(alloc: Allocator) !Config {
+    fn init(b: *Build) !Config {
         std.log.info("Loading {s}", .{PATH});
-        const file = try std.fs.cwd().openFile(PATH, .{});
+        const file = try b.build_root.handle.openFile(PATH, .{});
         defer file.close();
         const stat = try file.stat();
-        const buffer = try alloc.allocSentinel(u8, stat.size, 0);
+        const buffer = try b.allocator.allocSentinel(u8, stat.size, 0);
         std.debug.assert(try file.readAll(buffer[0..]) == stat.size);
         return try std.zon.parse.fromSlice(
             Config,
-            alloc,
+            b.allocator,
             buffer,
             null,
             .{ .ignore_unknown_fields = true },
@@ -28,9 +28,9 @@ const Config = struct {
 
 var config: Config = undefined;
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *Build) void {
     // Load config
-    config = Config.init(b.allocator) catch @panic("Can't load " ++ Config.PATH);
+    config = Config.init(b) catch @panic("Can't load " ++ Config.PATH);
 
     // Use standard target options
     const target = b.standardTargetOptions(.{});
@@ -176,7 +176,7 @@ fn compileShaders(b: *Build, depend: *Step) void {
     const shader_exe = shaderExe(b);
 
     // Create compiler run step for each shader
-    var source_dir = std.fs.cwd().openDir(
+    var source_dir = b.build_root.handle.openDir(
         config.shader_dir,
         .{ .iterate = true },
     ) catch @panic("Can't open shader dir");
