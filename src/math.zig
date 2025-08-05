@@ -1,11 +1,11 @@
+//! Vector and matrix operations.
+
 const std = @import("std");
 
-/// A 3-component vector
+/// A 3-component vector.
 pub const Vec3 = @Vector(3, f32);
 
-/// A 4-component vector
-pub const Vec4 = @Vector(4, f32);
-
+/// Operations on `Vec3`.
 pub const vec3 = struct {
     pub const ZERO: Vec3 = @splat(0.0);
     pub const YUP = Vec3{ 0.0, 1.0, 0.0 };
@@ -36,7 +36,7 @@ pub const vec3 = struct {
     }
 };
 
-/// A 4x4 square matrix
+/// A 4x4 square matrix.
 pub const Mat4 = extern struct {
     /// ## Column-major layout
     /// | `col[0][0]` | `col[1][0]` | `col[2][0]` | `col[3][0]` |
@@ -46,19 +46,28 @@ pub const Mat4 = extern struct {
     col: [4][4]f32,
 
     /// Constructs a perspective projection matrix.
-    /// This matrix transforms vertices from camera space to clip space.
-    /// ## Camera Space (Right-Handed):
-    /// +X is right, +Y is up, -Z is forward.
-    /// ## NDC Space:
-    /// - X: [-1.0, 1.0]
-    /// - Y: [-1.0, 1.0]
-    /// - Z: [ 0.0, 1.0]
-    /// ## Parameters
-    /// - `fov`: The vertical field of view in radians.
-    /// - `aspect`: The width of the viewport divided by the height.
-    /// - `near`: The distance to the near clipping plane (must be > 0).
-    /// - `far`: The distance to the far clipping plane (must be > nearPlane).
-    pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
+    ///
+    /// The matrix transforms vertices from camera space to clip space.
+    ///
+    /// Camera Space (Right-Handed):
+    /// * X is right
+    /// * Y is up
+    /// * Z is forward
+    ///
+    /// NDC Space:
+    /// * X: [-1.0, 1.0]
+    /// * Y: [-1.0, 1.0]
+    /// * Z: [ 0.0, 1.0]
+    pub fn perspective(
+        /// The vertical field of view in radians.
+        fov: f32,
+        /// The width of the viewport divided by the height.
+        aspect: f32,
+        /// The distance to the near clipping plane (must be > 0).
+        near: f32,
+        /// The distance to the far clipping plane (must be > nearPlane).
+        far: f32,
+    ) Mat4 {
         var matrix = std.mem.zeroes(Mat4);
 
         const yscale = 1.0 / @tan(fov / 2.0);
@@ -87,12 +96,16 @@ pub const Mat4 = extern struct {
     }
 
     /// Constructs a view matrix that looks at a target from a specific position.
-    /// This matrix transforms coordinates from World Space to Camera Space.
-    /// ## Parameters
-    /// - `camera`: The position of the camera in world space.
-    /// - `target`: The point in world space the camera is looking at.
-    /// - `up`: The "up" direction in world space (usually `vec3.YUP`).
-    pub fn lookAt(camera: Vec3, target: Vec3, up: Vec3) Mat4 {
+    ///
+    /// This matrix transforms coordinates from world space to camera space.
+    pub fn lookAt(
+        /// The position of the camera in world space.
+        camera: Vec3,
+        /// The point in world space the camera is looking at.
+        target: Vec3,
+        /// The "up" direction in world space (usually `vec3.YUP`).
+        up: Vec3,
+    ) Mat4 {
         const z = vec3.normalize(camera - target);
         const x = vec3.normalize(vec3.cross(up, z));
         const y = vec3.normalize(vec3.cross(z, x));
@@ -108,7 +121,7 @@ pub const Mat4 = extern struct {
     }
 };
 
-/// Convert degrees to radians
+/// Convert degrees to radians.
 pub fn radians(degrees: f32) f32 {
     return degrees * (std.math.pi / 180.0);
 }

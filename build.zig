@@ -120,6 +120,15 @@ pub fn build(b: *Build) void {
     // Configure the executable to be installed
     b.installArtifact(exe);
 
+    // Docs stuff
+    const install_docs = b.addInstallDirectory(.{
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+        .source_dir = exe.getEmittedDocs(),
+    });
+    const docs_step = b.step("docs", "Generate documentation");
+    docs_step.dependOn(&install_docs.step);
+
     // Add data files to bin
     b.getInstallStep().dependOn(&b.addInstallDirectory(.{
         .source_dir = b.path(config.data_dir),

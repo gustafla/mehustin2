@@ -14,7 +14,7 @@ const render = @import("render.zig");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
 
-pub const log = std.log.scoped(.sdl);
+const log = std.log.scoped(.sdl);
 
 // Track deinitialization with a stack
 const Resource = enum {
