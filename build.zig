@@ -67,11 +67,9 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .preferred_linkage = .static,
         .strip = release_build,
-        //.install_build_config_h = false,
+        .lto = release_build,
     });
     const sdl_lib = sdl_dep.artifact("SDL3");
-    //sdl_lib.lto = if (release_build) .full else null;
-    sdl_lib.want_lto = release_build;
 
     // Create a module for main.zig
     const exe_mod = b.createModule(.{
@@ -114,8 +112,7 @@ pub fn build(b: *Build) void {
         .root_module = exe_mod,
     });
     exe.linkLibC();
-    // exe.lto = if (release_build) .full else null;
-    exe.want_lto = release_build;
+    exe.lto = if (release_build) .full else .none;
 
     // Configure the executable to be installed
     b.installArtifact(exe);
