@@ -50,8 +50,8 @@
         "build.zig.zon",
         "src",
         "shaders",
-        // For example...
+        "data",
+        "README.md",
         //"LICENSE",
-        //"README.md",
     },
 }
