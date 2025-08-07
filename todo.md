@@ -7,8 +7,11 @@
   - [ ] Time
   - [ ] Cameras
 - [ ] Sync system
-  - [ ] Parameter tracks
   - [ ] Camera tracks
+  - [ ] Parameter tracks
+- [ ] Render abstractions
+  - [ ] Pass for post processing
+  - [ ] Mesh, instances for rasterizing
 - [ ] Post processing
   - [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
 - [ ] Use games-by-mason libraries?
