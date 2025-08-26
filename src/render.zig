@@ -10,45 +10,64 @@ const Allocator = std.mem.Allocator;
 const c = root.c;
 const sdlerr = root.sdlerr;
 
-// zig fmt: off
-const shape = [_]f32{
-    // position1          position2            position3
-     0.0, -1.0,  0.0,     0.66,  0.0,  0.66,    -0.66,  0.0,  0.66, // lower front
-     0.0, -1.0,  0.0,     0.66,  0.0, -0.66,     0.66,  0.0,  0.66, // lower right
-     0.0, -1.0,  0.0,    -0.66,  0.0, -0.66,     0.66,  0.0, -0.66, // lower back
-     0.0, -1.0,  0.0,    -0.66,  0.0,  0.66,    -0.66,  0.0, -0.66, // lower left
-
-     0.0,  1.0,  0.0,    -0.66,  0.0,  0.66,     0.66,  0.0,  0.66, // upper front
-     0.0,  1.0,  0.0,     0.66,  0.0,  0.66,     0.66,  0.0, -0.66, // upper right
-     0.0,  1.0,  0.0,     0.66,  0.0, -0.66,    -0.66,  0.0, -0.66, // upper back
-     0.0,  1.0,  0.0,    -0.66,  0.0, -0.66,    -0.66,  0.0,  0.66, // upper left
+const Format = enum(c.SDL_GPUTextureFormat) {
+    R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
 };
-const color = [_]f32{
-    0.3,0.3,0.3, 0.3,0.3,0.3, 0.3,0.3,0.3,
-    0.1,0.1,0.1, 0.1,0.1,0.1, 0.1,0.1,0.1,
-    0.3,0.3,0.3, 0.3,0.3,0.3, 0.3,0.3,0.3,
-    0.1,0.1,0.1, 0.1,0.1,0.1, 0.1,0.1,0.1,
 
-    0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,0.5,
-    0.7,0.7,0.7, 0.7,0.7,0.7, 0.7,0.7,0.7,
-    0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,0.5,
-    0.7,0.7,0.7, 0.7,0.7,0.7, 0.7,0.7,0.7,
+const Texture = union(enum) {
+    framebuffer: usize,
 };
-// zig fmt: on
+
+const Shader = struct {
+    name: []const u8,
+    textures: []const Texture,
+};
+
+const Draw = union(enum) {
+    shader: usize,
+    mesh: usize,
+};
+
+const Pass = struct {
+    draw: []const Draw,
+    targets: []const usize,
+};
+
+const StaticMesh = struct {
+    coords: []const f32,
+    colors: ?[]const f32,
+};
+
+const Mesh = union(enum) {
+    static: StaticMesh,
+};
+
+const Scene = struct {
+    framebuffers: []const Format,
+    shaders: []const Shader,
+    meshes: []const Mesh,
+    passes: []const Pass,
+};
+
+const scene: Scene = @import("scene.zon");
 
 pub const render_width: f32 = @floatFromInt(config.width);
 pub const render_height: f32 = @floatFromInt(config.height);
 pub const render_aspect = render_width / render_height;
 
 var device: *c.SDL_GPUDevice = undefined;
-var pipeline: *c.SDL_GPUGraphicsPipeline = undefined;
+var pipelines: [scene.shaders.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var pipeline3d: *c.SDL_GPUGraphicsPipeline = undefined;
-var vertex_buffer: *c.SDL_GPUBuffer = undefined;
+var vertex_buffers: [scene.meshes.len]*c.SDL_GPUBuffer = undefined;
 
 pub fn deinit() void {
-    c.SDL_ReleaseGPUBuffer(device, vertex_buffer);
+    for (vertex_buffers) |buf| {
+        c.SDL_ReleaseGPUBuffer(device, buf);
+    }
+    for (pipelines) |pipeline| {
+        c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
+    }
     c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline3d);
-    c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     c.SDL_DestroyGPUDevice(device);
 }
 
