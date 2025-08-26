@@ -165,25 +165,37 @@ pub fn init(alloc: Allocator) !void {
         },
     ));
 
-    const transferbuf = c.SDL_CreateGPUTransferBuffer(
+    const transferbuf = try sdlerr(c.SDL_CreateGPUTransferBuffer(
         device,
         &.{
             .size = @sizeOf(@TypeOf(shape)) * 2,
             .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
             .props = 0,
         },
-    );
+    ));
     defer c.SDL_ReleaseGPUTransferBuffer(device, transferbuf);
-    const data: [*]f32 = @ptrCast(@alignCast(c.SDL_MapGPUTransferBuffer(
+    const data: [*]f32 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
         device,
         transferbuf,
         false,
-    )));
+    ))));
     @memcpy(data, &shape);
     @memcpy(data[shape.len..], &color);
     c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
 
     const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
+    { // TODO: Remove this workaround when SDL is updated from 3.2.20
+        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+        var width: u32 = undefined;
+        var height: u32 = undefined;
+        try sdlerr(c.SDL_AcquireGPUSwapchainTexture(
+            cmdbuf,
+            root.window,
+            &swapchain_texture,
+            &width,
+            &height,
+        ));
+    }
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
     c.SDL_UploadToGPUBuffer(
         copy_pass,
