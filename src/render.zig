@@ -159,7 +159,7 @@ pub fn init(alloc: Allocator) !void {
     vertex_buffer = try sdlerr(c.SDL_CreateGPUBuffer(
         device,
         &.{
-            .size = @sizeOf(@TypeOf(shape)),
+            .size = @sizeOf(@TypeOf(shape)) * 2,
             .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
             .props = 0,
         },
