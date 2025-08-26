@@ -9,7 +9,8 @@ pub const c = @cImport({
     @cDefine("STB_VORBIS_HEADER_ONLY", {});
     @cInclude("stb_vorbis.c");
 });
-const util = @import("util.zig");
+const config = @import("config.zon");
+const res = @import("res.zig");
 const render = @import("render.zig");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
@@ -17,18 +18,18 @@ const time = @import("time.zig");
 const log = std.log.scoped(.sdl);
 
 // Track deinitialization with a stack
-const Resource = enum {
+const Subsystem = enum {
     window,
     renderer,
     audio,
 
     const N = @typeInfo(@This()).@"enum".fields.len;
-    var buffer = [_]Resource{undefined} ** N;
-    var stack: []Resource = buffer[N..N];
+    var buffer = [_]Subsystem{undefined} ** N;
+    var stack: []Subsystem = buffer[N..N];
 
-    fn initialized(res: Resource) void {
+    fn initialized(sys: Subsystem) void {
         stack = buffer[N - stack.len - 1 ..];
-        stack[0] = res;
+        stack[0] = sys;
     }
 };
 
@@ -49,8 +50,8 @@ fn fullscreen() !void {
         const display_width: f32 = @floatFromInt(mode.*.w);
         const display_height: f32 = @floatFromInt(mode.*.h);
         const display_aspect = display_width / display_height;
-        var width = util.conf.width;
-        var height = util.conf.height;
+        var width: u32 = config.width;
+        var height: u32 = config.height;
 
         if (display_aspect > render.render_aspect) {
             width = @intFromFloat(render.render_height * display_aspect + 0.5);
@@ -82,13 +83,17 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO));
 
-    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", util.conf.width, util.conf.height, c.SDL_WINDOW_RESIZABLE));
-    Resource.window.initialized();
+    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
+    Subsystem.window.initialized();
     try render.init(alloc);
-    Resource.renderer.initialized();
-    const music = "music.ogg";
-    audio.init(music) catch audio.log.warn("Can't play {s}", .{music});
-    Resource.audio.initialized();
+    Subsystem.renderer.initialized();
+    if (@hasField(@TypeOf(config), "audio")) {
+        if (audio.init(config.audio)) {
+            Subsystem.audio.initialized();
+        } else |err| {
+            audio.log.warn("Can't play {s}: {}", .{ config.audio, err });
+        }
+    }
 
     // Go fullscreen if release build
     if (builtin.mode != .Debug) {
@@ -144,8 +149,8 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
         log.err("{s}", .{c.SDL_GetError()});
     };
 
-    for (Resource.stack) |res| {
-        switch (res) {
+    for (Subsystem.stack) |sys| {
+        switch (sys) {
             .window => c.SDL_DestroyWindow(window),
             .renderer => render.deinit(),
             .audio => audio.deinit(),

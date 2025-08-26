@@ -1,8 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const root = @import("root");
+const config = @import("config.zon");
 const shader = @import("shader.zig");
-const util = @import("util.zig");
+const res = @import("res.zig");
 const math = @import("math.zig");
 const time = @import("time.zig");
 const Allocator = std.mem.Allocator;
@@ -35,8 +36,8 @@ const color = [_]f32{
 };
 // zig fmt: on
 
-pub const render_width: f32 = @floatFromInt(util.conf.width);
-pub const render_height: f32 = @floatFromInt(util.conf.height);
+pub const render_width: f32 = @floatFromInt(config.width);
+pub const render_height: f32 = @floatFromInt(config.height);
 pub const render_aspect = render_width / render_height;
 
 var device: *c.SDL_GPUDevice = undefined;

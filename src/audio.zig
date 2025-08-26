@@ -1,6 +1,6 @@
 const std = @import("std");
 const root = @import("root");
-const util = @import("util.zig");
+const res = @import("res.zig");
 const c = root.c;
 const sdlerr = root.sdlerr;
 
@@ -39,7 +39,7 @@ pub fn deinit() void {
 pub fn init(name: []const u8) !void {
     // Open vorbis decoder
     var err = c.VORBIS__no_error;
-    const path = try util.dataFilePath(name);
+    const path = try res.dataFilePath(name);
     // TODO: Do this with zig io and memory?
     vorbis = c.stb_vorbis_open_filename(path, &err, null) orelse return error.VorbisOpenFailed;
     errdefer c.stb_vorbis_close(vorbis);

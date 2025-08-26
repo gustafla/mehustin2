@@ -1,16 +1,10 @@
 const std = @import("std");
+const config = @import("config.zon");
 
 pub const log = std.log.scoped(.res);
 
 const BUF_SIZE = 64;
 var path_buf: [BUF_SIZE]u8 = undefined;
-
-pub const conf: struct {
-    width: u32,
-    height: u32,
-    data_dir: []const u8,
-    shader_dir: []const u8,
-} = @import("config.zon");
 
 fn pathZ(a: []const u8, b: []const u8) ![:0]const u8 {
     const path_len = a.len + 1 + b.len;
@@ -26,11 +20,11 @@ fn pathZ(a: []const u8, b: []const u8) ![:0]const u8 {
 }
 
 pub fn dataFilePath(name: []const u8) ![:0]const u8 {
-    return pathZ(conf.data_dir, name);
+    return pathZ(config.data_dir, name);
 }
 
 pub fn shaderFilePath(name: []const u8) ![:0]const u8 {
-    return pathZ(conf.shader_dir, name);
+    return pathZ(config.shader_dir, name);
 }
 
 pub fn loadFileZ(alloc: std.mem.Allocator, path: []const u8) ![:0]u8 {

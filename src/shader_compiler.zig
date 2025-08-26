@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const util = @import("util.zig");
+const res = @import("res.zig");
 const c = @cImport({
     @cInclude("shaderc/shaderc.h");
 });
@@ -26,13 +26,13 @@ pub fn includeResolve(data: ?*const anyopaque, source: [*c]const u8, typ: c_int,
     });
 
     _ = blk: {
-        const path_raw = util.shaderFilePath(name) catch |err| break :blk err;
+        const path_raw = res.shaderFilePath(name) catch |err| break :blk err;
         const path = alloc.dupe(u8, path_raw) catch |err| break :blk err;
         // TODO: https://github.com/ziglang/zig/issues/5610
         defer if (result.source_name == null) {
             alloc.free(path);
         };
-        const content = util.loadFileZ(alloc.*, path) catch |err| break :blk err;
+        const content = res.loadFileZ(alloc.*, path) catch |err| break :blk err;
 
         result.source_name = path.ptr;
         result.source_name_length = path.len;
@@ -146,7 +146,7 @@ const Args = struct {
 };
 
 fn compileFile(alloc: Allocator, input_path: [:0]const u8, output_path: []const u8) !void {
-    const glsl = try util.loadFileZ(alloc, input_path);
+    const glsl = try res.loadFileZ(alloc, input_path);
     defer alloc.free(glsl);
 
     const file = try std.fs.cwd().createFile(output_path, .{ .truncate = true });

@@ -1,6 +1,6 @@
 const std = @import("std");
 const options = @import("options");
-const util = @import("util.zig");
+const res = @import("res.zig");
 const Allocator = std.mem.Allocator;
 const root = @import("root");
 const sdlerr = root.sdlerr;
@@ -47,10 +47,10 @@ fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8,
     defer alloc.free(spirv_name);
 
     // Load SPIR-V binary
-    // const file = try std.fs.cwd().openFile(try util.dataFilePath(name), .{});
+    // const file = try std.fs.cwd().openFile(try res.dataFilePath(name), .{});
     // defer file.close();
     // const data = try file.readToEndAlloc(alloc, 1024 * 1024);
-    const data = try util.loadFileZ(alloc, try util.dataFilePath(spirv_name));
+    const data = try res.loadFileZ(alloc, try res.dataFilePath(spirv_name));
     defer alloc.free(data);
 
     // Load into SDL GPU
@@ -64,10 +64,10 @@ fn loadShaderGlsl(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8, 
     const stage = try stageFromExtension(name);
 
     // Allocate full file path
-    const path = try util.shaderFilePath(name);
+    const path = try res.shaderFilePath(name);
 
     // Read file and compile to SPIR-V
-    const glsl = try util.loadFileZ(alloc, path);
+    const glsl = try res.loadFileZ(alloc, path);
     defer alloc.free(glsl);
     const data = shaderc.compileShader(alloc, glsl, path) catch |err| {
         log.err("{s}\n", .{shaderc.shader_err.load()});
