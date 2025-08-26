@@ -1,10 +1,13 @@
+const std = @import("std");
 const root = @import("root");
 const util = @import("util.zig");
 const c = root.c;
 const sdlerr = root.sdlerr;
 
+pub const log = std.log.scoped(.audio);
+
 var vorbis: *c.stb_vorbis = undefined;
-var audio: *c.SDL_AudioStream = undefined;
+var audio: ?*c.SDL_AudioStream = null;
 var info: c.stb_vorbis_info = undefined;
 pub var at_end = false;
 
@@ -27,8 +30,10 @@ pub fn audioCallback(_: ?*anyopaque, _: ?*c.SDL_AudioStream, need_bytes: c_int, 
 }
 
 pub fn deinit() void {
-    c.SDL_DestroyAudioStream(audio);
-    c.stb_vorbis_close(vorbis);
+    if (audio) |a| {
+        c.SDL_DestroyAudioStream(a);
+        c.stb_vorbis_close(vorbis);
+    }
 }
 
 pub fn init(name: []const u8) !void {
@@ -55,9 +60,13 @@ pub fn init(name: []const u8) !void {
 }
 
 pub fn pause() !void {
-    try sdlerr(c.SDL_PauseAudioStreamDevice(audio));
+    if (audio) |a| {
+        try sdlerr(c.SDL_PauseAudioStreamDevice(a));
+    }
 }
 
 pub fn play() !void {
-    try sdlerr(c.SDL_ResumeAudioStreamDevice(audio));
+    if (audio) |a| {
+        try sdlerr(c.SDL_ResumeAudioStreamDevice(a));
+    }
 }

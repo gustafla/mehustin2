@@ -86,7 +86,8 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     Resource.window.initialized();
     try render.init(alloc);
     Resource.renderer.initialized();
-    try audio.init("music.ogg");
+    const music = "music.ogg";
+    audio.init(music) catch audio.log.warn("Can't play {s}", .{music});
     Resource.audio.initialized();
 
     // Go fullscreen if release build
