@@ -2,23 +2,40 @@
     .framebuffers = .{
         .R16g16b16a16Float,
     },
-    .shaders = .{ .{
-        .name = "shader.frag",
-        .textures = .{},
-    }, .{
-        .name = "post.frag",
-        .textures = .{.{ .framebuffer = 0 }},
-    } },
-    .passes = .{
-        // Background shader pass
+    .pipelines = .{
         .{
-            .draw = .{.{ .shader = 0 }},
-            .targets = .{0},
+            .vert = .{ .name = "3d.vert", .samplers = .{} },
+            .frag = .{ .name = "3d.frag", .samplers = .{} },
+            .targets = .{.{ .fb = 0 }},
+        },
+        .{
+            .vert = .{ .name = "quad.vert", .samplers = .{} },
+            .frag = .{ .name = "shader.frag", .samplers = .{} },
+            .targets = .{.{ .fb = 0 }},
+        },
+        .{
+            .vert = .{ .name = "quad.vert", .samplers = .{} },
+            .frag = .{ .name = "post.frag", .samplers = .{.{ .fb = 0 }} },
+            .targets = .{.swapchain},
+        },
+    },
+    .passes = .{
+        .{
+            .draw = .{
+                // Background shader
+                .{ .shader = 1 },
+                // Foreground mesh
+                .{ .mesh = .{
+                    .mesh = 0,
+                    .pipeline = 0,
+                } },
+            },
+            .targets = .{.{ .fb = 0 }},
         },
         // Post processing output pass
         .{
-            .draw = .{.{ .shader = 1 }},
-            .targets = .{},
+            .draw = .{.{ .shader = 2 }},
+            .targets = .{.swapchain},
         },
     },
     .meshes = .{
