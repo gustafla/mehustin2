@@ -38,7 +38,7 @@
             .drawcalls = .{
                 .{
                     .pipeline = 2,
-                    .samplers = .{.{ .fb = 0 }},
+                    .fragment_samplers = .{.{ .fb = 0 }},
                 },
             },
         },
