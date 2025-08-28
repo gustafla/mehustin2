@@ -10,12 +10,69 @@ const Allocator = std.mem.Allocator;
 const c = root.c;
 const sdlerr = root.sdlerr;
 
-const Format = enum(c.SDL_GPUTextureFormat) {
-    R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+const VertexAttributes = packed struct {
+    coords: bool = false,
+    normals: bool = false,
+    colors: bool = false,
+    uvs: bool = false,
 };
 
-const Sampler = union(enum) {
-    fb: usize,
+const AttribFields = std.meta.FieldEnum(VertexAttributes);
+
+fn attribParameters(comptime attribName: []const u8) ?struct {
+    pitch: u32,
+    format: c.SDL_GPUVertexElementFormat,
+} {
+    const field = std.meta.stringToEnum(AttribFields, attribName);
+    return switch (field orelse return null) {
+        .coords => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
+        .normals => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
+        .colors => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
+        .uvs => .{ .pitch = @sizeOf(f32) * 2, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2 },
+    };
+}
+
+const VertexData = struct {
+    coords: []const f32,
+    normals: []const f32 = &.{},
+    colors: []const f32 = &.{},
+    uvs: []const f32 = &.{},
+};
+
+const VertexBuffers = struct {
+    coords: ?*c.SDL_GPUBuffer,
+    normals: ?*c.SDL_GPUBuffer,
+    colors: ?*c.SDL_GPUBuffer,
+    uvs: ?*c.SDL_GPUBuffer,
+};
+
+// Statically assert that structs above have matching fields
+comptime {
+    const attributes_fields = @typeInfo(VertexAttributes).@"struct".fields;
+    const data_fields = @typeInfo(VertexData).@"struct".fields;
+    const buffers_fields = @typeInfo(VertexBuffers).@"struct".fields;
+    for (attributes_fields, data_fields, buffers_fields) |a, d, b| {
+        std.debug.assert(std.mem.eql(u8, a.name, d.name));
+        std.debug.assert(std.mem.eql(u8, a.name, b.name));
+    }
+}
+
+const TargetFormat = enum(c.SDL_GPUTextureFormat) {
+    R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+    Swapchain,
+};
+
+const PrimitiveType = enum(c.SDL_GPUPrimitiveType) {
+    TriangleList = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+    TriangleStrip = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,
+    LineList = c.SDL_GPU_PRIMITIVETYPE_LINELIST,
+    LineStrip = c.SDL_GPU_PRIMITIVETYPE_LINESTRIP,
+    PointList = c.SDL_GPU_PRIMITIVETYPE_POINTLIST,
+};
+
+const UniformData = enum {
+    Matrices,
+    Shadertoy,
 };
 
 const RenderTarget = union(enum) {
@@ -25,43 +82,50 @@ const RenderTarget = union(enum) {
 
 const Shader = struct {
     name: []const u8,
-    samplers: []const Sampler,
+    info: struct {
+        num_samplers: u32 = 0,
+        num_storage_textures: u32 = 0,
+        num_storage_buffers: u32 = 0,
+        num_uniform_buffers: u32 = 0,
+    } = .{},
 };
 
 const Pipeline = struct {
-    vert: Shader,
+    vert: Shader = .{ .name = "quad.vert" },
     frag: Shader,
-    targets: []const RenderTarget,
-};
-
-const DrawMesh = struct {
-    mesh: usize,
-    pipeline: usize,
-};
-
-const Draw = union(enum) {
-    shader: usize,
-    mesh: DrawMesh,
+    targets: []const TargetFormat = &.{.Swapchain},
+    vertex_attributes: VertexAttributes = .{},
+    primitive_type: PrimitiveType = .TriangleStrip,
 };
 
 const Pass = struct {
-    draw: []const Draw,
-    targets: []const RenderTarget,
+    drawcalls: []const struct {
+        pipeline: usize,
+        vertices: ?usize = null,
+        samplers: []const union(enum) {
+            fb: usize,
+        } = &.{},
+        vertex_uniforms: []const UniformData = &.{},
+        fragment_uniforms: []const UniformData = &.{},
+        num_vertices: union(enum) {
+            infer, // From first binding coords count, or 4 if no bindings
+            override: u32,
+        } = .infer,
+        num_instances: u32 = 1,
+        first_vertex: u32 = 0,
+        first_instance: u32 = 0,
+    },
+    targets: []const RenderTarget = &.{.swapchain},
 };
 
-const StaticMesh = struct {
-    coords: []const f32,
-    colors: ?[]const f32,
-};
-
-const Mesh = union(enum) {
-    static: StaticMesh,
+const VertexSource = union(enum) {
+    static: VertexData,
 };
 
 const Scene = struct {
-    framebuffers: []const Format,
+    framebuffers: []const TargetFormat,
     pipelines: []const Pipeline,
-    meshes: []const Mesh,
+    vertices: []const VertexSource,
     passes: []const Pass,
 };
 
@@ -73,12 +137,14 @@ pub const render_aspect = render_width / render_height;
 
 var device: *c.SDL_GPUDevice = undefined;
 var pipelines: [scene.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var vertex_buffers: [scene.meshes.len]*c.SDL_GPUBuffer = undefined;
-var vertex_counts: [scene.meshes.len]u32 = undefined;
+var vertex_buffers: [scene.vertices.len]VertexBuffers = undefined;
+var vertex_counts: [scene.vertices.len]u32 = undefined;
 
 pub fn deinit() void {
     for (vertex_buffers) |buf| {
-        c.SDL_ReleaseGPUBuffer(device, buf);
+        inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
+            c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
+        }
     }
     for (pipelines) |pipeline| {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
@@ -87,13 +153,9 @@ pub fn deinit() void {
 }
 
 fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
-    const vert = try shader.loadShader(alloc, device, pipeline.vert.name, .{
-        .num_samplers = @as(u32, @intCast(pipeline.vert.samplers.len)),
-    });
+    const vert = try shader.loadShader(alloc, device, pipeline.vert.name, pipeline.vert.info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(alloc, device, pipeline.frag.name, .{
-        .num_samplers = @as(u32, @intCast(pipeline.frag.samplers.len)),
-    });
+    const frag = try shader.loadShader(alloc, device, pipeline.frag.name, pipeline.frag.info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     const color_targets = try alloc.alloc(
@@ -103,21 +165,52 @@ fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipelin
     defer alloc.free(color_targets);
     for (pipeline.targets, color_targets) |target_def, *target| {
         const format = switch (target_def) {
-            .fb => |fbi| @intFromEnum(scene.framebuffers[fbi]),
-            .swapchain => c.SDL_GetGPUSwapchainTextureFormat(
+            .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
                 device,
                 root.window,
             ),
+            else => @intFromEnum(target_def),
         };
         target.* = .{ .format = format };
     }
 
+    // TODO: Instances
+    const max_attribs = @bitSizeOf(VertexAttributes);
+    var buffers: [max_attribs]c.SDL_GPUVertexBufferDescription = undefined;
+    var attribs: [max_attribs]c.SDL_GPUVertexAttribute = undefined;
+    var num_attribs: u32 = 0;
+    inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, i| {
+        const param = attribParameters(field.name) orelse unreachable;
+        const enabled = @field(pipeline.vertex_attributes, field.name);
+        if (enabled) {
+            buffers[num_attribs] = .{
+                .slot = @intCast(i),
+                .pitch = param.pitch,
+                .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                .instance_step_rate = 0,
+            };
+            attribs[num_attribs] = .{
+                .location = @intCast(i),
+                .buffer_slot = @intCast(i),
+                .format = param.format,
+                .offset = 0,
+            };
+            num_attribs += 1;
+        }
+    }
+
     return try sdlerr(c.SDL_CreateGPUGraphicsPipeline(
         device,
-        &std.mem.zeroInit(c.SDL_GPUGraphicsPipelineCreateInfo, .{
+        &.{
             .vertex_shader = vert,
             .fragment_shader = frag,
-            .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP, // TODO: config
+            .vertex_input_state = .{
+                .vertex_buffer_descriptions = &buffers,
+                .num_vertex_buffers = num_attribs,
+                .vertex_attributes = &attribs,
+                .num_vertex_attributes = num_attribs,
+            },
+            .primitive_type = @intFromEnum(pipeline.primitive_type),
             .rasterizer_state = .{
                 .fill_mode = c.SDL_GPU_FILLMODE_FILL,
                 .cull_mode = c.SDL_GPU_CULLMODE_NONE,
@@ -130,21 +223,18 @@ fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipelin
                 .num_color_targets = @as(u32, @intCast(color_targets.len)),
                 .color_target_descriptions = color_targets.ptr,
             },
-        }),
+        },
     ));
 }
 
-fn initVertexBufferStatic(mesh: StaticMesh) !*c.SDL_GPUBuffer {
-    var size: u32 = @intCast(mesh.coords.len * @sizeOf(f32));
-    if (mesh.colors) |colors| {
-        size += @intCast(colors.len * @sizeOf(f32));
-    }
+fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SDL_GPUBuffer {
+    const size: u32 = @intCast(data.len * @sizeOf(T));
 
     const buffer = try sdlerr(c.SDL_CreateGPUBuffer(
         device,
         &.{
             .size = size,
-            .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
+            .usage = usage,
             .props = 0,
         },
     ));
@@ -158,15 +248,12 @@ fn initVertexBufferStatic(mesh: StaticMesh) !*c.SDL_GPUBuffer {
         },
     ));
     defer c.SDL_ReleaseGPUTransferBuffer(device, transferbuf);
-    const data: [*]f32 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+    const tbp: [*]T = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
         device,
         transferbuf,
         false,
     ))));
-    @memcpy(data, mesh.coords);
-    if (mesh.colors) |colors| {
-        @memcpy(data[mesh.coords.len..], colors);
-    }
+    @memcpy(tbp, data);
     c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
 
     const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
@@ -214,71 +301,17 @@ pub fn init(alloc: Allocator) !void {
         pipeline.* = try initPipeline(alloc, def);
     }
 
-    // const vert3d = try shader.loadShader(
-    //     alloc,
-    //     device,
-    //     "3d.vert",
-    //     .{ .num_uniform_buffers = 1 },
-    // );
-    // defer c.SDL_ReleaseGPUShader(device, vert3d);
-    // const frag3d = try shader.loadShader(alloc, device, "3d.frag", .{});
-    // defer c.SDL_ReleaseGPUShader(device, frag3d);
-
-    // pipeline3d = try sdlerr(c.SDL_CreateGPUGraphicsPipeline(
-    //     device,
-    //     &std.mem.zeroInit(c.SDL_GPUGraphicsPipelineCreateInfo, .{
-    //         .vertex_shader = vert3d,
-    //         .fragment_shader = frag3d,
-    //         .vertex_input_state = .{
-    //             .vertex_buffer_descriptions = &[_]c.SDL_GPUVertexBufferDescription{
-    //                 .{
-    //                     .slot = 0,
-    //                     .pitch = @sizeOf(f32) * 3,
-    //                     .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-    //                     .instance_step_rate = 0,
-    //                 },
-    //             },
-    //             .num_vertex_buffers = 1,
-    //             .vertex_attributes = &[_]c.SDL_GPUVertexAttribute{
-    //                 .{
-    //                     // a_Position
-    //                     .location = 0,
-    //                     .buffer_slot = 0,
-    //                     .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-    //                     .offset = 0,
-    //                 },
-    //                 .{
-    //                     // a_Color
-    //                     .location = 1,
-    //                     .buffer_slot = 0,
-    //                     .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-    //                     .offset = @sizeOf(@TypeOf(shape)),
-    //                 },
-    //             },
-    //             .num_vertex_attributes = 2,
-    //         },
-    //         .primitive_type = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-    //         .rasterizer_state = .{
-    //             .fill_mode = c.SDL_GPU_FILLMODE_FILL,
-    //             .cull_mode = c.SDL_GPU_CULLMODE_BACK,
-    //             .front_face = c.SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
-    //         },
-    //         .multisample_state = .{
-    //             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-    //         },
-    //         .target_info = .{
-    //             .num_color_targets = 1,
-    //             .color_target_descriptions = &[_]c.SDL_GPUColorTargetDescription{
-    //                 .{ .format = swapchain_format },
-    //             },
-    //         },
-    //     }),
-    // ));
-    // errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline3d);
-
-    for (scene.meshes, &vertex_buffers, &vertex_counts) |def, *buffer, *count| {
-        buffer.* = try initVertexBufferStatic(def.static);
-        count.* = @intCast(def.static.coords.len / 3);
+    for (scene.vertices, &vertex_buffers, &vertex_counts) |def, *buffers, *count| {
+        const data = def.static;
+        // Create vertex buffer for each vertex data slice (matching names)
+        inline for (@typeInfo(VertexData).@"struct".fields) |field| {
+            @field(buffers.*, field.name) = if (@field(data, field.name).len > 0)
+                try initBuffer(f32, @field(data, field.name), c.SDL_GPU_BUFFERUSAGE_VERTEX)
+            else
+                null;
+        }
+        // Divide by three because XYZ
+        count.* = @intCast(data.coords.len / 3);
     }
 }
 
@@ -340,30 +373,68 @@ pub fn render() !void {
         );
         c.SDL_SetGPUViewport(render_pass, &viewport(width, height));
 
-        for (pass.draw) |draw| {
-            switch (draw) {
-                .shader => |i| {
-                    c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[i]);
-                    c.SDL_DrawGPUPrimitives(render_pass, 4, 1, 0, 0);
-                },
-                .mesh => |draw_mesh| {
-                    // 3D scene
-                    c.SDL_PushGPUVertexUniformData(
-                        cmdbuf,
-                        0,
-                        @ptrCast(&matrices),
-                        @sizeOf(@TypeOf(matrices)),
-                    );
-                    const pipeline = pipelines[draw_mesh.pipeline];
-                    c.SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
-                    c.SDL_BindGPUVertexBuffers(render_pass, 0, &[_]c.SDL_GPUBufferBinding{.{
-                        // TODO: document assumption that 1 mesh = 1 vertex buffer
-                        .buffer = vertex_buffers[draw_mesh.mesh],
-                        .offset = 0,
-                    }}, 1);
-                    c.SDL_DrawGPUPrimitives(render_pass, vertex_counts[draw_mesh.mesh], 1, 0, 0);
-                },
+        for (pass.drawcalls) |drawcall| {
+            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[drawcall.pipeline]);
+
+            // Bind vertex buffers
+            if (drawcall.vertices) |vertices_index| {
+                inline for (@typeInfo(VertexBuffers).@"struct".fields, 0..) |field, i| {
+                    const buffer = @field(vertex_buffers[vertices_index], field.name);
+                    if (buffer) |buf| {
+                        c.SDL_BindGPUVertexBuffers(
+                            render_pass,
+                            @intCast(i),
+                            &[_]c.SDL_GPUBufferBinding{.{
+                                .buffer = buf,
+                                .offset = 0,
+                            }},
+                            1,
+                        );
+                    }
+                }
             }
+
+            // TODO: bind textures
+
+            // Push uniforms
+            inline for (.{
+                .{
+                    .push = c.SDL_PushGPUVertexUniformData,
+                    .ufms = drawcall.vertex_uniforms,
+                },
+                .{
+                    .push = c.SDL_PushGPUFragmentUniformData,
+                    .ufms = drawcall.fragment_uniforms,
+                },
+            }) |stage| {
+                for (stage.ufms, 0..) |ufm, slot| {
+                    const param: struct { *const anyopaque, u32 } = switch (ufm) {
+                        .Matrices => .{
+                            @ptrCast(&matrices),
+                            @sizeOf(@TypeOf(matrices)),
+                        },
+                        .Shadertoy => @panic("TODO: Shadertoy uniforms"),
+                    };
+                    stage.push(
+                        cmdbuf,
+                        @intCast(slot),
+                        param[0],
+                        param[1],
+                    );
+                }
+            }
+
+            const num_vertices = switch (drawcall.num_vertices) {
+                .infer => if (drawcall.vertices) |i| vertex_counts[i] else 4,
+                .override => |num| num,
+            };
+            c.SDL_DrawGPUPrimitives(
+                render_pass,
+                num_vertices,
+                drawcall.num_instances,
+                drawcall.first_vertex,
+                drawcall.first_instance,
+            );
         }
 
         c.SDL_EndGPURenderPass(render_pass);

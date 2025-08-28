@@ -4,41 +4,46 @@
     },
     .pipelines = .{
         .{
-            .vert = .{ .name = "3d.vert", .samplers = .{} },
-            .frag = .{ .name = "3d.frag", .samplers = .{} },
-            .targets = .{.{ .fb = 0 }},
+            .vert = .{ .name = "3d.vert", .info = .{ .num_uniform_buffers = 1 } },
+            .frag = .{ .name = "3d.frag" },
+            .targets = .{.R16g16b16a16Float},
+            .vertex_attributes = .{ .coords = true, .colors = true },
+            .primitive_type = .TriangleList,
         },
         .{
-            .vert = .{ .name = "quad.vert", .samplers = .{} },
-            .frag = .{ .name = "shader.frag", .samplers = .{} },
-            .targets = .{.{ .fb = 0 }},
+            .frag = .{ .name = "shader.frag" },
+            .targets = .{.R16g16b16a16Float},
         },
         .{
-            .vert = .{ .name = "quad.vert", .samplers = .{} },
-            .frag = .{ .name = "post.frag", .samplers = .{.{ .fb = 0 }} },
-            .targets = .{.swapchain},
+            .frag = .{ .name = "post.frag", .info = .{ .num_samplers = 1 } },
         },
     },
     .passes = .{
+        // Main render pass
         .{
-            .draw = .{
+            .drawcalls = .{
                 // Background shader
-                .{ .shader = 1 },
+                .{ .pipeline = 1 },
                 // Foreground mesh
-                .{ .mesh = .{
-                    .mesh = 0,
+                .{
                     .pipeline = 0,
-                } },
+                    .vertices = 0,
+                    .vertex_uniforms = .{.Matrices},
+                },
             },
             .targets = .{.{ .fb = 0 }},
         },
         // Post processing output pass
         .{
-            .draw = .{.{ .shader = 2 }},
-            .targets = .{.swapchain},
+            .drawcalls = .{
+                .{
+                    .pipeline = 2,
+                    .samplers = .{.{ .fb = 0 }},
+                },
+            },
         },
     },
-    .meshes = .{
+    .vertices = .{
         // zig fmt: off
         .{ .static = .{
             .coords = .{
