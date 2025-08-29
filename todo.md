@@ -1,8 +1,10 @@
 # High priority
 
-- [ ] Render abstractions
-  - [ ] Pass for post processing
-  - [ ] Mesh, instances for rasterizing
+- [X] Render abstractions
+  - [X] Pass for post processing
+  - [X] Mesh
+  - [ ] Instances
+  - [X] Uniforms
 - [ ] Music player
 - [ ] Developer controls
   - [ ] Time
@@ -14,13 +16,14 @@
 
 # Backlog
 
-- [ ] Use games-by-mason libraries?
+- [ ] Use (games-by-mason) libraries?
   - [ ] Zex
   - [ ] shader_compiler
   - [ ] tracy_zig
   - [ ] Tween
   - [ ] dear_imgui_zig
   - [ ] gbms
+  - [ ] zm
 - [ ] Shader live editing
   - [ ] Text renderer
     - [ ] Texture loader

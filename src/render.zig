@@ -118,6 +118,10 @@ const Pass = struct {
         first_vertex: u32 = 0,
         first_instance: u32 = 0,
     },
+    viewport: enum {
+        Default,
+        ToWindow,
+    } = .Default,
     targets: []const RenderTarget = &.{.swapchain},
 };
 
@@ -241,7 +245,7 @@ fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipelin
         .primitive_type = @intFromEnum(pipeline.primitive_type),
         .rasterizer_state = .{
             .fill_mode = c.SDL_GPU_FILLMODE_FILL,
-            .cull_mode = c.SDL_GPU_CULLMODE_NONE,
+            .cull_mode = c.SDL_GPU_CULLMODE_BACK,
             .front_face = c.SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
         },
         .multisample_state = .{
@@ -365,11 +369,13 @@ pub fn init(alloc: Allocator) !void {
 }
 
 pub fn render() !void {
+    // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
+
+    // Acquire swapchain texture
     var width: u32 = 0;
     var height: u32 = 0;
-
     const swapchain_texture = blk: {
         var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
         try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
@@ -385,11 +391,12 @@ pub fn render() !void {
         };
     };
 
+    // Compute view & projection matrices
     const t = time.getTime();
-    const matrices = extern struct {
+    const matrices: extern struct {
         projection: math.Mat4,
         view: math.Mat4,
-    }{
+    } = .{
         .projection = math.Mat4.perspective(
             math.radians(90),
             render_aspect,
@@ -407,6 +414,16 @@ pub fn render() !void {
         ),
     };
 
+    // Initialize uniforms
+    const uniforms: extern struct {
+        resolution: [2]f32,
+        time: f32,
+    } = .{
+        .resolution = .{ render_width, render_height },
+        .time = t,
+    };
+
+    // Render passes
     for (scene.passes) |pass| {
         // TODO: take upper bound from scene.zon
         var color_target_infos: [8]c.SDL_GPUColorTargetInfo = undefined;
@@ -427,8 +444,12 @@ pub fn render() !void {
             @intCast(pass.targets.len),
             null,
         );
-        c.SDL_SetGPUViewport(render_pass, &viewport(width, height));
+        switch (pass.viewport) {
+            .Default => {},
+            .ToWindow => c.SDL_SetGPUViewport(render_pass, &viewport(width, height)),
+        }
 
+        // Record drawcalls
         for (pass.drawcalls) |drawcall| {
             c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[drawcall.pipeline]);
 
@@ -485,7 +506,10 @@ pub fn render() !void {
                             @ptrCast(&matrices),
                             @sizeOf(@TypeOf(matrices)),
                         },
-                        .Shadertoy => @panic("TODO: Shadertoy uniforms"),
+                        .Shadertoy => .{
+                            @ptrCast(&uniforms),
+                            @sizeOf(@TypeOf(uniforms)),
+                        },
                     };
                     stage.push(
                         cmdbuf,
