@@ -218,14 +218,14 @@ fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipelin
         const enabled = @field(pipeline.vertex_attributes, field.name);
         if (enabled) {
             buffers[num_attribs] = .{
-                .slot = @intCast(i),
+                .slot = num_attribs,
                 .pitch = param.pitch,
                 .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
                 .instance_step_rate = 0,
             };
             attribs[num_attribs] = .{
                 .location = @intCast(i),
-                .buffer_slot = @intCast(i),
+                .buffer_slot = num_attribs,
                 .format = param.format,
                 .offset = 0,
             };
@@ -405,9 +405,9 @@ pub fn render() !void {
         ),
         .view = math.Mat4.lookAt(
             .{
-                @sin(t / 3) * 3,
-                @sin(t / 5) * 2,
-                @cos(t / 3) * 3,
+                @sin(t / 4 * std.math.pi) * 3,
+                @sin(t / 8 * std.math.pi) * 2,
+                @cos(t / 3 * std.math.pi) * 4,
             },
             math.vec3.ZERO,
             math.vec3.YUP,
@@ -455,15 +455,17 @@ pub fn render() !void {
 
             // Bind vertex buffers
             if (drawcall.vertices) |vertices_index| {
-                inline for (@typeInfo(VertexBuffers).@"struct".fields, 0..) |field, i| {
+                var slot: u32 = 0;
+                inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
                     const buffer = @field(vertex_buffers[vertices_index], field.name);
                     if (buffer) |buf| {
                         c.SDL_BindGPUVertexBuffers(
                             render_pass,
-                            @intCast(i),
+                            slot,
                             &.{ .buffer = buf, .offset = 0 },
                             1,
                         );
+                        slot += 1;
                     }
                 }
             }
