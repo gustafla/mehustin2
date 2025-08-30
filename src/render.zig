@@ -57,9 +57,15 @@ comptime {
     }
 }
 
-const TargetFormat = enum(c.SDL_GPUTextureFormat) {
+const ColorFormat = enum(c.SDL_GPUTextureFormat) {
     R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
     Swapchain,
+};
+
+const DepthFormat = enum(c.SDL_GPUTextureFormat) {
+    D16Unorm = c.SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+    D24Unorm = c.SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+    D32Float = c.SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
 };
 
 const PrimitiveType = enum(c.SDL_GPUPrimitiveType) {
@@ -70,13 +76,17 @@ const PrimitiveType = enum(c.SDL_GPUPrimitiveType) {
     PointList = c.SDL_GPU_PRIMITIVETYPE_POINTLIST,
 };
 
+const CompareOp = enum(c.SDL_GPUCompareOp) {
+    Less = c.SDL_GPU_COMPAREOP_LESS,
+};
+
 const UniformData = enum {
     Matrices,
     Shadertoy,
 };
 
-const RenderTarget = union(enum) {
-    fb: usize,
+const ColorTarget = union(enum) {
+    index: usize,
     swapchain,
 };
 
@@ -93,13 +103,20 @@ const Shader = struct {
 const Pipeline = struct {
     vert: Shader = .{ .name = "quad.vert" },
     frag: Shader,
-    targets: []const TargetFormat = &.{.Swapchain},
     vertex_attributes: VertexAttributes = .{},
     primitive_type: PrimitiveType = .TriangleStrip,
+    depth_test: ?struct {
+        compare_op: CompareOp = .Less,
+        enable: bool = true,
+        write: bool = true,
+    } = null,
+    color_targets: []const ColorFormat = &.{.Swapchain},
+    depth_target: ?DepthFormat = null,
 };
 
 const Texture = union(enum) {
-    fb: usize,
+    color: usize,
+    // depth: usize,
 };
 
 const Pass = struct {
@@ -122,7 +139,8 @@ const Pass = struct {
         Default,
         ToWindow,
     } = .Default,
-    targets: []const RenderTarget = &.{.swapchain},
+    color_targets: []const ColorTarget = &.{.swapchain},
+    depth_target: ?usize = null,
 };
 
 const VertexSource = union(enum) {
@@ -130,7 +148,8 @@ const VertexSource = union(enum) {
 };
 
 const Scene = struct {
-    framebuffers: []const TargetFormat,
+    color_textures: []const ColorFormat = &.{},
+    depth_textures: []const DepthFormat = &.{},
     pipelines: []const Pipeline,
     vertices: []const VertexSource,
     passes: []const Pass,
@@ -138,13 +157,28 @@ const Scene = struct {
 
 const scene: Scene = @import("scene.zon");
 
+// Compute upper bounds from scene
+fn maxSliceLen(set: anytype, comptime fieldName: []const u8) usize {
+    var max: usize = 0;
+    for (set) |elem| {
+        const len = @field(elem, fieldName).len;
+        if (len > max) {
+            max = len;
+        }
+    }
+    return max;
+}
+const max_pipeline_color_targets = maxSliceLen(scene.pipelines, "color_targets");
+const max_pass_color_targets = maxSliceLen(scene.passes, "color_targets");
+
 pub const render_width: f32 = @floatFromInt(config.width);
 pub const render_height: f32 = @floatFromInt(config.height);
 pub const render_aspect = render_width / render_height;
 
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
-var framebuffers: [scene.framebuffers.len]*c.SDL_GPUTexture = undefined;
+var color_textures: [scene.color_textures.len]*c.SDL_GPUTexture = undefined;
+var depth_textures: [scene.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var pipelines: [scene.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var vertex_buffers: [scene.vertices.len]VertexBuffers = undefined;
 var vertex_counts: [scene.vertices.len]u32 = undefined;
@@ -158,14 +192,17 @@ pub fn deinit() void {
     for (pipelines) |pipeline| {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
-    for (framebuffers) |framebuffer| {
-        c.SDL_ReleaseGPUTexture(device, framebuffer);
+    for (depth_textures) |texture| {
+        c.SDL_ReleaseGPUTexture(device, texture);
+    }
+    for (color_textures) |texture| {
+        c.SDL_ReleaseGPUTexture(device, texture);
     }
     c.SDL_ReleaseGPUSampler(device, nearest);
     c.SDL_DestroyGPUDevice(device);
 }
 
-pub fn initFramebuffer(format: TargetFormat) !*c.SDL_GPUTexture {
+pub fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
         .format = switch (format) {
@@ -185,19 +222,28 @@ pub fn initFramebuffer(format: TargetFormat) !*c.SDL_GPUTexture {
     }));
 }
 
+pub fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
+    return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+        .type = c.SDL_GPU_TEXTURETYPE_2D,
+        .format = @intFromEnum(format),
+        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        .width = render_width,
+        .height = render_height,
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+        .props = 0,
+    }));
+}
+
 fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
     const vert = try shader.loadShader(alloc, device, pipeline.vert.name, pipeline.vert.info);
     defer c.SDL_ReleaseGPUShader(device, vert);
     const frag = try shader.loadShader(alloc, device, pipeline.frag.name, pipeline.frag.info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    // TODO: take upper bound from scene.zon
-    const color_targets = try alloc.alloc(
-        c.SDL_GPUColorTargetDescription,
-        pipeline.targets.len,
-    );
-    defer alloc.free(color_targets);
-    for (pipeline.targets, color_targets) |target_def, *target| {
+    var color_targets: [max_pipeline_color_targets]c.SDL_GPUColorTargetDescription = undefined;
+    for (pipeline.color_targets, color_targets[0..pipeline.color_targets.len]) |target_def, *target| {
         const format = switch (target_def) {
             .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
                 device,
@@ -251,9 +297,21 @@ fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipelin
         .multisample_state = .{
             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
         },
+        .depth_stencil_state = if (pipeline.depth_test) |state| .{
+            .compare_op = @intFromEnum(state.compare_op),
+            .enable_depth_test = state.enable,
+            .enable_depth_write = state.write,
+            .enable_stencil_test = false,
+        } else .{
+            .enable_depth_test = false,
+            .enable_depth_write = false,
+            .enable_stencil_test = false,
+        },
         .target_info = .{
-            .num_color_targets = @as(u32, @intCast(color_targets.len)),
-            .color_target_descriptions = color_targets.ptr,
+            .num_color_targets = @as(u32, @intCast(pipeline.color_targets.len)),
+            .color_target_descriptions = &color_targets,
+            .depth_stencil_format = @intFromEnum(pipeline.depth_target orelse undefined),
+            .has_depth_stencil_target = pipeline.depth_target != null,
         },
         .props = 0,
     }));
@@ -343,9 +401,14 @@ pub fn init(alloc: Allocator) !void {
     )));
     errdefer c.SDL_ReleaseGPUSampler(device, nearest);
 
-    for (scene.framebuffers, &framebuffers) |format, *framebuffer| {
-        framebuffer.* = try initFramebuffer(format);
-        errdefer c.SDL_ReleaseGPUTexture(device, framebuffer.*);
+    for (scene.color_textures, &color_textures) |format, *texture| {
+        texture.* = try initColorTexture(format);
+        errdefer c.SDL_ReleaseGPUTexture(texture.*);
+    }
+
+    for (scene.depth_textures, &depth_textures) |format, *texture| {
+        texture.* = try initDepthTexture(format);
+        errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     for (scene.pipelines, &pipelines) |def, *pipeline| {
@@ -425,24 +488,32 @@ pub fn render() !void {
 
     // Render passes
     for (scene.passes) |pass| {
-        // TODO: take upper bound from scene.zon
-        var color_target_infos: [8]c.SDL_GPUColorTargetInfo = undefined;
-        for (pass.targets, color_target_infos[0..pass.targets.len]) |target, *info| {
+        var color_target_infos: [max_pass_color_targets]c.SDL_GPUColorTargetInfo = undefined;
+        for (pass.color_targets, color_target_infos[0..pass.color_targets.len]) |target, *info| {
             info.* = .{
                 .texture = switch (target) {
-                    .fb => |index| framebuffers[index],
+                    .index => |index| color_textures[index],
                     .swapchain => swapchain_texture,
                 },
                 .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
                 .load_op = c.SDL_GPU_LOADOP_CLEAR,
                 .store_op = c.SDL_GPU_STOREOP_STORE,
+                .cycle = true,
             };
         }
         const render_pass = c.SDL_BeginGPURenderPass(
             cmdbuf,
             &color_target_infos,
-            @intCast(pass.targets.len),
-            null,
+            @intCast(pass.color_targets.len),
+            if (pass.depth_target) |index| &.{
+                .texture = depth_textures[index],
+                .clear_depth = 1,
+                .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                .store_op = c.SDL_GPU_STOREOP_STORE,
+                .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
+                .stencil_store_op = c.SDL_GPU_STOREOP_DONT_CARE,
+                .cycle = true,
+            } else null,
         );
         switch (pass.viewport) {
             .Default => {},
@@ -484,7 +555,7 @@ pub fn render() !void {
                 for (stage.tex, 0..) |tex, slot| {
                     stage.bind(render_pass, @intCast(slot), &.{
                         .texture = switch (tex) {
-                            .fb => |i| framebuffers[i],
+                            .color => |i| color_textures[i],
                         },
                         .sampler = nearest,
                     }, 1);

@@ -1,18 +1,24 @@
 .{
-    .framebuffers = .{
+    .color_textures = .{
         .R16g16b16a16Float,
+    },
+    .depth_textures = .{
+        .D16Unorm,
     },
     .pipelines = .{
         .{
-            .vert = .{ .name = "3d.vert", .info = .{ .num_uniform_buffers = 1 } },
+            .vert = .{ .name = "3d.vert", .info = .{ .num_uniform_buffers = 2 } },
             .frag = .{ .name = "3d.frag" },
-            .targets = .{.R16g16b16a16Float},
             .vertex_attributes = .{ .coords = true, .colors = true },
             .primitive_type = .TriangleList,
+            .depth_test = .{}, // Enable with defaults
+            .color_targets = .{.R16g16b16a16Float},
+            .depth_target = .D16Unorm,
         },
         .{
             .frag = .{ .name = "shader.frag" },
-            .targets = .{.R16g16b16a16Float},
+            .color_targets = .{.R16g16b16a16Float},
+            .depth_target = .D16Unorm, // Not written to, just for validation
         },
         .{
             .frag = .{ .name = "post.frag", .info = .{
@@ -34,17 +40,19 @@
                 .{
                     .pipeline = 0,
                     .vertices = 0,
-                    .vertex_uniforms = .{.Matrices},
+                    .vertex_uniforms = .{ .Matrices, .Shadertoy },
+                    .num_instances = 512,
                 },
             },
-            .targets = .{.{ .fb = 0 }},
+            .color_targets = .{.{ .index = 0 }},
+            .depth_target = 0,
         },
         // Post processing output pass
         .{
             .drawcalls = .{
                 .{
                     .pipeline = 2,
-                    .fragment_samplers = .{.{ .fb = 0 }},
+                    .fragment_samplers = .{.{ .color = 0 }},
                     .fragment_uniforms = .{.Shadertoy},
                 },
             },
