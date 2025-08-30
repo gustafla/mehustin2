@@ -62,28 +62,30 @@ inline fn seek(to: f32) void {
 fn fullscreen() !void {
     try sdlerr(c.SDL_HideCursor());
 
-    if (std.mem.eql(u8, std.mem.span(c.SDL_GetCurrentVideoDriver()), "wayland")) {
-        const display = c.SDL_GetDisplayForWindow(window);
-        const mode = c.SDL_GetDesktopDisplayMode(display);
-        const display_width: f32 = @floatFromInt(mode.*.w);
-        const display_height: f32 = @floatFromInt(mode.*.h);
-        const display_aspect = display_width / display_height;
-        var width: u32 = config.width;
-        var height: u32 = config.height;
+    if (builtin.target.os.tag == .linux) {
+        if (std.mem.eql(u8, std.mem.span(c.SDL_GetCurrentVideoDriver()), "wayland")) {
+            const display = c.SDL_GetDisplayForWindow(window);
+            const mode = c.SDL_GetDesktopDisplayMode(display);
+            const display_width: f32 = @floatFromInt(mode.*.w);
+            const display_height: f32 = @floatFromInt(mode.*.h);
+            const display_aspect = display_width / display_height;
+            var width: u32 = config.width;
+            var height: u32 = config.height;
 
-        if (display_aspect > render.render_aspect) {
-            width = @intFromFloat(render.render_height * display_aspect + 0.5);
-        } else {
-            height = @intFromFloat(render.render_width / display_aspect + 0.5);
+            if (display_aspect > render.render_aspect) {
+                width = @intFromFloat(render.render_height * display_aspect + 0.5);
+            } else {
+                height = @intFromFloat(render.render_width / display_aspect + 0.5);
+            }
+
+            var hack_mode: c.SDL_DisplayMode = mode.*;
+            hack_mode.w = @intCast(width);
+            hack_mode.h = @intCast(height);
+
+            const videodisplay = SDL_GetVideoDisplay(display) orelse return error.FullscreenHackFailed;
+            _ = SDL_AddFullscreenDisplayMode(videodisplay, &hack_mode);
+            try sdlerr(c.SDL_SetWindowFullscreenMode(window, &hack_mode));
         }
-
-        var hack_mode: c.SDL_DisplayMode = mode.*;
-        hack_mode.w = @intCast(width);
-        hack_mode.h = @intCast(height);
-
-        const videodisplay = SDL_GetVideoDisplay(display) orelse return error.FullscreenHackFailed;
-        _ = SDL_AddFullscreenDisplayMode(videodisplay, &hack_mode);
-        try sdlerr(c.SDL_SetWindowFullscreenMode(window, &hack_mode));
     }
 
     try sdlerr(c.SDL_SetWindowFullscreen(window, true));
@@ -94,10 +96,11 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     const revision: [*:0]const u8 = c.SDL_GetRevision();
     log.debug("SDL runtime revision: {s}", .{revision});
-
-    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
-    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
-    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_SCALING, "stretch");
+    if (builtin.target.os.tag == .linux) {
+        _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
+        _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
+        _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_SCALING, "stretch");
+    }
     try sdlerr(c.SDL_SetAppMetadata("Mehustin2", "2.0.0", "tech.mehu.mehustin2"));
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO));
 
