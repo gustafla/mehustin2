@@ -156,8 +156,8 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDLK_SPACE => pause(),
                 c.SDLK_LEFT => seek(time.getTime() - 1),
                 c.SDLK_RIGHT => seek(time.getTime() + 1),
-                c.SDLK_PAGEUP => seek(time.getTime() - 10),
-                c.SDLK_PAGEDOWN => seek(time.getTime() + 10),
+                c.SDLK_PAGEUP => seek(time.getTime() - 8),
+                c.SDLK_PAGEDOWN => seek(time.getTime() + 8),
                 c.SDLK_HOME => seek(0),
                 else => {},
             }

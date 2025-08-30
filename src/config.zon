@@ -4,4 +4,5 @@
     .data_dir = "data",
     .shader_dir = "shaders",
     .audio = "music.ogg",
+    .bpm = 140,
 }
