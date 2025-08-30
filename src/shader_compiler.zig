@@ -115,33 +115,37 @@ pub threadlocal var shader_err: ErrorStore = .{};
 // Build-time compiler binary:
 
 const Args = struct {
-    output_dir: [:0]const u8,
-    input_file: [:0]const u8,
+    output_dir: [:0]const u8 = undefined,
+    input_file: [:0]const u8 = undefined,
 
     fn init() !Args {
-        var args = std.process.args();
-        std.debug.assert(args.skip());
+        var argv = std.process.args();
+        std.debug.assert(argv.skip());
 
-        var output_dir: ?[:0]const u8 = null;
-        var input_file: ?[:0]const u8 = null;
+        var args: Args = .{};
+        var have_output = false;
+        var have_input = false;
 
-        while (args.next()) |arg| {
+        while (argv.next()) |arg| {
             if (std.mem.startsWith(u8, arg, "-o")) {
-                output_dir = arg[2..];
+                args.output_dir = arg[2..];
+                have_output = true;
             }
-            input_file = arg;
+            args.input_file = arg;
+            have_input = true;
         }
 
-        return .{
-            .output_dir = output_dir orelse {
-                log.err("Missing output directory (-o./dir)", .{});
-                return error.NoOutputDir;
-            },
-            .input_file = input_file orelse {
-                log.err("Missing input file", .{});
-                return error.NoInputFile;
-            },
-        };
+        if (!have_output) {
+            log.err("Missing output directory (-o./dir)", .{});
+            return error.NoOutputDir;
+        }
+
+        if (!have_input) {
+            log.err("Missing input file", .{});
+            return error.NoInputFile;
+        }
+
+        return args;
     }
 };
 
@@ -160,6 +164,10 @@ fn compileFile(alloc: Allocator, input_path: [:0]const u8, output_path: []const 
 
     try file.writeAll(spirv);
 }
+
+pub const std_options: std.Options = .{
+    .log_level = .err,
+};
 
 pub fn main() !void {
     const args = try Args.init();

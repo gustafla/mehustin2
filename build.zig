@@ -50,17 +50,6 @@ pub fn build(b: *Build) void {
     ) orelse !release_build;
     options.addOption(bool, "use_shaderc", use_shaderc);
 
-    if (!use_shaderc) {
-        std.log.warn(
-            \\
-            \\.----------------------------------------------.
-            \\| Runtime shaderc (-Duse-shaderc) is disabled. |
-            \\| Shaders are not automatically compiled!      |
-            \\| Run `zig build shaders` after this build.    |
-            \\`----------------------------------------------'
-        , .{});
-    }
-
     // Get SDL3 dependency from build.zig.zon
     const sdl_dep = b.dependency("sdl", .{
         .target = target,
@@ -117,6 +106,9 @@ pub fn build(b: *Build) void {
     // Configure the executable to be installed
     b.installArtifact(exe);
 
+    // Create a shader compilation build step.
+    compileShaders(b, b.getInstallStep());
+
     // Docs stuff
     const install_docs = b.addInstallDirectory(.{
         .install_dir = .prefix,
@@ -154,13 +146,6 @@ pub fn build(b: *Build) void {
     // It will be visible in the `zig build --help` menu.
     const run_step = b.step("run", "Run the demo");
     run_step.dependOn(&run_cmd.step);
-
-    // Create a shader compilation build step.
-    const shaders_step = b.step(
-        "shaders",
-        "Compile shaders (requires shaderc)",
-    );
-    compileShaders(b, shaders_step);
 }
 
 fn shaderExe(b: *Build) *Step.Compile {
