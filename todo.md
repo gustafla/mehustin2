@@ -5,14 +5,14 @@
   - [X] Mesh
   - [ ] Instances
   - [X] Uniforms
-- [ ] Music player
+- [X] Music player
 - [ ] Developer controls
-  - [ ] Time
+  - [X] Time
   - [ ] Cameras
 - [ ] Sync system
   - [ ] Camera tracks
   - [ ] Parameter tracks
-- [ ] Post processing
+- [X] Post processing
 
 # Backlog
 

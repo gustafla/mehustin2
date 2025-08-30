@@ -41,6 +41,24 @@ pub var window: *c.SDL_Window = undefined;
 pub extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
 pub extern fn SDL_AddFullscreenDisplayMode(display: *anyopaque, mode: *const c.SDL_DisplayMode) bool;
 
+inline fn pause() void {
+    if (builtin.mode != .Debug) return;
+    if (time.paused) {
+        audio.play() catch unreachable;
+        time.pause(false);
+    } else {
+        audio.pause() catch unreachable;
+        time.pause(true);
+    }
+}
+
+inline fn seek(to: f32) void {
+    if (builtin.mode != .Debug) return;
+    const normalized = @max(to, 0);
+    time.seek(normalized);
+    audio.seek(normalized) catch unreachable;
+}
+
 fn fullscreen() !void {
     try sdlerr(c.SDL_HideCursor());
 
@@ -135,6 +153,12 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                         try fullscreen();
                     }
                 },
+                c.SDLK_SPACE => pause(),
+                c.SDLK_LEFT => seek(time.getTime() - 1),
+                c.SDLK_RIGHT => seek(time.getTime() + 1),
+                c.SDLK_PAGEUP => seek(time.getTime() - 10),
+                c.SDLK_PAGEDOWN => seek(time.getTime() + 10),
+                c.SDLK_HOME => seek(0),
                 else => {},
             }
         },

@@ -3,7 +3,7 @@ const c = root.c;
 
 var start: u64 = 0;
 var offset: u64 = 0;
-var paused: bool = false;
+pub var paused: bool = false;
 
 const ns_per_sec: f32 = @floatFromInt(c.SDL_NS_PER_SECOND);
 

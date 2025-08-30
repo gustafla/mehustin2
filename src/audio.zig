@@ -70,3 +70,14 @@ pub fn play() !void {
         try sdlerr(c.SDL_ResumeAudioStreamDevice(a));
     }
 }
+
+pub fn seek(to: f32) !void {
+    if (audio) |a| {
+        const num_samples = c.stb_vorbis_stream_length_in_samples(vorbis);
+        const goal: c_uint = @intFromFloat(@as(f32, @floatFromInt(info.sample_rate)) * to);
+        const samples = @min(num_samples, goal);
+        try sdlerr(c.SDL_LockAudioStream(a));
+        _ = c.stb_vorbis_seek(vorbis, samples);
+        try sdlerr(c.SDL_UnlockAudioStream(a));
+    }
+}
