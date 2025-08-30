@@ -25,11 +25,30 @@ mat4 model() {
             0, 0, 0, 1
         );
 
-    if (u_Time > 14.) {
-        float i = gl_InstanceIndex * 1024.213 + 23321.;
+    if (u_Time > 28.) {
+        float i = gl_InstanceIndex * 1024.213 + 2321.;
         m[3].x = noise(i + 0) * 64. - 32.;
         m[3].y = noise(i + 1) * 64. - 32.;
         m[3].z = noise(i + 2) * 64. - 32.;
+
+        float x = noise(i * 123 + 0) + u_Time * 0.5;
+        float y = noise(i * 123 + 1) - u_Time * 0.23;
+        float z = noise(i * 123 + 2) + u_Time * 0.11;
+        m[0].xyz = vec3(
+                cos(y) * cos(x),
+                cos(y) * sin(x),
+                -sin(y)
+            );
+        m[1].xyz = vec3(
+                sin(z) * sin(y) * cos(x) - cos(z) * sin(x),
+                sin(z) * sin(y) * sin(x) + cos(z) * cos(x),
+                sin(z) * cos(y)
+            );
+        m[2].xyz = vec3(
+                cos(z) * sin(y) * cos(x) + sin(z) * sin(x),
+                cos(z) * sin(y) * sin(x) - sin(z) * cos(x),
+                cos(z) * cos(y)
+            );
     }
 
     return m;

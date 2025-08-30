@@ -467,11 +467,11 @@ pub fn render() !void {
             4096,
         ),
         .view = math.Mat4.lookAt(
-            .{
-                @sin(t / 4 * std.math.pi) * 3,
-                @sin(t / 8 * std.math.pi) * 2,
+            if (t > 14) .{
+                @sin((t - 14) / 4 * std.math.pi) * 3,
+                @sin((t - 14) / 8 * std.math.pi) * 2,
                 @cos(t / 3 * std.math.pi) * 4,
-            },
+            } else .{ 0, 0, 4 },
             math.vec3.ZERO,
             math.vec3.YUP,
         ),

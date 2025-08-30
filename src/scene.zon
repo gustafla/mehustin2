@@ -16,7 +16,9 @@
             .depth_target = .D16Unorm,
         },
         .{
-            .frag = .{ .name = "shader.frag" },
+            .frag = .{ .name = "shader.frag", .info = .{
+                .num_uniform_buffers = 1,
+            } },
             .color_targets = .{.R16g16b16a16Float},
             .depth_target = .D16Unorm, // Not written to, just for validation
         },
