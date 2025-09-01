@@ -1,18 +1,19 @@
 # High priority
 
-- [X] Render abstractions
-  - [X] Pass for post processing
-  - [X] Mesh
-  - [ ] Instances
-  - [X] Uniforms
-- [X] Music player
+- [ ] Dynamic library reloading
+- [ ] Textures
+  - [X] Color target
+  - [ ] Depth target
+  - [ ] RGB(A) from file
+  - [ ] HDR from file
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
+- [ ] Sequencing
+  - [ ] Transitions
 - [ ] Sync system
   - [ ] Camera tracks
   - [ ] Parameter tracks
-- [X] Post processing
 
 # Backlog
 
@@ -27,5 +28,14 @@
 - [ ] Shader live editing
   - [ ] Text renderer
     - [ ] Texture loader
-- [ ] Dynamic library reloading
 - [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
+
+# Done
+
+- [X] Post processing
+- [X] Music player
+- [X] Render abstractions
+  - [X] Pass for post processing
+  - [X] Mesh
+  - [ ] Instances
+  - [X] Uniforms
