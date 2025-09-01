@@ -1,14 +1,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const root = @import("root");
-const config = @import("config.zon");
 const shader = @import("shader.zig");
 const res = @import("res.zig");
 const math = @import("math.zig");
-const time = @import("time.zig");
 const Allocator = std.mem.Allocator;
-const c = root.c;
-const sdlerr = root.sdlerr;
+pub const c = @cImport({
+    @cDefine("SDL_DISABLE_OLD_NAMES", {});
+    @cInclude("SDL3/SDL.h");
+});
+const sdlerr = @import("err.zig").sdlerr;
 
 const VertexAttributes = packed struct {
     coords: bool = false,
@@ -147,7 +147,7 @@ const VertexSource = union(enum) {
     static: VertexData,
 };
 
-const Scene = struct {
+const Config = struct {
     color_textures: []const ColorFormat = &.{},
     depth_textures: []const DepthFormat = &.{},
     pipelines: []const Pipeline,
@@ -155,7 +155,7 @@ const Scene = struct {
     passes: []const Pass,
 };
 
-const scene: Scene = @import("scene.zon");
+const config: Config = @import("render.zon");
 
 // Compute upper bounds from scene
 fn maxSliceLen(set: anytype, comptime fieldName: []const u8) usize {
@@ -168,22 +168,24 @@ fn maxSliceLen(set: anytype, comptime fieldName: []const u8) usize {
     }
     return max;
 }
-const max_pipeline_color_targets = maxSliceLen(scene.pipelines, "color_targets");
-const max_pass_color_targets = maxSliceLen(scene.passes, "color_targets");
+const max_pipeline_color_targets = maxSliceLen(config.pipelines, "color_targets");
+const max_pass_color_targets = maxSliceLen(config.passes, "color_targets");
 
-pub const render_width: f32 = @floatFromInt(config.width);
-pub const render_height: f32 = @floatFromInt(config.height);
-pub const render_aspect = render_width / render_height;
+const main_config = @import("config.zon");
+const render_width: f32 = @floatFromInt(main_config.width);
+const render_height: f32 = @floatFromInt(main_config.height);
+const render_aspect = render_width / render_height;
 
+var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
-var color_textures: [scene.color_textures.len]*c.SDL_GPUTexture = undefined;
-var depth_textures: [scene.depth_textures.len]*c.SDL_GPUTexture = undefined;
-var pipelines: [scene.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var vertex_buffers: [scene.vertices.len]VertexBuffers = undefined;
-var vertex_counts: [scene.vertices.len]u32 = undefined;
+var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
+var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
+var pipelines: [config.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
+var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
+var vertex_counts: [config.vertices.len]u32 = undefined;
 
-pub fn deinit() void {
+pub export fn deinit() void {
     for (vertex_buffers) |buf| {
         inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
             c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
@@ -208,7 +210,7 @@ pub fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
         .format = switch (format) {
             .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
                 device,
-                root.window,
+                window,
             ),
             else => @intFromEnum(format),
         },
@@ -247,7 +249,7 @@ fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipelin
         const format = switch (target_def) {
             .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
                 device,
-                root.window,
+                window,
             ),
             else => @intFromEnum(target_def),
         };
@@ -353,7 +355,7 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
         var height: u32 = undefined;
         _ = c.SDL_AcquireGPUSwapchainTexture(
             cmdbuf,
-            root.window,
+            window,
             &swapchain_texture,
             &width,
             &height,
@@ -378,16 +380,17 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
     return buffer;
 }
 
-pub fn init(alloc: Allocator) !void {
-    device = try sdlerr(c.SDL_CreateGPUDevice(
+pub export fn init(alloc: *Allocator, win: *c.SDL_Window) bool {
+    window = win;
+    device = sdlerr(c.SDL_CreateGPUDevice(
         c.SDL_GPU_SHADERFORMAT_SPIRV,
         builtin.mode == .Debug,
         null,
-    ));
+    )) catch return false;
     errdefer c.SDL_DestroyGPUDevice(device);
-    try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, root.window));
+    sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window)) catch return false;
 
-    nearest = try sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
+    nearest = sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
         c.SDL_GPUSamplerCreateInfo,
         .{
             .min_filter = c.SDL_GPU_FILTER_NEAREST,
@@ -398,30 +401,30 @@ pub fn init(alloc: Allocator) !void {
             .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,
             // .max_lod =
         },
-    )));
+    ))) catch return false;
     errdefer c.SDL_ReleaseGPUSampler(device, nearest);
 
-    for (scene.color_textures, &color_textures) |format, *texture| {
-        texture.* = try initColorTexture(format);
+    for (config.color_textures, &color_textures) |format, *texture| {
+        texture.* = initColorTexture(format) catch return false;
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (scene.depth_textures, &depth_textures) |format, *texture| {
-        texture.* = try initDepthTexture(format);
+    for (config.depth_textures, &depth_textures) |format, *texture| {
+        texture.* = initDepthTexture(format) catch return false;
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (scene.pipelines, &pipelines) |def, *pipeline| {
-        pipeline.* = try initPipeline(alloc, def);
+    for (config.pipelines, &pipelines) |def, *pipeline| {
+        pipeline.* = initPipeline(alloc.*, def) catch return false;
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
 
-    for (scene.vertices, &vertex_buffers, &vertex_counts) |def, *buffers, *count| {
+    for (config.vertices, &vertex_buffers, &vertex_counts) |def, *buffers, *count| {
         const data = def.static;
         // Create vertex buffer for each vertex data slice (matching names)
         inline for (@typeInfo(VertexData).@"struct".fields) |field| {
             @field(buffers.*, field.name) = if (@field(data, field.name).len > 0)
-                try initBuffer(f32, @field(data, field.name), c.SDL_GPU_BUFFERUSAGE_VERTEX)
+                initBuffer(f32, @field(data, field.name), c.SDL_GPU_BUFFERUSAGE_VERTEX) catch return false
             else
                 null;
             errdefer c.SDL_ReleaseGPUBuffer(device, @field(buffers.*, field.name));
@@ -429,11 +432,13 @@ pub fn init(alloc: Allocator) !void {
         // Divide by three because XYZ
         count.* = @intCast(data.coords.len / 3);
     }
+
+    return true;
 }
 
-pub fn render() !void {
+pub export fn render(time: f32) bool {
     // Acquire command buffer
-    const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
+    const cmdbuf = sdlerr(c.SDL_AcquireGPUCommandBuffer(device)) catch return false;
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
 
     // Acquire swapchain texture
@@ -441,21 +446,20 @@ pub fn render() !void {
     var height: u32 = 0;
     const swapchain_texture = blk: {
         var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
+        sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
             cmdbuf,
-            root.window,
+            window,
             &swapchain_texture,
             &width,
             &height,
-        ));
+        )) catch return false;
         break :blk swapchain_texture orelse {
-            try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
-            return;
+            sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf)) catch return false;
+            return true;
         };
     };
 
     // Compute view & projection matrices
-    const t = time.getTime();
     const matrices: extern struct {
         projection: math.Mat4,
         view: math.Mat4,
@@ -467,10 +471,10 @@ pub fn render() !void {
             4096,
         ),
         .view = math.Mat4.lookAt(
-            if (t > 14) .{
-                @sin((t - 14) / 4 * std.math.pi) * 3,
-                @sin((t - 14) / 8 * std.math.pi) * 2,
-                @cos(t / 3 * std.math.pi) * 4,
+            if (time > 14) .{
+                @sin((time - 14) / 4 * std.math.pi) * 3,
+                @sin((time - 14) / 8 * std.math.pi) * 2,
+                @cos(time / 3 * std.math.pi) * 4,
             } else .{ 0, 0, 4 },
             math.vec3.ZERO,
             math.vec3.YUP,
@@ -483,11 +487,11 @@ pub fn render() !void {
         time: f32,
     } = .{
         .resolution = .{ render_width, render_height },
-        .time = t,
+        .time = time,
     };
 
     // Render passes
-    for (scene.passes) |pass| {
+    for (config.passes) |pass| {
         var color_target_infos: [max_pass_color_targets]c.SDL_GPUColorTargetInfo = undefined;
         for (pass.color_targets, color_target_infos[0..pass.color_targets.len]) |target, *info| {
             info.* = .{
@@ -609,7 +613,9 @@ pub fn render() !void {
         c.SDL_EndGPURenderPass(render_pass);
     }
 
-    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+    sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf)) catch return false;
+
+    return true;
 }
 
 fn viewport(width: u32, height: u32) c.SDL_GPUViewport {

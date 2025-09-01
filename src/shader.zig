@@ -3,8 +3,8 @@ const options = @import("options");
 const res = @import("res.zig");
 const Allocator = std.mem.Allocator;
 const root = @import("root");
-const sdlerr = root.sdlerr;
-const c = root.c;
+const sdlerr = @import("err.zig").sdlerr;
+const c = @import("render.zig").c;
 
 const log = std.log.scoped(.shader);
 

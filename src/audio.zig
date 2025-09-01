@@ -1,8 +1,8 @@
 const std = @import("std");
 const root = @import("root");
 const res = @import("res.zig");
+const sdlerr = @import("err.zig").sdlerr;
 const c = root.c;
-const sdlerr = root.sdlerr;
 
 pub const log = std.log.scoped(.audio);
 
@@ -71,10 +71,10 @@ pub fn play() !void {
     }
 }
 
-pub fn seek(to: f32) !void {
+pub fn seek(to_sec: f32) !void {
     if (audio) |a| {
         const num_samples = c.stb_vorbis_stream_length_in_samples(vorbis);
-        const goal: c_uint = @intFromFloat(@as(f32, @floatFromInt(info.sample_rate)) * to);
+        const goal: c_uint = @intFromFloat(@as(f32, @floatFromInt(info.sample_rate)) * to_sec);
         const samples = @min(num_samples, goal);
         try sdlerr(c.SDL_LockAudioStream(a));
         _ = c.stb_vorbis_seek(vorbis, samples);

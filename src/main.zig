@@ -15,7 +15,9 @@ const render = @import("render.zig");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
 
+const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const log = std.log.scoped(.sdl);
+const sdlerr = @import("err.zig").sdlerr;
 
 // Track deinitialization with a stack
 const Subsystem = enum {
@@ -34,12 +36,12 @@ const Subsystem = enum {
 };
 
 // Root globals
-pub var alloc: std.mem.Allocator = undefined;
-pub var window: *c.SDL_Window = undefined;
+var alloc: std.mem.Allocator = undefined;
+var window: *c.SDL_Window = undefined;
 
 // Private SDL symbols for hacking wayland mode emulation
-pub extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
-pub extern fn SDL_AddFullscreenDisplayMode(display: *anyopaque, mode: *const c.SDL_DisplayMode) bool;
+extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
+extern fn SDL_AddFullscreenDisplayMode(display: *anyopaque, mode: *const c.SDL_DisplayMode) bool;
 
 inline fn pause() void {
     if (builtin.mode != .Debug) return;
@@ -52,9 +54,9 @@ inline fn pause() void {
     }
 }
 
-inline fn seek(to: f32) void {
+inline fn seek(to_sec: f32) void {
     if (builtin.mode != .Debug) return;
-    const normalized = @max(to, 0);
+    const normalized = @max(to_sec, 0);
     time.seek(normalized);
     audio.seek(normalized) catch unreachable;
 }
@@ -72,10 +74,10 @@ fn fullscreen() !void {
             var width: u32 = config.width;
             var height: u32 = config.height;
 
-            if (display_aspect > render.render_aspect) {
-                width = @intFromFloat(render.render_height * display_aspect + 0.5);
+            if (display_aspect > (@as(f32, config.width) / @as(f32, config.height))) {
+                width = @intFromFloat(@as(f32, config.height) * display_aspect + 0.5);
             } else {
-                height = @intFromFloat(render.render_width / display_aspect + 0.5);
+                height = @intFromFloat(@as(f32, config.width) / display_aspect + 0.5);
             }
 
             var hack_mode: c.SDL_DisplayMode = mode.*;
@@ -106,7 +108,9 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
     Subsystem.window.initialized();
-    try render.init(alloc);
+    if (!render.init(&alloc, @ptrCast(window))) {
+        return error.RenderInitFailed;
+    }
     Subsystem.renderer.initialized();
     if (@hasField(@TypeOf(config), "audio")) {
         if (audio.init(config.audio)) {
@@ -129,7 +133,9 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 }
 
 fn sdlAppIterate() !c.SDL_AppResult {
-    try render.render();
+    if (!render.render(time.getTime() * bps)) {
+        return error.RenderFailed;
+    }
 
     // Quit if done
     if (builtin.mode != .Debug and audio.at_end) {
@@ -186,27 +192,6 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     }
 
     c.SDL_Quit();
-}
-
-/// Converts the return value of an SDL function to an error union.
-pub inline fn sdlerr(value: anytype) error{SdlError}!switch (@typeInfo(@TypeOf(value))) {
-    .bool => void,
-    .pointer, .optional => @TypeOf(value.?),
-    .int => |info| switch (info.signedness) {
-        .signed => @TypeOf(@max(0, value)),
-        .unsigned => @TypeOf(value),
-    },
-    else => @compileError("unerrifiable type: " ++ @typeName(@TypeOf(value))),
-} {
-    return switch (@typeInfo(@TypeOf(value))) {
-        .bool => if (!value) error.SdlError,
-        .pointer, .optional => value orelse error.SdlError,
-        .int => |info| switch (info.signedness) {
-            .signed => if (value >= 0) @max(0, value) else error.SdlError,
-            .unsigned => if (value != 0) value else error.SdlError,
-        },
-        else => comptime unreachable,
-    };
 }
 
 pub fn main() !u8 {
