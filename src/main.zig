@@ -165,6 +165,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 else => {},
             }
         },
+        c.SDL_EVENT_MOUSE_WHEEL => seek(time.getTime() - event.wheel.y),
         else => {},
     }
 
