@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const options = @import("options");
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
@@ -11,13 +12,38 @@ pub const c = @cImport({
 });
 const config = @import("config.zon");
 const res = @import("res.zig");
-const render = @import("render.zig");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
 
 const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const log = std.log.scoped(.sdl);
 const sdlerr = @import("err.zig").sdlerr;
+
+const render_dynlib = struct {
+    var dl: std.DynLib = undefined;
+    var deinit: *const fn () callconv(.c) void = undefined;
+    var init: *const fn (*c.SDL_Window) callconv(.c) bool = undefined;
+    var render: *const fn (f32) callconv(.c) bool = undefined;
+
+    fn load() !void {
+        dl = std.DynLib.open("librender.so") catch |e| {
+            std.debug.print("{s}\n", .{std.mem.span(std.c.dlerror() orelse return e)});
+            return e;
+        };
+        @This().deinit = dl.lookup(@TypeOf(@This().deinit), "deinit") orelse unreachable;
+        @This().init = dl.lookup(@TypeOf(@This().init), "init") orelse unreachable;
+        @This().render = dl.lookup(@TypeOf(@This().render), "render") orelse unreachable;
+    }
+
+    fn unload() void {
+        dl.close();
+        @This().deinit = undefined;
+        @This().init = undefined;
+        @This().render = undefined;
+    }
+};
+
+const render = if (options.render_dynlib) render_dynlib else @import("render.zig");
 
 // Track deinitialization with a stack
 const Subsystem = enum {
@@ -35,8 +61,6 @@ const Subsystem = enum {
     }
 };
 
-// Root globals
-var alloc: std.mem.Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 
 // Private SDL symbols for hacking wayland mode emulation
@@ -64,7 +88,7 @@ inline fn seek(to_sec: f32) void {
 fn fullscreen() !void {
     try sdlerr(c.SDL_HideCursor());
 
-    if (builtin.target.os.tag == .linux) {
+    if (builtin.target.os.tag == .linux and !options.system_sdl) {
         if (std.mem.eql(u8, std.mem.span(c.SDL_GetCurrentVideoDriver()), "wayland")) {
             const display = c.SDL_GetDisplayForWindow(window);
             const mode = c.SDL_GetDesktopDisplayMode(display);
@@ -108,10 +132,15 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
     Subsystem.window.initialized();
-    if (!render.init(&alloc, @ptrCast(window))) {
+
+    if (options.render_dynlib) {
+        try render.load();
+    }
+    if (!render.init(@ptrCast(window))) {
         return error.RenderInitFailed;
     }
     Subsystem.renderer.initialized();
+
     if (@hasField(@TypeOf(config), "audio")) {
         if (audio.init(config.audio)) {
             Subsystem.audio.initialized();
@@ -168,6 +197,14 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDLK_PAGEUP => seek(time.getTime() - 8),
                 c.SDLK_PAGEDOWN => seek(time.getTime() + 8),
                 c.SDLK_HOME => seek(0),
+                c.SDLK_R => if (options.render_dynlib) {
+                    render.deinit();
+                    render.unload();
+                    try render.load();
+                    if (!render.init(@ptrCast(window))) {
+                        return error.RenderInitFailed;
+                    }
+                },
                 else => {},
             }
         },
@@ -197,16 +234,6 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
 pub fn main() !u8 {
     // Initialize error store
     app_err.reset();
-
-    // Initialize allocator
-    var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
-    alloc = if (builtin.mode == .Debug) blk: {
-        debug_allocator = std.heap.DebugAllocator(.{}).init;
-        break :blk debug_allocator.allocator();
-    } else std.heap.raw_c_allocator;
-    defer if (builtin.mode == .Debug) {
-        _ = debug_allocator.detectLeaks();
-    };
 
     // Start SDL
     var empty_argv: [0:null]?[*:0]u8 = .{};

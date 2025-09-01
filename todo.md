@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Dynamic library reloading
 - [ ] Textures
   - [X] Color target
   - [ ] Depth target
@@ -39,3 +38,6 @@
   - [X] Mesh
   - [ ] Instances
   - [X] Uniforms
+- [X] Dynamic library reloading
+  - [ ] TODO: https://github.com/ziglang/zig/issues/25026
+  - [ ] Improve error handling

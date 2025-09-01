@@ -42,13 +42,25 @@ pub fn build(b: *Build) void {
     const release_build = optimize != .Debug;
 
     // Define build options
-    const options = b.addOptions();
     const use_shaderc = b.option(
         bool,
         "use-shaderc",
         "Compile shaders at runtime (requires shaderc)",
     ) orelse !release_build;
+    const system_sdl = b.option(
+        bool,
+        "system-sdl",
+        "Link with system SDL library",
+    ) orelse !release_build;
+    const render_dynlib = b.option(
+        bool,
+        "render-dynlib",
+        "Load (and reload) render logic from librender.so",
+    ) orelse !release_build and system_sdl;
+    const options = b.addOptions();
     options.addOption(bool, "use_shaderc", use_shaderc);
+    options.addOption(bool, "system_sdl", system_sdl);
+    options.addOption(bool, "render_dynlib", render_dynlib);
 
     // Get SDL3 dependency from build.zig.zon
     const sdl_dep = b.dependency("sdl", .{
@@ -72,10 +84,14 @@ pub fn build(b: *Build) void {
     exe_mod.addOptions("options", options);
 
     // Link SDL
-    exe_mod.linkLibrary(sdl_lib);
+    if (system_sdl) {
+        exe_mod.linkSystemLibrary("SDL3", .{});
+    } else {
+        exe_mod.linkLibrary(sdl_lib);
+    }
 
     // Link shaderc
-    if (use_shaderc) {
+    if (!render_dynlib and use_shaderc) {
         exe_mod.linkSystemLibrary("shaderc", .{});
     }
 
@@ -105,6 +121,36 @@ pub fn build(b: *Build) void {
 
     // Configure the executable to be installed
     b.installArtifact(exe);
+
+    // Create a render shared library
+    if (render_dynlib) {
+        if (!system_sdl) {
+            @panic("system-sdl is required with render-dynlib");
+        }
+
+        const installpath = b.getInstallPath(.lib, ".");
+        exe_mod.addRPath(.{ .cwd_relative = installpath });
+
+        const render_mod = b.createModule(.{
+            .root_source_file = b.path("src/render.zig"),
+            .target = target,
+            .optimize = optimize,
+            .strip = false,
+        });
+        render_mod.addOptions("options", options);
+        render_mod.linkSystemLibrary("SDL3", .{});
+        if (use_shaderc) {
+            render_mod.linkSystemLibrary("shaderc", .{});
+        }
+
+        const render = b.addLibrary(.{
+            .name = "render",
+            .linkage = .dynamic,
+            .root_module = render_mod,
+        });
+        render.linkLibC();
+        b.installArtifact(render);
+    }
 
     // Create a shader compilation build step.
     compileShaders(b, b.getInstallStep());

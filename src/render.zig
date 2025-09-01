@@ -176,6 +176,9 @@ const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
 const render_aspect = render_width / render_height;
 
+// TODO: https://github.com/ziglang/zig/issues/25026
+// var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
+var alloc: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
@@ -185,7 +188,7 @@ var pipelines: [config.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
 
-pub export fn deinit() void {
+pub export fn deinit() callconv(.c) void {
     for (vertex_buffers) |buf| {
         inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
             c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
@@ -201,7 +204,13 @@ pub export fn deinit() void {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
     c.SDL_ReleaseGPUSampler(device, nearest);
+    c.SDL_ReleaseWindowFromGPUDevice(device, window);
     c.SDL_DestroyGPUDevice(device);
+
+    // TODO: https://github.com/ziglang/zig/issues/25026
+    // if (builtin.mode == .Debug) {
+    //     _ = debug_allocator.detectLeaks();
+    // }
 }
 
 pub fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
@@ -238,7 +247,7 @@ pub fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
     }));
 }
 
-fn initPipeline(alloc: Allocator, pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
+fn initPipeline(pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
     const vert = try shader.loadShader(alloc, device, pipeline.vert.name, pipeline.vert.info);
     defer c.SDL_ReleaseGPUShader(device, vert);
     const frag = try shader.loadShader(alloc, device, pipeline.frag.name, pipeline.frag.info);
@@ -380,7 +389,16 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
     return buffer;
 }
 
-pub export fn init(alloc: *Allocator, win: *c.SDL_Window) bool {
+pub export fn init(win: *c.SDL_Window) callconv(.c) bool {
+    // Initialize allocator
+    alloc =
+        // TODO: https://github.com/ziglang/zig/issues/25026
+        // if (builtin.mode == .Debug) blk: {
+        //     debug_allocator = std.heap.DebugAllocator(.{}).init;
+        //     break :blk debug_allocator.allocator();
+        // } else
+        std.heap.raw_c_allocator;
+
     window = win;
     device = sdlerr(c.SDL_CreateGPUDevice(
         c.SDL_GPU_SHADERFORMAT_SPIRV,
@@ -389,6 +407,7 @@ pub export fn init(alloc: *Allocator, win: *c.SDL_Window) bool {
     )) catch return false;
     errdefer c.SDL_DestroyGPUDevice(device);
     sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window)) catch return false;
+    errdefer c.SDL_ReleaseWindowFromGPUDevice(device, window);
 
     nearest = sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
         c.SDL_GPUSamplerCreateInfo,
@@ -415,7 +434,7 @@ pub export fn init(alloc: *Allocator, win: *c.SDL_Window) bool {
     }
 
     for (config.pipelines, &pipelines) |def, *pipeline| {
-        pipeline.* = initPipeline(alloc.*, def) catch return false;
+        pipeline.* = initPipeline(def) catch return false;
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
 
@@ -436,7 +455,7 @@ pub export fn init(alloc: *Allocator, win: *c.SDL_Window) bool {
     return true;
 }
 
-pub export fn render(time: f32) bool {
+pub export fn render(time: f32) callconv(.c) bool {
     // Acquire command buffer
     const cmdbuf = sdlerr(c.SDL_AcquireGPUCommandBuffer(device)) catch return false;
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
@@ -640,3 +659,8 @@ fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
         .max_depth = 1,
     };
 }
+
+// TODO: https://github.com/ziglang/zig/issues/25026
+pub const std_options: std.Options = .{
+    .log_level = .err,
+};
