@@ -204,8 +204,6 @@ pub export fn deinit() callconv(.c) void {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
     c.SDL_ReleaseGPUSampler(device, nearest);
-    c.SDL_ReleaseWindowFromGPUDevice(device, window);
-    c.SDL_DestroyGPUDevice(device);
 
     // TODO: https://github.com/ziglang/zig/issues/25026
     // if (builtin.mode == .Debug) {
@@ -389,7 +387,7 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
     return buffer;
 }
 
-pub export fn init(win: *c.SDL_Window) callconv(.c) bool {
+pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool {
     // Initialize allocator
     alloc =
         // TODO: https://github.com/ziglang/zig/issues/25026
@@ -400,14 +398,7 @@ pub export fn init(win: *c.SDL_Window) callconv(.c) bool {
         std.heap.raw_c_allocator;
 
     window = win;
-    device = sdlerr(c.SDL_CreateGPUDevice(
-        c.SDL_GPU_SHADERFORMAT_SPIRV,
-        builtin.mode == .Debug,
-        null,
-    )) catch return false;
-    errdefer c.SDL_DestroyGPUDevice(device);
-    sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window)) catch return false;
-    errdefer c.SDL_ReleaseWindowFromGPUDevice(device, window);
+    device = dev;
 
     nearest = sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
         c.SDL_GPUSamplerCreateInfo,

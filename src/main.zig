@@ -22,7 +22,7 @@ const sdlerr = @import("err.zig").sdlerr;
 const render_dynlib = struct {
     var dl: std.DynLib = undefined;
     var deinit: *const fn () callconv(.c) void = undefined;
-    var init: *const fn (*c.SDL_Window) callconv(.c) bool = undefined;
+    var init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool = undefined;
     var render: *const fn (f32) callconv(.c) bool = undefined;
 
     fn load() !void {
@@ -46,22 +46,25 @@ const render_dynlib = struct {
 const render = if (options.render_dynlib) render_dynlib else @import("render.zig");
 
 // Track deinitialization with a stack
-const Subsystem = enum {
+const InitStep = enum {
     window,
+    device,
+    claim_window,
     renderer,
     audio,
 
     const N = @typeInfo(@This()).@"enum".fields.len;
-    var buffer = [_]Subsystem{undefined} ** N;
-    var stack: []Subsystem = buffer[N..N];
+    var buffer = [_]InitStep{undefined} ** N;
+    var stack: []InitStep = buffer[N..N];
 
-    fn initialized(sys: Subsystem) void {
+    fn initialized(sys: InitStep) void {
         stack = buffer[N - stack.len - 1 ..];
         stack[0] = sys;
     }
 };
 
 var window: *c.SDL_Window = undefined;
+var device: *c.SDL_GPUDevice = undefined;
 
 // Private SDL symbols for hacking wayland mode emulation
 extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
@@ -131,19 +134,28 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO));
 
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
-    Subsystem.window.initialized();
+    InitStep.window.initialized();
+
+    device = try sdlerr(c.SDL_CreateGPUDevice(
+        c.SDL_GPU_SHADERFORMAT_SPIRV,
+        builtin.mode == .Debug,
+        null,
+    ));
+    InitStep.device.initialized();
+    try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window));
+    InitStep.claim_window.initialized();
 
     if (options.render_dynlib) {
         try render.load();
     }
-    if (!render.init(@ptrCast(window))) {
+    if (!render.init(@ptrCast(window), @ptrCast(device))) {
         return error.RenderInitFailed;
     }
-    Subsystem.renderer.initialized();
+    InitStep.renderer.initialized();
 
     if (@hasField(@TypeOf(config), "audio")) {
         if (audio.init(config.audio)) {
-            Subsystem.audio.initialized();
+            InitStep.audio.initialized();
         } else |err| {
             audio.log.warn("Can't play {s}: {}", .{ config.audio, err });
         }
@@ -201,7 +213,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                     render.deinit();
                     render.unload();
                     try render.load();
-                    if (!render.init(@ptrCast(window))) {
+                    if (!render.init(@ptrCast(window), @ptrCast(device))) {
                         return error.RenderInitFailed;
                     }
                 },
@@ -220,9 +232,11 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
         log.err("{s}", .{c.SDL_GetError()});
     };
 
-    for (Subsystem.stack) |sys| {
+    for (InitStep.stack) |sys| {
         switch (sys) {
             .window => c.SDL_DestroyWindow(window),
+            .device => c.SDL_DestroyGPUDevice(device),
+            .claim_window => c.SDL_ReleaseWindowFromGPUDevice(device, window),
             .renderer => render.deinit(),
             .audio => audio.deinit(),
         }

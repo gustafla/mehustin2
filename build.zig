@@ -55,7 +55,7 @@ pub fn build(b: *Build) void {
     const render_dynlib = b.option(
         bool,
         "render-dynlib",
-        "Load (and reload) render logic from librender.so",
+        "Load (and enable reloading) render logic from librender.so",
     ) orelse !release_build and system_sdl;
     const options = b.addOptions();
     options.addOption(bool, "use_shaderc", use_shaderc);
