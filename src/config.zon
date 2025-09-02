@@ -1,8 +1,8 @@
 .{
-    .width = 800,
-    .height = 600,
     .data_dir = "data",
     .shader_dir = "shaders",
+    .width = 800,
+    .height = 600,
     .audio = "music.ogg",
     .bpm = 140,
 }

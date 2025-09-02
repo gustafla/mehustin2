@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const Build = std.Build;
 const Step = Build.Step;
 
+const log = std.log.scoped(.build);
+
 const Config = struct {
     data_dir: []const u8,
     shader_dir: []const u8,
@@ -10,7 +12,7 @@ const Config = struct {
     const PATH = "src/config.zon";
 
     fn init(b: *Build) !Config {
-        std.log.info("Loading {s}", .{PATH});
+        log.info("Loading {s}", .{PATH});
         const file = try b.build_root.handle.openFile(PATH, .{});
         defer file.close();
         const stat = try file.stat();
@@ -55,6 +57,7 @@ pub fn build(b: *Build) void {
     const options = b.addOptions();
     options.addOption(bool, "system_sdl", system_sdl);
     options.addOption(bool, "render_dynlib", render_dynlib);
+    options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, config.data_dir));
 
     // Get SDL3 dependency from build.zig.zon
     const sdl_dep = b.dependency("sdl", .{

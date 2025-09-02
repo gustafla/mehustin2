@@ -11,16 +11,18 @@ pub const c = @cImport({
     @cInclude("stb_vorbis.c");
 });
 const config = @import("config.zon");
-const res = @import("res.zig");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
 
 const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
-const log = std.log.scoped(.sdl);
+const sdl_log = std.log.scoped(.sdl);
 const sdlerr = @import("err.zig").sdlerr;
 
 // Namespace for loading, unloading and calling into librender.so
 const render_dynlib = struct {
+    const filename = "librender.so";
+    const log = std.log.scoped(.dynlib);
+
     var dynlib: ?std.DynLib = null;
     pub var deinit: *const fn () callconv(.c) void = undefined;
     pub var init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool = undefined;
@@ -32,6 +34,7 @@ const render_dynlib = struct {
         }
 
         // Open librender.so
+        log.info("Loading {s}", .{filename});
         dynlib = std.DynLib.open("librender.so") catch |e| {
             std.debug.print("{s}\n", .{std.mem.span(std.c.dlerror() orelse return e)});
             return e;
@@ -39,7 +42,7 @@ const render_dynlib = struct {
 
         // Lookup symbols
         inline for (@typeInfo(@This()).@"struct".decls) |decl| {
-            std.log.scoped(.dynlib).info("Lookup {s}", .{decl.name});
+            log.info("Lookup {s}", .{decl.name});
             @field(@This(), decl.name) = dynlib.?.lookup(
                 @TypeOf(@field(@This(), decl.name)),
                 decl.name,
@@ -154,7 +157,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     // Init SDL
     const revision: [*:0]const u8 = c.SDL_GetRevision();
-    log.debug("SDL runtime revision: {s}", .{revision});
+    sdl_log.debug("SDL runtime revision: {s}", .{revision});
     if (builtin.target.os.tag == .linux) {
         _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "wayland,x11");
         _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_WAYLAND_MODE_EMULATION, "1");
@@ -179,7 +182,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     // Init audio
     if (@hasField(@TypeOf(config), "audio")) {
-        if (audio.init(config.audio)) {
+        if (audio.init(std.heap.c_allocator, config.audio)) {
             InitStep.push(.audio);
         } else |err| {
             audio.log.warn("Can't play {s}: {}", .{ config.audio, err });
@@ -294,7 +297,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
 
 fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     _ = result catch |err| if (err == error.SdlError) {
-        log.err("{s}", .{c.SDL_GetError()});
+        sdl_log.err("{s}", .{c.SDL_GetError()});
     };
 
     for (InitStep.stack) |sys| {

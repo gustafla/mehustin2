@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const shader = @import("shader.zig");
-const res = @import("res.zig");
 const math = @import("math.zig");
 const Allocator = std.mem.Allocator;
 pub const c = @cImport({
@@ -178,7 +177,7 @@ const render_aspect = render_width / render_height;
 
 // TODO: https://github.com/ziglang/zig/issues/25026
 // var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
-var alloc: Allocator = undefined;
+var gpa: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
@@ -246,9 +245,9 @@ pub fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
 }
 
 fn initPipeline(pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
-    const vert = try shader.loadShader(alloc, device, pipeline.vert.name, pipeline.vert.info);
+    const vert = try shader.loadShader(gpa, device, pipeline.vert.name, pipeline.vert.info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(alloc, device, pipeline.frag.name, pipeline.frag.info);
+    const frag = try shader.loadShader(gpa, device, pipeline.frag.name, pipeline.frag.info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     var color_targets: [max_pipeline_color_targets]c.SDL_GPUColorTargetDescription = undefined;
@@ -389,13 +388,13 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
 
 pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool {
     // Initialize allocator
-    alloc =
+    gpa =
         // TODO: https://github.com/ziglang/zig/issues/25026
         // if (builtin.mode == .Debug) blk: {
         //     debug_allocator = std.heap.DebugAllocator(.{}).init;
         //     break :blk debug_allocator.allocator();
         // } else
-        std.heap.raw_c_allocator;
+        std.heap.c_allocator;
 
     window = win;
     device = dev;

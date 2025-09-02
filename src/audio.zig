@@ -1,8 +1,9 @@
 const std = @import("std");
 const root = @import("root");
-const res = @import("res.zig");
+const resource = @import("resource.zig");
 const sdlerr = @import("err.zig").sdlerr;
 const c = root.c;
+const Allocator = std.mem.Allocator;
 
 pub const log = std.log.scoped(.audio);
 
@@ -19,13 +20,19 @@ pub fn audioCallback(_: ?*anyopaque, _: ?*c.SDL_AudioStream, need_bytes: c_int, 
     var put_shorts: c_int = 0;
     var got_samples: c_int = 0;
     while (put_shorts < need_shorts) : (put_shorts += got_samples * info.channels) {
-        got_samples = c.stb_vorbis_get_samples_short_interleaved(vorbis, info.channels, &buffer, @min(bufsize, need_shorts));
+        got_samples = c.stb_vorbis_get_samples_short_interleaved(
+            vorbis,
+            info.channels,
+            &buffer,
+            @min(bufsize, need_shorts),
+        );
         if (got_samples == 0) {
             at_end = true;
             return;
         }
         const len = got_samples * @sizeOf(c_short) * info.channels;
-        sdlerr(c.SDL_PutAudioStreamData(audio, &buffer, len)) catch @panic("SDL_PutAudioStreamData failed");
+        sdlerr(c.SDL_PutAudioStreamData(audio, &buffer, len)) catch
+            @panic("SDL_PutAudioStreamData failed");
     }
 }
 
@@ -36,12 +43,13 @@ pub fn deinit() void {
     }
 }
 
-pub fn init(name: []const u8) !void {
+pub fn init(gpa: Allocator, name: []const u8) !void {
     // Open vorbis decoder
     var err = c.VORBIS__no_error;
-    const path = try res.dataFilePath(name);
-    // TODO: Do this with zig io and memory?
-    vorbis = c.stb_vorbis_open_filename(path, &err, null) orelse return error.VorbisOpenFailed;
+    const path = try resource.dataFilePath(gpa, name);
+    defer gpa.free(path);
+    vorbis = c.stb_vorbis_open_filename(path, &err, null) orelse
+        return error.VorbisOpenFailed;
     errdefer c.stb_vorbis_close(vorbis);
     info = c.stb_vorbis_get_info(vorbis);
 
@@ -74,7 +82,9 @@ pub fn play() !void {
 pub fn seek(to_sec: f32) !void {
     if (audio) |a| {
         const num_samples = c.stb_vorbis_stream_length_in_samples(vorbis);
-        const goal: c_uint = @intFromFloat(@as(f32, @floatFromInt(info.sample_rate)) * to_sec);
+        const goal: c_uint = @intFromFloat(
+            @as(f32, @floatFromInt(info.sample_rate)) * to_sec,
+        );
         const samples = @min(num_samples, goal);
         try sdlerr(c.SDL_LockAudioStream(a));
         _ = c.stb_vorbis_seek(vorbis, samples);

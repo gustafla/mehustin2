@@ -1,9 +1,9 @@
 const std = @import("std");
-const res = @import("res.zig");
-const Allocator = std.mem.Allocator;
 const root = @import("root");
+const resource = @import("resource.zig");
 const sdlerr = @import("err.zig").sdlerr;
 const c = @import("render.zig").c;
+const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.shader);
 
@@ -18,8 +18,8 @@ pub fn stageFromExtension(name: []const u8) !Stage {
     return std.meta.stringToEnum(Stage, extension[1..]) orelse error.NoStageExtension;
 }
 
-pub fn loadShader(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8, info: anytype) !*c.SDL_GPUShader {
-    return loadShaderSpirv(alloc, device, name, info);
+pub fn loadShader(gpa: Allocator, device: *c.SDL_GPUDevice, name: []const u8, info: anytype) !*c.SDL_GPUShader {
+    return loadShaderSpirv(gpa, device, name, info);
 }
 
 fn createShader(device: *c.SDL_GPUDevice, data: []u8, stage: Stage, info: anytype) !*c.SDL_GPUShader {
@@ -33,17 +33,19 @@ fn createShader(device: *c.SDL_GPUDevice, data: []u8, stage: Stage, info: anytyp
     return sdlerr(c.SDL_CreateGPUShader(device, &create_info));
 }
 
-fn loadShaderSpirv(alloc: Allocator, device: *c.SDL_GPUDevice, name: []const u8, info: anytype) !*c.SDL_GPUShader {
+fn loadShaderSpirv(gpa: Allocator, device: *c.SDL_GPUDevice, name: []const u8, info: anytype) !*c.SDL_GPUShader {
     // Determine shader stage from extension
     const stage = try stageFromExtension(name);
 
     // Allocate relative path to SPIR-V file
-    const spirv_name = try std.mem.concat(alloc, u8, &.{ name, ".spv" });
-    defer alloc.free(spirv_name);
+    const spirv_name = try std.mem.concat(gpa, u8, &.{ name, ".spv" });
+    defer gpa.free(spirv_name);
 
     // Load SPIR-V binary
-    const data = try res.loadFileZ(alloc, try res.dataFilePath(spirv_name));
-    defer alloc.free(data);
+    const path = try resource.dataFilePath(gpa, spirv_name);
+    defer gpa.free(path);
+    const data = try resource.loadFileZ(gpa, path);
+    defer gpa.free(data);
 
     // Load into SDL GPU
     return createShader(device, data, stage, info);
