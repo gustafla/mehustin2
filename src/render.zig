@@ -181,6 +181,7 @@ var gpa: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
+var output_buffer: *c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var pipelines: [config.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
@@ -202,6 +203,7 @@ pub export fn deinit() callconv(.c) void {
     for (color_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
+    c.SDL_ReleaseGPUTexture(device, output_buffer);
     c.SDL_ReleaseGPUSampler(device, nearest);
 
     // TODO: https://github.com/ziglang/zig/issues/25026
@@ -413,6 +415,9 @@ pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool 
     ))) catch return false;
     errdefer c.SDL_ReleaseGPUSampler(device, nearest);
 
+    output_buffer = initColorTexture(.Swapchain) catch return false;
+    errdefer c.SDL_ReleaseGPUTexture(output_buffer);
+
     for (config.color_textures, &color_textures) |format, *texture| {
         texture.* = initColorTexture(format) catch return false;
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
@@ -467,6 +472,12 @@ pub export fn render(time: f32) callconv(.c) bool {
             return true;
         };
     };
+    const size_match =
+        (width == main_config.width and height >= main_config.height) or
+        (height == main_config.height and width >= main_config.width);
+
+    // Compute viewport preserving aspect ratio rendering to swapchain
+    const swapchain_viewport = viewport(width, height);
 
     // Compute view & projection matrices
     const matrices: extern struct {
@@ -506,7 +517,7 @@ pub export fn render(time: f32) callconv(.c) bool {
             info.* = .{
                 .texture = switch (target) {
                     .index => |index| color_textures[index],
-                    .swapchain => swapchain_texture,
+                    .swapchain => if (size_match) swapchain_texture else output_buffer,
                 },
                 .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
                 .load_op = c.SDL_GPU_LOADOP_CLEAR,
@@ -530,7 +541,9 @@ pub export fn render(time: f32) callconv(.c) bool {
         );
         switch (pass.viewport) {
             .Default => {},
-            .ToWindow => c.SDL_SetGPUViewport(render_pass, &viewport(width, height)),
+            .ToWindow => if (size_match) {
+                c.SDL_SetGPUViewport(render_pass, &swapchain_viewport);
+            },
         }
 
         // Record drawcalls
@@ -620,6 +633,29 @@ pub export fn render(time: f32) callconv(.c) bool {
         }
 
         c.SDL_EndGPURenderPass(render_pass);
+    }
+
+    // Blit output_buffer to swapchain when necessary
+    if (!size_match) {
+        c.SDL_BlitGPUTexture(cmdbuf, &.{
+            .source = .{
+                .texture = output_buffer,
+                .w = main_config.width,
+                .h = main_config.height,
+            },
+            .destination = .{
+                .texture = swapchain_texture,
+                .x = @intFromFloat(swapchain_viewport.x + 0.5),
+                .y = @intFromFloat(swapchain_viewport.y + 0.5),
+                .w = @intFromFloat(swapchain_viewport.w + 0.5),
+                .h = @intFromFloat(swapchain_viewport.h + 0.5),
+            },
+            .load_op = c.SDL_GPU_LOADOP_CLEAR,
+            .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+            .flip_mode = c.SDL_FLIP_NONE,
+            .filter = c.SDL_GPU_FILTER_NEAREST,
+            .cycle = true,
+        });
     }
 
     sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf)) catch return false;
