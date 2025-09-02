@@ -14,55 +14,15 @@ const config = @import("config.zon");
 const audio = @import("audio.zig");
 const time = @import("time.zig");
 
+// Render is defined as dynlib.zig or render.zig depending on build configuration
+const render = if (options.render_dynlib)
+    @import("dynlib.zig")
+else
+    @import("render.zig");
+
 const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const sdl_log = std.log.scoped(.sdl);
 const sdlerr = @import("err.zig").sdlerr;
-
-// Namespace for loading, unloading and calling into librender.so
-const render_dynlib = struct {
-    const filename = "librender.so";
-    const log = std.log.scoped(.dynlib);
-
-    var dynlib: ?std.DynLib = null;
-    pub var deinit: *const fn () callconv(.c) void = undefined;
-    pub var init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool = undefined;
-    pub var render: *const fn (f32) callconv(.c) bool = undefined;
-
-    fn load() !void {
-        if (dynlib != null) {
-            unload();
-        }
-
-        // Open librender.so
-        log.info("Loading {s}", .{filename});
-        dynlib = std.DynLib.open("librender.so") catch |e| {
-            std.debug.print("{s}\n", .{std.mem.span(std.c.dlerror() orelse return e)});
-            return e;
-        };
-
-        // Lookup symbols
-        inline for (@typeInfo(@This()).@"struct".decls) |decl| {
-            log.info("Lookup {s}", .{decl.name});
-            @field(@This(), decl.name) = dynlib.?.lookup(
-                @TypeOf(@field(@This(), decl.name)),
-                decl.name,
-            ) orelse return error.SymbolNotFound;
-        }
-    }
-
-    fn unload() void {
-        if (dynlib) |*dl| {
-            dl.close();
-        }
-        dynlib = null;
-        @This().deinit = undefined;
-        @This().init = undefined;
-        @This().render = undefined;
-    }
-};
-
-// Render is defined as render_dylib or imported directly depending on build configuration
-const render = if (options.render_dynlib) render_dynlib else @import("render.zig");
 
 // Track deinitialization with a stack
 const InitStep = enum {
@@ -79,15 +39,6 @@ const InitStep = enum {
     fn push(sys: InitStep) void {
         stack = buffer[N - stack.len - 1 ..];
         stack[0] = sys;
-    }
-
-    fn pop() void {
-        stack = stack[1..];
-    }
-
-    fn peek() ?InitStep {
-        if (stack.len == 0) return null;
-        return stack[0];
     }
 };
 
@@ -190,12 +141,8 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     }
 
     // Init render
-    blk: {
-        if (options.render_dynlib) render.load() catch break :blk;
-        if (render.init(@ptrCast(window), @ptrCast(device))) {
-            InitStep.push(.render);
-        } else if (!options.render_dynlib) return error.RenderInitFailed;
-    }
+    try render.init(@ptrCast(window), @ptrCast(device));
+    InitStep.push(.render);
 
     // Go fullscreen if release build
     if (builtin.mode != .Debug) {
@@ -210,37 +157,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 }
 
 fn sdlAppIterate() !c.SDL_AppResult {
-    if (InitStep.peek() != .render or !render.render(time.getTime() * bps)) {
-        if (!options.render_dynlib) {
-            return error.RenderFailed;
-        }
-
-        // Paint window red when render is not succeeding
-        const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
-        errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
-        const swapchain_texture = blk: {
-            var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-            try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
-                cmdbuf,
-                window,
-                &swapchain_texture,
-                null,
-                null,
-            ));
-            break :blk swapchain_texture orelse {
-                try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
-                return c.SDL_APP_CONTINUE;
-            };
-        };
-        const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &.{
-            .texture = swapchain_texture,
-            .clear_color = .{ .r = 1, .g = 0, .b = 0, .a = 1 },
-            .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .store_op = c.SDL_GPU_STOREOP_STORE,
-        }, 1, null);
-        c.SDL_EndGPURenderPass(render_pass);
-        try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
-    }
+    try render.render(time.getTime() * bps);
 
     // Quit if done
     if (builtin.mode != .Debug and audio.at_end) {
@@ -273,17 +190,9 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDLK_PAGEUP => seek(time.getTime() - 8),
                 c.SDLK_PAGEDOWN => seek(time.getTime() + 8),
                 c.SDLK_HOME => seek(0),
-                c.SDLK_R => if (options.render_dynlib) {
-                    if (InitStep.peek() == .render) {
-                        render.deinit();
-                        InitStep.pop();
-                    }
-                    blk: {
-                        render.load() catch break :blk;
-                        if (render.init(@ptrCast(window), @ptrCast(device))) {
-                            InitStep.push(.render);
-                        }
-                    }
+                c.SDLK_R => if (builtin.mode == .Debug) {
+                    render.deinit();
+                    try render.init(@ptrCast(window), @ptrCast(device));
                 },
                 else => {},
             }

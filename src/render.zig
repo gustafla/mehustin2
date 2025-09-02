@@ -188,7 +188,7 @@ var pipelines: [config.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
 
-pub export fn deinit() callconv(.c) void {
+pub fn deinit() void {
     for (vertex_buffers) |buf| {
         inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
             c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
@@ -212,7 +212,7 @@ pub export fn deinit() callconv(.c) void {
     // }
 }
 
-pub fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
+fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
         .format = switch (format) {
@@ -232,7 +232,7 @@ pub fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
     }));
 }
 
-pub fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
+fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
         .format = @intFromEnum(format),
@@ -388,7 +388,7 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
     return buffer;
 }
 
-pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool {
+pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     // Initialize allocator
     gpa =
         // TODO: https://github.com/ziglang/zig/issues/25026
@@ -401,7 +401,7 @@ pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool 
     window = win;
     device = dev;
 
-    nearest = sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
+    nearest = try sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
         c.SDL_GPUSamplerCreateInfo,
         .{
             .min_filter = c.SDL_GPU_FILTER_NEAREST,
@@ -412,24 +412,24 @@ pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool 
             .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,
             // .max_lod =
         },
-    ))) catch return false;
+    )));
     errdefer c.SDL_ReleaseGPUSampler(device, nearest);
 
-    output_buffer = initColorTexture(.Swapchain) catch return false;
-    errdefer c.SDL_ReleaseGPUTexture(output_buffer);
+    output_buffer = try initColorTexture(.Swapchain);
+    errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
     for (config.color_textures, &color_textures) |format, *texture| {
-        texture.* = initColorTexture(format) catch return false;
+        texture.* = try initColorTexture(format);
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     for (config.depth_textures, &depth_textures) |format, *texture| {
-        texture.* = initDepthTexture(format) catch return false;
+        texture.* = try initDepthTexture(format);
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     for (config.pipelines, &pipelines) |def, *pipeline| {
-        pipeline.* = initPipeline(def) catch return false;
+        pipeline.* = try initPipeline(def);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
 
@@ -438,7 +438,7 @@ pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool 
         // Create vertex buffer for each vertex data slice (matching names)
         inline for (@typeInfo(VertexData).@"struct".fields) |field| {
             @field(buffers.*, field.name) = if (@field(data, field.name).len > 0)
-                initBuffer(f32, @field(data, field.name), c.SDL_GPU_BUFFERUSAGE_VERTEX) catch return false
+                try initBuffer(f32, @field(data, field.name), c.SDL_GPU_BUFFERUSAGE_VERTEX)
             else
                 null;
             errdefer c.SDL_ReleaseGPUBuffer(device, @field(buffers.*, field.name));
@@ -446,13 +446,11 @@ pub export fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool 
         // Divide by three because XYZ
         count.* = @intCast(data.coords.len / 3);
     }
-
-    return true;
 }
 
-pub export fn render(time: f32) callconv(.c) bool {
+pub fn render(time: f32) !void {
     // Acquire command buffer
-    const cmdbuf = sdlerr(c.SDL_AcquireGPUCommandBuffer(device)) catch return false;
+    const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
 
     // Acquire swapchain texture
@@ -460,16 +458,16 @@ pub export fn render(time: f32) callconv(.c) bool {
     var height: u32 = 0;
     const swapchain_texture = blk: {
         var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-        sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
+        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
             cmdbuf,
             window,
             &swapchain_texture,
             &width,
             &height,
-        )) catch return false;
+        ));
         break :blk swapchain_texture orelse {
-            sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf)) catch return false;
-            return true;
+            try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
+            return;
         };
     };
     const size_match =
@@ -658,9 +656,7 @@ pub export fn render(time: f32) callconv(.c) bool {
         });
     }
 
-    sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf)) catch return false;
-
-    return true;
+    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
 }
 
 fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
@@ -690,3 +686,26 @@ fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
 pub const std_options: std.Options = .{
     .log_level = .err,
 };
+
+fn deinitC() callconv(.c) void {
+    deinit();
+}
+
+fn initC(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool {
+    init(win, dev) catch return false;
+    return true;
+}
+
+fn renderC(time: f32) callconv(.c) bool {
+    render(time) catch return false;
+    return true;
+}
+
+// Export symbols if build configuration requires
+comptime {
+    if (@import("options").render_dynlib) {
+        @export(&deinitC, .{ .name = "deinit" });
+        @export(&initC, .{ .name = "init" });
+        @export(&renderC, .{ .name = "render" });
+    }
+}
