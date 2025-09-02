@@ -42,11 +42,6 @@ pub fn build(b: *Build) void {
     const release_build = optimize != .Debug;
 
     // Define build options
-    const use_shaderc = b.option(
-        bool,
-        "use-shaderc",
-        "Compile shaders at runtime (requires shaderc)",
-    ) orelse !release_build;
     const system_sdl = b.option(
         bool,
         "system-sdl",
@@ -58,7 +53,6 @@ pub fn build(b: *Build) void {
         "Load (and enable reloading) render logic from librender.so",
     ) orelse !release_build and system_sdl;
     const options = b.addOptions();
-    options.addOption(bool, "use_shaderc", use_shaderc);
     options.addOption(bool, "system_sdl", system_sdl);
     options.addOption(bool, "render_dynlib", render_dynlib);
 
@@ -88,11 +82,6 @@ pub fn build(b: *Build) void {
         exe_mod.linkSystemLibrary("SDL3", .{});
     } else {
         exe_mod.linkLibrary(sdl_lib);
-    }
-
-    // Link shaderc
-    if (!render_dynlib and use_shaderc) {
-        exe_mod.linkSystemLibrary("shaderc", .{});
     }
 
     // Get the stb dependency from build.zig.zon
@@ -139,9 +128,6 @@ pub fn build(b: *Build) void {
         });
         render_mod.addOptions("options", options);
         render_mod.linkSystemLibrary("SDL3", .{});
-        if (use_shaderc) {
-            render_mod.linkSystemLibrary("shaderc", .{});
-        }
 
         const render = b.addLibrary(.{
             .name = "render",
@@ -194,52 +180,39 @@ pub fn build(b: *Build) void {
     run_step.dependOn(&run_cmd.step);
 }
 
-fn shaderExe(b: *Build) *Step.Compile {
-    const shader_mod = b.createModule(.{
-        .root_source_file = b.path("src/shader_compiler.zig"),
-        .target = b.resolveTargetQuery(.{}), // Native
-        .optimize = .Debug,
-    });
-    shader_mod.linkSystemLibrary("shaderc", .{});
-    const shader_exe = b.addExecutable(.{
-        .name = "shader_compiler",
-        .root_module = shader_mod,
-    });
-    shader_exe.linkLibC();
-    return shader_exe;
-}
-
 fn compileShaders(b: *Build, depend: *Step) void {
-    const shader_exe = shaderExe(b);
-
     // Create compiler run step for each shader
-    var source_dir = b.build_root.handle.openDir(
+    var shader_source_dir = b.build_root.handle.openDir(
         config.shader_dir,
         .{ .iterate = true },
     ) catch @panic("Can't open shader dir");
-    defer source_dir.close();
-    var iter = source_dir.iterate();
+    var iter = shader_source_dir.iterate();
     while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
         if (entry.kind != .file) continue;
-        //Define input and output paths
+
+        // Init input and output paths
         const input_path = std.fs.path.join(
             b.allocator,
             &.{ config.shader_dir, entry.name },
         ) catch @panic("OOM");
-        const shader_run = b.addRunArtifact(shader_exe);
-        const shader_output = shader_run.addPrefixedOutputDirectoryArg(
-            "-o",
-            config.shader_dir,
-        );
-        shader_run.addFileArg(b.path(input_path));
+        const output_path = std.mem.concat(
+            b.allocator,
+            u8,
+            &.{ config.data_dir, "/", entry.name, ".spv" },
+        ) catch @panic("OOM");
+
+        // Create run step
+        const shaderc_run = b.addSystemCommand(&.{ "glslc", "-O" });
+        shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
+        const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
+        shaderc_run.addFileArg(b.path(input_path));
 
         // Create install step
-        const shader_install = b.addInstallDirectory(.{
-            .source_dir = shader_output,
-            .install_dir = .bin,
-            .install_subdir = config.data_dir,
-        });
-        shader_install.step.dependOn(&shader_run.step);
+        const shader_install = b.addInstallBinFile(
+            shaderc_output,
+            output_path,
+        );
+        shader_install.step.dependOn(&shaderc_run.step);
         depend.dependOn(&shader_install.step);
     }
 }
