@@ -19,36 +19,46 @@ const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const log = std.log.scoped(.sdl);
 const sdlerr = @import("err.zig").sdlerr;
 
+// Namespace for loading, unloading and calling into librender.so
 const render_dynlib = struct {
-    var dl: ?std.DynLib = null;
-    var deinit: *const fn () callconv(.c) void = undefined;
-    var init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool = undefined;
-    var render: *const fn (f32) callconv(.c) bool = undefined;
+    var dynlib: ?std.DynLib = null;
+    pub var deinit: *const fn () callconv(.c) void = undefined;
+    pub var init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool = undefined;
+    pub var render: *const fn (f32) callconv(.c) bool = undefined;
 
     fn load() !void {
-        if (dl != null) {
+        if (dynlib != null) {
             unload();
         }
-        dl = std.DynLib.open("librender.so") catch |e| {
+
+        // Open librender.so
+        dynlib = std.DynLib.open("librender.so") catch |e| {
             std.debug.print("{s}\n", .{std.mem.span(std.c.dlerror() orelse return e)});
             return e;
         };
-        @This().deinit = dl.?.lookup(@TypeOf(@This().deinit), "deinit") orelse unreachable;
-        @This().init = dl.?.lookup(@TypeOf(@This().init), "init") orelse unreachable;
-        @This().render = dl.?.lookup(@TypeOf(@This().render), "render") orelse unreachable;
+
+        // Lookup symbols
+        inline for (@typeInfo(@This()).@"struct".decls) |decl| {
+            std.log.scoped(.dynlib).info("Lookup {s}", .{decl.name});
+            @field(@This(), decl.name) = dynlib.?.lookup(
+                @TypeOf(@field(@This(), decl.name)),
+                decl.name,
+            ) orelse return error.SymbolNotFound;
+        }
     }
 
     fn unload() void {
-        if (dl) |*l| {
-            l.close();
+        if (dynlib) |*dl| {
+            dl.close();
         }
-        dl = null;
+        dynlib = null;
         @This().deinit = undefined;
         @This().init = undefined;
         @This().render = undefined;
     }
 };
 
+// Render is defined as render_dylib or imported directly depending on build configuration
 const render = if (options.render_dynlib) render_dynlib else @import("render.zig");
 
 // Track deinitialization with a stack
@@ -96,6 +106,7 @@ inline fn pause() void {
     }
 }
 
+// Helper for seeking the demo
 inline fn seek(to_sec: f32) void {
     if (builtin.mode != .Debug) return;
     const normalized = @max(to_sec, 0);
@@ -106,6 +117,9 @@ inline fn seek(to_sec: f32) void {
 fn fullscreen() !void {
     try sdlerr(c.SDL_HideCursor());
 
+    // Hack SDL Wayland mode emulation on Linux when static linking
+    // This creates a video mode which matches the aspect ratio of the display,
+    // but has a resolution as low as required in config.zon
     if (builtin.target.os.tag == .linux and !options.system_sdl) {
         if (std.mem.eql(u8, std.mem.span(c.SDL_GetCurrentVideoDriver()), "wayland")) {
             const display = c.SDL_GetDisplayForWindow(window);

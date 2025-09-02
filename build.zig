@@ -138,8 +138,40 @@ pub fn build(b: *Build) void {
         b.installArtifact(render);
     }
 
-    // Create a shader compilation build step.
-    compileShaders(b, b.getInstallStep());
+    // Create glsl compiler run step for each shader
+    var shader_source_dir = b.build_root.handle.openDir(
+        config.shader_dir,
+        .{ .iterate = true },
+    ) catch @panic("Can't open shader dir");
+    var iter = shader_source_dir.iterate();
+    while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
+        if (entry.kind != .file) continue;
+
+        // Init input and output paths
+        const input_path = std.fs.path.join(
+            b.allocator,
+            &.{ config.shader_dir, entry.name },
+        ) catch @panic("OOM");
+        const output_path = std.mem.concat(
+            b.allocator,
+            u8,
+            &.{ config.data_dir, "/", entry.name, ".spv" },
+        ) catch @panic("OOM");
+
+        // Create run step
+        const shaderc_run = b.addSystemCommand(&.{ "glslc", "-O" });
+        shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
+        const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
+        shaderc_run.addFileArg(b.path(input_path));
+
+        // Create install step
+        const shader_install = b.addInstallBinFile(
+            shaderc_output,
+            output_path,
+        );
+        shader_install.step.dependOn(&shaderc_run.step);
+        b.getInstallStep().dependOn(&shader_install.step);
+    }
 
     // Docs stuff
     const install_docs = b.addInstallDirectory(.{
@@ -178,41 +210,4 @@ pub fn build(b: *Build) void {
     // It will be visible in the `zig build --help` menu.
     const run_step = b.step("run", "Run the demo");
     run_step.dependOn(&run_cmd.step);
-}
-
-fn compileShaders(b: *Build, depend: *Step) void {
-    // Create compiler run step for each shader
-    var shader_source_dir = b.build_root.handle.openDir(
-        config.shader_dir,
-        .{ .iterate = true },
-    ) catch @panic("Can't open shader dir");
-    var iter = shader_source_dir.iterate();
-    while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
-        if (entry.kind != .file) continue;
-
-        // Init input and output paths
-        const input_path = std.fs.path.join(
-            b.allocator,
-            &.{ config.shader_dir, entry.name },
-        ) catch @panic("OOM");
-        const output_path = std.mem.concat(
-            b.allocator,
-            u8,
-            &.{ config.data_dir, "/", entry.name, ".spv" },
-        ) catch @panic("OOM");
-
-        // Create run step
-        const shaderc_run = b.addSystemCommand(&.{ "glslc", "-O" });
-        shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
-        const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
-        shaderc_run.addFileArg(b.path(input_path));
-
-        // Create install step
-        const shader_install = b.addInstallBinFile(
-            shaderc_output,
-            output_path,
-        );
-        shader_install.step.dependOn(&shaderc_run.step);
-        depend.dependOn(&shader_install.step);
-    }
 }

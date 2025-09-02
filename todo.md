@@ -16,6 +16,8 @@
 
 # Backlog
 
+- [ ] Text renderer
+- [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
 - [ ] Use (games-by-mason) libraries?
   - [ ] Zex
   - [ ] shader_compiler
@@ -24,10 +26,6 @@
   - [ ] dear_imgui_zig
   - [ ] gbms
   - [ ] zm
-- [ ] Shader live editing
-  - [ ] Text renderer
-    - [ ] Texture loader
-- [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
 
 # Done
 
@@ -39,6 +37,7 @@
   - [ ] Instances
   - [X] Uniforms
 - [X] Dynamic library reloading
+  - [X] Shader live editing
   - [ ] Improve error handling
     - [X] Keep running when errors
     - [ ] Report error codes over FFI boundary
