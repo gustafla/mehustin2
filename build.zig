@@ -53,7 +53,7 @@ pub fn build(b: *Build) void {
         bool,
         "render-dynlib",
         "Load (and enable reloading) render logic from librender.so",
-    ) orelse !release_build and system_sdl;
+    ) orelse !release_build;
     const options = b.addOptions();
     options.addOption(bool, "system_sdl", system_sdl);
     options.addOption(bool, "render_dynlib", render_dynlib);
@@ -116,10 +116,6 @@ pub fn build(b: *Build) void {
 
     // Create a render shared library
     if (render_dynlib) {
-        if (!system_sdl) {
-            @panic("system-sdl is required with render-dynlib");
-        }
-
         const installpath = b.getInstallPath(.lib, ".");
         exe_mod.addRPath(.{ .cwd_relative = installpath });
 

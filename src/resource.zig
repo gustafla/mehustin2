@@ -1,13 +1,14 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const options = @import("options");
 const config = @import("config.zon");
 
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.resource);
+const data_dir = if (builtin.mode == .Debug) options.data_dir else config.data_dir;
 
 pub fn dataFilePath(gpa: Allocator, name: []const u8) ![:0]const u8 {
     log.info("Loading {s}", .{name});
-    const data_dir = if (options.render_dynlib) options.data_dir else config.data_dir;
     return std.fs.path.joinZ(gpa, &.{ data_dir, name });
 }
 
