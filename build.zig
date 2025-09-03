@@ -1,7 +1,5 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const Build = std.Build;
-const Step = Build.Step;
 
 const log = std.log.scoped(.build);
 
@@ -9,11 +7,11 @@ const Config = struct {
     data_dir: []const u8,
     shader_dir: []const u8,
 
-    const PATH = "src/config.zon";
+    pub const path = "src/config.zon";
 
     fn init(b: *Build) !Config {
-        log.info("Loading {s}", .{PATH});
-        const file = try b.build_root.handle.openFile(PATH, .{});
+        log.info("Loading {s}", .{path});
+        const file = try b.build_root.handle.openFile(path, .{});
         defer file.close();
         const stat = try file.stat();
         const buffer = try b.allocator.allocSentinel(u8, stat.size, 0);
@@ -28,11 +26,9 @@ const Config = struct {
     }
 };
 
-var config: Config = undefined;
-
 pub fn build(b: *Build) void {
     // Load config
-    config = Config.init(b) catch @panic("Can't load " ++ Config.PATH);
+    const config = Config.init(b) catch @panic("Failed to load config");
 
     // Use standard target options
     const target = b.standardTargetOptions(.{});
@@ -77,20 +73,67 @@ pub fn build(b: *Build) void {
         .strip = release_build,
     });
 
-    // Export build options defined earlier into the executable module
+    // Create a module for render.zig
+    const render_mod = b.createModule(.{
+        .root_source_file = b.path("src/render.zig"),
+        .target = target,
+        .optimize = optimize,
+        .strip = false,
+    });
+
+    // Export build options defined earlier into modules
     exe_mod.addOptions("options", options);
 
     // Link SDL
     if (system_sdl) {
         exe_mod.linkSystemLibrary("SDL3", .{});
+        render_mod.linkSystemLibrary("SDL3", .{});
     } else {
         exe_mod.linkLibrary(sdl_lib);
+        render_mod.linkLibrary(sdl_lib);
     }
 
     // Get the stb dependency from build.zig.zon
     const stb_dep = b.dependency("stb", .{});
     exe_mod.addIncludePath(stb_dep.path("."));
+    render_mod.addIncludePath(stb_dep.path("."));
+
+    // Add stb_vorbis to exe
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
+
+    // Generate stb_image.c
+    const stbi_write = b.addWriteFile("stb_image.c",
+        \\#define STB_IMAGE_IMPLEMENTATION
+        \\#define STBI_NO_FAILURE_STRINGS
+        \\#define STBI_ASSERT(x)
+        \\#include <stb_image.h>
+        \\
+    );
+    const stbi_dir = stbi_write.getDirectory();
+    const stbi_c = stbi_dir.join(b.allocator, "stb_image.c") catch @panic("OOM");
+
+    // Set up render shared library
+    if (render_dynlib) {
+        const lib_path = b.getInstallPath(.lib, ".");
+        exe_mod.addRPath(.{ .cwd_relative = lib_path });
+
+        render_mod.addOptions("options", options);
+        render_mod.addCSourceFile(.{
+            .file = stbi_c,
+        });
+
+        const render = b.addLibrary(.{
+            .name = "render",
+            .linkage = .dynamic,
+            .root_module = render_mod,
+        });
+        render.linkLibC();
+        b.installArtifact(render);
+    } else {
+        exe_mod.addCSourceFile(.{
+            .file = stbi_c,
+        });
+    }
 
     // Add target triple to executable name if target isn't native
     const exe_name_base = "demo";
@@ -103,39 +146,14 @@ pub fn build(b: *Build) void {
         }) catch @panic("OOM");
     } else exe_name_base;
 
-    // Build the main.zig exe
+    // Add the main exe
     const exe = b.addExecutable(.{
         .name = exe_name,
         .root_module = exe_mod,
     });
     exe.linkLibC();
     exe.lto = if (release_build) .full else .none;
-
-    // Configure the executable to be installed
     b.installArtifact(exe);
-
-    // Create a render shared library
-    if (render_dynlib) {
-        const installpath = b.getInstallPath(.lib, ".");
-        exe_mod.addRPath(.{ .cwd_relative = installpath });
-
-        const render_mod = b.createModule(.{
-            .root_source_file = b.path("src/render.zig"),
-            .target = target,
-            .optimize = optimize,
-            .strip = false,
-        });
-        render_mod.addOptions("options", options);
-        render_mod.linkSystemLibrary("SDL3", .{});
-
-        const render = b.addLibrary(.{
-            .name = "render",
-            .linkage = .dynamic,
-            .root_module = render_mod,
-        });
-        render.linkLibC();
-        b.installArtifact(render);
-    }
 
     // Create glsl compiler run step for each shader
     var shader_source_dir = b.build_root.handle.openDir(
@@ -172,7 +190,7 @@ pub fn build(b: *Build) void {
         b.getInstallStep().dependOn(&shader_install.step);
     }
 
-    // Docs stuff
+    // Setup docs generation
     const install_docs = b.addInstallDirectory(.{
         .install_dir = .prefix,
         .install_subdir = "docs",
@@ -189,11 +207,10 @@ pub fn build(b: *Build) void {
     }).step);
 
     // Add README to bin
-    const readme_install = b.addInstallBinFile(
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
         b.path("README-RELEASE.md"),
         "README.md",
-    );
-    b.getInstallStep().dependOn(&readme_install.step);
+    ).step);
 
     // Create a Run step in the build graph
     const run_cmd = b.addRunArtifact(exe);

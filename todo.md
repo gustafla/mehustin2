@@ -3,7 +3,7 @@
 - [ ] Textures
   - [X] Color target
   - [ ] Depth target
-  - [ ] RGB(A) from file
+  - [X] RGBA from file
   - [ ] HDR from file
 - [ ] Developer controls
   - [X] Time

@@ -1,5 +1,4 @@
 const root = @import("root");
-const config = @import("config.zon");
 const c = root.c;
 
 var start: u64 = 0;

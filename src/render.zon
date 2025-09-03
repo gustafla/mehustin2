@@ -5,6 +5,7 @@
     .depth_textures = .{
         .D16Unorm,
     },
+    .image_textures = .{},
     .pipelines = .{
         .{
             .vert = .{ .name = "3d.vert", .info = .{ .num_uniform_buffers = 2 } },

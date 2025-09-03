@@ -2,10 +2,12 @@ const std = @import("std");
 const builtin = @import("builtin");
 const shader = @import("shader.zig");
 const math = @import("math.zig");
+const resource = @import("resource.zig");
 const Allocator = std.mem.Allocator;
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
+    @cInclude("stb_image.h");
 });
 const sdlerr = @import("err.zig").sdlerr;
 
@@ -115,7 +117,8 @@ const Pipeline = struct {
 
 const Texture = union(enum) {
     color: usize,
-    // depth: usize,
+    depth: usize,
+    image: usize,
 };
 
 const Pass = struct {
@@ -147,6 +150,7 @@ const VertexSource = union(enum) {
 };
 
 const Config = struct {
+    image_textures: []const []const u8 = &.{},
     color_textures: []const ColorFormat = &.{},
     depth_textures: []const DepthFormat = &.{},
     pipelines: []const Pipeline,
@@ -182,6 +186,7 @@ var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
+var image_textures: [config.image_textures.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var pipelines: [config.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
@@ -203,6 +208,9 @@ pub fn deinit() void {
     for (color_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
+    for (image_textures) |texture| {
+        c.SDL_ReleaseGPUTexture(device, texture);
+    }
     c.SDL_ReleaseGPUTexture(device, output_buffer);
     c.SDL_ReleaseGPUSampler(device, nearest);
 
@@ -210,6 +218,78 @@ pub fn deinit() void {
     // if (builtin.mode == .Debug) {
     //     _ = debug_allocator.detectLeaks();
     // }
+}
+
+fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
+    var width: c_int = 0;
+    var height: c_int = 0;
+    var n: c_int = 0;
+
+    const path = try resource.dataFilePath(gpa, name);
+    defer gpa.free(path);
+    const data: [*]u8 = c.stbi_load(path, &width, &height, &n, 4) orelse
+        return error.ImageLoadFailed;
+    defer c.stbi_image_free(data);
+    const size: usize = @intCast(width * height * 4);
+
+    const texture = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+        .type = c.SDL_GPU_TEXTURETYPE_2D,
+        .format = c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        .width = @intCast(width),
+        .height = @intCast(height),
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+        .props = 0,
+    }));
+    errdefer c.SDL_ReleaseGPUTexture(device, texture);
+
+    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+        .size = @intCast(size),
+        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    }));
+    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+    const tbp: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        false,
+    ))));
+    @memcpy(tbp, data[0..size]);
+    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
+    { // TODO: Remove this workaround when SDL is updated from 3.2.20
+        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+        var w: u32 = undefined;
+        var h: u32 = undefined;
+        _ = c.SDL_AcquireGPUSwapchainTexture(
+            cmdbuf,
+            window,
+            &swapchain_texture,
+            &w,
+            &h,
+        );
+    }
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
+    c.SDL_UploadToGPUTexture(
+        copy_pass,
+        &.{
+            .offset = 0,
+            .transfer_buffer = transfer_buffer,
+        },
+        &.{
+            .texture = texture,
+            .w = @intCast(width),
+            .h = @intCast(height),
+            .d = 1,
+        },
+        false,
+    );
+    c.SDL_EndGPUCopyPass(copy_pass);
+    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+
+    return texture;
 }
 
 fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
@@ -418,6 +498,11 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     output_buffer = try initColorTexture(.Swapchain);
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
+    for (config.image_textures, &image_textures) |name, *texture| {
+        texture.* = try initImageTexture(name);
+        errdefer c.SDL_ReleaseGPUTexture(texture.*);
+    }
+
     for (config.color_textures, &color_textures) |format, *texture| {
         texture.* = try initColorTexture(format);
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
@@ -578,8 +663,13 @@ pub fn render(time: f32) !void {
             }) |stage| {
                 for (stage.tex, 0..) |tex, slot| {
                     stage.bind(render_pass, @intCast(slot), &.{
-                        .texture = switch (tex) {
-                            .color => |i| color_textures[i],
+                        .texture = blk: {
+                            const i, const textures = switch (tex) {
+                                .color => |i| .{ i, &color_textures },
+                                .depth => |i| .{ i, &depth_textures },
+                                .image => |i| .{ i, &image_textures },
+                            };
+                            break :blk textures[i];
                         },
                         .sampler = nearest,
                     }, 1);
