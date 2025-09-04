@@ -18,14 +18,12 @@ const VertexAttributes = packed struct {
     uvs: bool = false,
 };
 
-const AttribFields = std.meta.FieldEnum(VertexAttributes);
-
-fn attribParameters(comptime attribName: []const u8) ?struct {
+fn attribParameters(comptime attrib_name: []const u8) struct {
     pitch: u32,
     format: c.SDL_GPUVertexElementFormat,
 } {
-    const field = std.meta.stringToEnum(AttribFields, attribName);
-    return switch (field orelse return null) {
+    const field = std.meta.stringToEnum(std.meta.FieldEnum(VertexAttributes), attrib_name);
+    return switch (field orelse @panic("parameters not found for attrib name")) {
         .coords => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
         .normals => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
         .colors => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
@@ -178,7 +176,6 @@ const ShaderInfo = struct {
     num_uniform_buffers: u32,
 };
 
-// Generate a pipeline map
 const PipelineKey = struct {
     pipeline: Pipeline,
     vert_info: ShaderInfo,
@@ -188,24 +185,7 @@ const PipelineKey = struct {
     depth_target: ?DepthFormat,
 };
 
-fn Map(
-    Key: type,
-    comptime n: usize,
-    comptime keys: [n]Key,
-) type {
-    return struct {
-        pub fn get(comptime key: Key) usize {
-            for (keys, 0..) |k, i| {
-                if (std.meta.eql(k, key)) {
-                    return i;
-                }
-            }
-            // Map.get should never be called with non-existing key
-            @compileError("Key doesn't exist");
-        }
-    };
-}
-
+// Generate a comptime array of all unique pipeline keys from config
 const pipeline_keys = init: {
     // Find upper bound for pipelines defined in render config
     var n = 0;
@@ -251,7 +231,6 @@ const pipeline_keys = init: {
 
     break :init keys[0..num_keys].*;
 };
-const pipeline_map = Map(PipelineKey, pipeline_keys.len, pipeline_keys);
 
 const main_config = @import("config.zon");
 const render_width: f32 = @floatFromInt(main_config.width);
@@ -427,7 +406,7 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     var attribs: [max_attribs]c.SDL_GPUVertexAttribute = undefined;
     var num_attribs: u32 = 0;
     inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, i| {
-        const param = attribParameters(field.name) orelse unreachable;
+        const param = attribParameters(field.name);
         const enabled = @field(pipeline.vertex_attributes, field.name);
         if (enabled) {
             buffers[num_attribs] = .{
@@ -735,7 +714,13 @@ pub fn render(time: f32) !void {
                     .num_color_targets = @intCast(pass.color_targets.len),
                     .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
                 };
-                break :blk pipeline_map.get(key);
+                for (pipeline_keys, 0..) |plk, i| {
+                    if (std.meta.eql(plk, key)) {
+                        break :blk i;
+                    }
+                }
+                @compileError("No pipeline key defined for " ++
+                    drawcall.pipeline.vert ++ " and " ++ drawcall.pipeline.frag);
             };
             c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
 
