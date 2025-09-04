@@ -89,6 +89,7 @@ const PrimitiveType = enum(c.SDL_GPUPrimitiveType) {
 
 const CompareOp = enum(c.SDL_GPUCompareOp) {
     Less = c.SDL_GPU_COMPAREOP_LESS,
+    LessOrEqual = c.SDL_GPU_COMPAREOP_LESS_OR_EQUAL,
 };
 
 const UniformData = enum {
@@ -107,7 +108,7 @@ const Pipeline = struct {
     vertex_attributes: VertexAttributes = .{},
     primitive_type: PrimitiveType = .TriangleStrip,
     depth_test: ?struct {
-        compare_op: CompareOp = .Less,
+        compare_op: CompareOp = .LessOrEqual,
         enable: bool = true,
         write: bool = true,
     } = null,

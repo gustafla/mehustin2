@@ -9,11 +9,6 @@
         // Main render pass
         .{
             .drawcalls = .{
-                // Background shader
-                .{
-                    .pipeline = .{ .frag = "shader.frag" },
-                    .fragment_uniforms = .{.Shadertoy},
-                },
                 // Foreground mesh
                 .{
                     .pipeline = .{
@@ -26,6 +21,14 @@
                     .vertices = 0,
                     .vertex_uniforms = .{ .Matrices, .Shadertoy },
                     .num_instances = 512,
+                },
+                // Background shader, render last for optimal depth test
+                .{
+                    .pipeline = .{
+                        .frag = "shader.frag",
+                        .depth_test = .{}, // Enable with defaults
+                    },
+                    .fragment_uniforms = .{.Shadertoy},
                 },
             },
             .color_targets = .{.{ .index = 0 }},
