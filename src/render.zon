@@ -40,7 +40,6 @@
                     .fragment_uniforms = .{.Shadertoy},
                 },
             },
-            .viewport = .ToWindow,
         },
     },
     .vertices = .{

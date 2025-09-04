@@ -135,10 +135,6 @@ const Pass = struct {
         first_vertex: u32 = 0,
         first_instance: u32 = 0,
     },
-    viewport: enum {
-        Default,
-        ToWindow,
-    } = .Default,
     color_targets: []const ColorTarget = &.{.swapchain},
     depth_target: ?usize = null,
 };
@@ -651,7 +647,7 @@ pub fn render(time: f32) !void {
             return;
         };
     };
-    const size_match =
+    const resolution_match =
         (width == main_config.width and height >= main_config.height) or
         (height == main_config.height and width >= main_config.width);
 
@@ -691,19 +687,28 @@ pub fn render(time: f32) !void {
 
     // Render passes
     inline for (config.passes) |pass| {
-        var color_target_infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
-        for (pass.color_targets, &color_target_infos) |target, *info| {
-            info.* = .{
-                .texture = switch (target) {
-                    .index => |index| color_textures[index],
-                    .swapchain => if (size_match) swapchain_texture else output_buffer,
-                },
-                .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
-                .load_op = c.SDL_GPU_LOADOP_CLEAR,
-                .store_op = c.SDL_GPU_STOREOP_STORE,
-                .cycle = true,
-            };
-        }
+        // Initialize color target infos
+        const color_target_infos = blk: {
+            var infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
+            inline for (pass.color_targets, &infos) |target, *info| {
+                info.* = .{
+                    .texture = switch (target) {
+                        .index => |index| color_textures[index],
+                        .swapchain => if (resolution_match)
+                            swapchain_texture
+                        else
+                            output_buffer,
+                    },
+                    .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+                    .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                    .store_op = c.SDL_GPU_STOREOP_STORE,
+                    .cycle = true,
+                };
+            }
+            break :blk infos;
+        };
+
+        // Begin render pass
         const render_pass = c.SDL_BeginGPURenderPass(
             cmdbuf,
             &color_target_infos,
@@ -718,11 +723,13 @@ pub fn render(time: f32) !void {
                 .cycle = true,
             } else null,
         );
-        switch (pass.viewport) {
-            .Default => {},
-            .ToWindow => if (size_match) {
-                c.SDL_SetGPUViewport(render_pass, &swapchain_viewport);
-            },
+
+        // Set viewport if necessary
+        const target_swapchain = comptime for (pass.color_targets) |target| {
+            if (target == .swapchain) break true;
+        } else false;
+        if (target_swapchain and resolution_match) {
+            c.SDL_SetGPUViewport(render_pass, &swapchain_viewport);
         }
 
         // Construct color target format array for the pipeline key
@@ -819,7 +826,7 @@ pub fn render(time: f32) !void {
                     .ufms = drawcall.fragment_uniforms,
                 },
             }) |stage| {
-                for (stage.ufms, 0..) |ufm, slot| {
+                inline for (stage.ufms, 0..) |ufm, slot| {
                     const param: struct { *const anyopaque, u32 } = switch (ufm) {
                         .Matrices => .{
                             @ptrCast(&matrices),
@@ -856,7 +863,7 @@ pub fn render(time: f32) !void {
     }
 
     // Blit output_buffer to swapchain when necessary
-    if (!size_match) {
+    if (!resolution_match) {
         c.SDL_BlitGPUTexture(cmdbuf, &.{
             .source = .{
                 .texture = output_buffer,
