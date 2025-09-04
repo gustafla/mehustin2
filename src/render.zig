@@ -59,8 +59,20 @@ comptime {
 }
 
 const ColorFormat = enum(c.SDL_GPUTextureFormat) {
+    Default = 0,
     R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
     Swapchain,
+
+    fn toSDL(self: ColorFormat) c.SDL_GPUTextureFormat {
+        return switch (self) {
+            .Default => c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+            .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
+                device,
+                window,
+            ),
+            else => @intFromEnum(self),
+        };
+    }
 };
 
 const DepthFormat = enum(c.SDL_GPUTextureFormat) {
@@ -91,19 +103,9 @@ const ColorTarget = union(enum) {
     swapchain,
 };
 
-const Shader = struct {
-    name: []const u8,
-    info: struct {
-        num_samplers: u32 = 0,
-        num_storage_textures: u32 = 0,
-        num_storage_buffers: u32 = 0,
-        num_uniform_buffers: u32 = 0,
-    } = .{},
-};
-
 const Pipeline = struct {
-    vert: Shader = .{ .name = "quad.vert" },
-    frag: Shader,
+    vert: []const u8 = "quad.vert",
+    frag: []const u8,
     vertex_attributes: VertexAttributes = .{},
     primitive_type: PrimitiveType = .TriangleStrip,
     depth_test: ?struct {
@@ -111,8 +113,6 @@ const Pipeline = struct {
         enable: bool = true,
         write: bool = true,
     } = null,
-    color_targets: []const ColorFormat = &.{.Swapchain},
-    depth_target: ?DepthFormat = null,
 };
 
 const Texture = union(enum) {
@@ -123,7 +123,7 @@ const Texture = union(enum) {
 
 const Pass = struct {
     drawcalls: []const struct {
-        pipeline: usize,
+        pipeline: Pipeline,
         vertices: ?usize = null,
         vertex_samplers: []const Texture = &.{},
         fragment_samplers: []const Texture = &.{},
@@ -153,26 +153,105 @@ const Config = struct {
     image_textures: []const []const u8 = &.{},
     color_textures: []const ColorFormat = &.{},
     depth_textures: []const DepthFormat = &.{},
-    pipelines: []const Pipeline,
     vertices: []const VertexSource,
     passes: []const Pass,
 };
 
 const config: Config = @import("render.zon");
 
-// Compute upper bounds from scene
-fn maxSliceLen(set: anytype, comptime fieldName: []const u8) usize {
+// Compute upper bounds from config
+fn maxSliceLen(set: anytype, comptime field: []const u8) usize {
     var max: usize = 0;
     for (set) |elem| {
-        const len = @field(elem, fieldName).len;
-        if (len > max) {
-            max = len;
-        }
+        const len = @field(elem, field).len;
+        max = @max(max, len);
     }
     return max;
 }
-const max_pipeline_color_targets = maxSliceLen(config.pipelines, "color_targets");
+
 const max_pass_color_targets = maxSliceLen(config.passes, "color_targets");
+
+const ShaderInfo = struct {
+    num_samplers: u32,
+    num_storage_textures: u32 = 0,
+    num_storage_buffers: u32 = 0,
+    num_uniform_buffers: u32,
+};
+
+// Generate a pipeline map
+const PipelineKey = struct {
+    pipeline: Pipeline,
+    vert_info: ShaderInfo,
+    frag_info: ShaderInfo,
+    color_targets_buf: [max_pass_color_targets]ColorFormat,
+    num_color_targets: u32,
+    depth_target: ?DepthFormat,
+};
+
+fn Map(Key: type, Value: type, comptime n: usize, comptime keys: [n]Key) type {
+    return struct {
+        comptime keys: [n]Key = keys,
+        values: [n]Value = undefined,
+
+        pub fn get(self: @This(), key: Key) Value {
+            inline for (self.keys, self.values) |k, v| {
+                if (std.meta.eql(k, key)) {
+                    return v;
+                }
+            }
+            // Map.get should never be called with non-existing key
+            unreachable;
+        }
+    };
+}
+
+var pipelines = init: {
+    // Find upper bound for pipelines defined in render config
+    var n = 0;
+    for (config.passes) |pass| {
+        n += pass.drawcalls.len;
+    }
+
+    // Initialize unique map keys with O(n^2) filtering
+    var keys: [n]PipelineKey = undefined;
+    var num_keys = 0;
+    for (config.passes) |pass| {
+        var color_targets = std.mem.zeroes([pass.color_targets.len]ColorFormat);
+        for (pass.color_targets, color_targets[0..pass.color_targets.len]) |format, *target| {
+            target.* = switch (format) {
+                .index => |i| config.color_textures[i],
+                .swapchain => .Swapchain,
+            };
+        }
+        outer: for (pass.drawcalls) |drawcall| {
+            const candidate: PipelineKey = .{
+                .pipeline = drawcall.pipeline,
+                .vert_info = .{
+                    .num_samplers = drawcall.vertex_samplers.len,
+                    .num_uniform_buffers = drawcall.vertex_uniforms.len,
+                },
+                .frag_info = .{
+                    .num_samplers = drawcall.fragment_samplers.len,
+                    .num_uniform_buffers = drawcall.fragment_uniforms.len,
+                },
+                .color_targets_buf = color_targets,
+                .num_color_targets = pass.color_targets.len,
+                .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
+            };
+            for (keys[0..num_keys]) |key| {
+                if (std.meta.eql(key, candidate)) {
+                    continue :outer;
+                }
+            }
+            keys[num_keys] = candidate;
+            num_keys += 1;
+        }
+    }
+
+    // Initialize map
+    const map: Map(PipelineKey, *c.SDL_GPUGraphicsPipeline, num_keys, keys[0..num_keys].*) = .{};
+    break :init map;
+};
 
 const main_config = @import("config.zon");
 const render_width: f32 = @floatFromInt(main_config.width);
@@ -189,7 +268,6 @@ var output_buffer: *c.SDL_GPUTexture = undefined;
 var image_textures: [config.image_textures.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
-var pipelines: [config.pipelines.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
 
@@ -199,7 +277,7 @@ pub fn deinit() void {
             c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
         }
     }
-    for (pipelines) |pipeline| {
+    for (pipelines.values) |pipeline| {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
     for (depth_textures) |texture| {
@@ -326,21 +404,19 @@ fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
     }));
 }
 
-fn initPipeline(pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
-    const vert = try shader.loadShader(gpa, device, pipeline.vert.name, pipeline.vert.info);
+fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
+    const pipeline = key.pipeline;
+    const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(gpa, device, pipeline.frag.name, pipeline.frag.info);
+    const frag = try shader.loadShader(gpa, device, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    var color_targets: [max_pipeline_color_targets]c.SDL_GPUColorTargetDescription = undefined;
-    for (pipeline.color_targets, color_targets[0..pipeline.color_targets.len]) |target_def, *target| {
-        const format = switch (target_def) {
-            .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
-                device,
-                window,
-            ),
-            else => @intFromEnum(target_def),
-        };
+    var color_targets: [max_pass_color_targets]c.SDL_GPUColorTargetDescription = undefined;
+    for (
+        key.color_targets_buf[0..key.num_color_targets],
+        color_targets[0..key.num_color_targets],
+    ) |target_def, *target| {
+        const format = target_def.toSDL();
         target.* = .{ .format = format };
     }
 
@@ -398,10 +474,10 @@ fn initPipeline(pipeline: Pipeline) !*c.SDL_GPUGraphicsPipeline {
             .enable_stencil_test = false,
         },
         .target_info = .{
-            .num_color_targets = @as(u32, @intCast(pipeline.color_targets.len)),
+            .num_color_targets = key.num_color_targets,
             .color_target_descriptions = &color_targets,
-            .depth_stencil_format = @intFromEnum(pipeline.depth_target orelse undefined),
-            .has_depth_stencil_target = pipeline.depth_target != null,
+            .depth_stencil_format = @intFromEnum(key.depth_target orelse undefined),
+            .has_depth_stencil_target = key.depth_target != null,
         },
         .props = 0,
     }));
@@ -513,7 +589,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (config.pipelines, &pipelines) |def, *pipeline| {
+    for (pipelines.keys, &pipelines.values) |def, *pipeline| {
         pipeline.* = try initPipeline(def);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
@@ -629,9 +705,32 @@ pub fn render(time: f32) !void {
             },
         }
 
+        // Construct color target format array for the pipeline key
+        var color_targets = std.mem.zeroes([max_pass_color_targets]ColorFormat);
+        for (pass.color_targets, color_targets[0..pass.color_targets.len]) |format, *target| {
+            target.* = switch (format) {
+                .index => |i| config.color_textures[i],
+                .swapchain => .Swapchain,
+            };
+        }
+
         // Record drawcalls
         for (pass.drawcalls) |drawcall| {
-            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[drawcall.pipeline]);
+            const key: PipelineKey = .{
+                .pipeline = drawcall.pipeline,
+                .vert_info = .{
+                    .num_samplers = @intCast(drawcall.vertex_samplers.len),
+                    .num_uniform_buffers = @intCast(drawcall.vertex_uniforms.len),
+                },
+                .frag_info = .{
+                    .num_samplers = @intCast(drawcall.fragment_samplers.len),
+                    .num_uniform_buffers = @intCast(drawcall.fragment_uniforms.len),
+                },
+                .color_targets_buf = color_targets,
+                .num_color_targets = @intCast(pass.color_targets.len),
+                .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
+            };
+            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines.get(key));
 
             // Bind vertex buffers
             if (drawcall.vertices) |vertices_index| {

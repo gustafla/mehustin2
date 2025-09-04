@@ -6,42 +6,24 @@
         .D16Unorm,
     },
     .image_textures = .{},
-    .pipelines = .{
-        .{
-            .vert = .{ .name = "3d.vert", .info = .{ .num_uniform_buffers = 2 } },
-            .frag = .{ .name = "3d.frag" },
-            .vertex_attributes = .{ .coords = true, .colors = true },
-            .primitive_type = .TriangleList,
-            .depth_test = .{}, // Enable with defaults
-            .color_targets = .{.R16g16b16a16Float},
-            .depth_target = .D16Unorm,
-        },
-        .{
-            .frag = .{ .name = "shader.frag", .info = .{
-                .num_uniform_buffers = 1,
-            } },
-            .color_targets = .{.R16g16b16a16Float},
-            .depth_target = .D16Unorm, // Not written to, just for validation
-        },
-        .{
-            .frag = .{ .name = "post.frag", .info = .{
-                .num_samplers = 1,
-                .num_uniform_buffers = 1,
-            } },
-        },
-    },
     .passes = .{
         // Main render pass
         .{
             .drawcalls = .{
                 // Background shader
                 .{
-                    .pipeline = 1,
+                    .pipeline = .{ .frag = "shader.frag" },
                     .fragment_uniforms = .{.Shadertoy},
                 },
                 // Foreground mesh
                 .{
-                    .pipeline = 0,
+                    .pipeline = .{
+                        .vert = "3d.vert",
+                        .frag = "3d.frag",
+                        .vertex_attributes = .{ .coords = true, .colors = true },
+                        .primitive_type = .TriangleList,
+                        .depth_test = .{}, // Enable with defaults
+                    },
                     .vertices = 0,
                     .vertex_uniforms = .{ .Matrices, .Shadertoy },
                     .num_instances = 512,
@@ -54,7 +36,7 @@
         .{
             .drawcalls = .{
                 .{
-                    .pipeline = 2,
+                    .pipeline = .{ .frag = "post.frag" },
                     .fragment_samplers = .{.{ .color = 0 }},
                     .fragment_uniforms = .{.Shadertoy},
                 },
