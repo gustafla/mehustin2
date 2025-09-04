@@ -188,24 +188,25 @@ const PipelineKey = struct {
     depth_target: ?DepthFormat,
 };
 
-fn Map(Key: type, Value: type, comptime n: usize, comptime keys: [n]Key) type {
+fn Map(
+    Key: type,
+    comptime n: usize,
+    comptime keys: [n]Key,
+) type {
     return struct {
-        comptime keys: [n]Key = keys,
-        values: [n]Value = undefined,
-
-        pub fn get(self: @This(), key: Key) Value {
-            inline for (self.keys, self.values) |k, v| {
+        pub fn get(comptime key: Key) usize {
+            for (keys, 0..) |k, i| {
                 if (std.meta.eql(k, key)) {
-                    return v;
+                    return i;
                 }
             }
             // Map.get should never be called with non-existing key
-            unreachable;
+            @compileError("Key doesn't exist");
         }
     };
 }
 
-var pipelines = init: {
+const pipeline_keys = init: {
     // Find upper bound for pipelines defined in render config
     var n = 0;
     for (config.passes) |pass| {
@@ -248,10 +249,9 @@ var pipelines = init: {
         }
     }
 
-    // Initialize map
-    const map: Map(PipelineKey, *c.SDL_GPUGraphicsPipeline, num_keys, keys[0..num_keys].*) = .{};
-    break :init map;
+    break :init keys[0..num_keys].*;
 };
+const pipeline_map = Map(PipelineKey, pipeline_keys.len, pipeline_keys);
 
 const main_config = @import("config.zon");
 const render_width: f32 = @floatFromInt(main_config.width);
@@ -265,6 +265,7 @@ var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
+var pipelines: [pipeline_keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var image_textures: [config.image_textures.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
@@ -277,7 +278,7 @@ pub fn deinit() void {
             c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
         }
     }
-    for (pipelines.values) |pipeline| {
+    for (pipelines) |pipeline| {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
     for (depth_textures) |texture| {
@@ -589,8 +590,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (pipelines.keys, &pipelines.values) |def, *pipeline| {
-        pipeline.* = try initPipeline(def);
+    for (pipeline_keys, &pipelines) |key, *pipeline| {
+        pipeline.* = try initPipeline(key);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
 
@@ -670,9 +671,9 @@ pub fn render(time: f32) !void {
     };
 
     // Render passes
-    for (config.passes) |pass| {
-        var color_target_infos: [max_pass_color_targets]c.SDL_GPUColorTargetInfo = undefined;
-        for (pass.color_targets, color_target_infos[0..pass.color_targets.len]) |target, *info| {
+    inline for (config.passes) |pass| {
+        var color_target_infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
+        for (pass.color_targets, &color_target_infos) |target, *info| {
             info.* = .{
                 .texture = switch (target) {
                     .index => |index| color_textures[index],
@@ -706,31 +707,37 @@ pub fn render(time: f32) !void {
         }
 
         // Construct color target format array for the pipeline key
-        var color_targets = std.mem.zeroes([max_pass_color_targets]ColorFormat);
-        for (pass.color_targets, color_targets[0..pass.color_targets.len]) |format, *target| {
-            target.* = switch (format) {
-                .index => |i| config.color_textures[i],
-                .swapchain => .Swapchain,
-            };
-        }
+        const color_targets = comptime init: {
+            var targets = std.mem.zeroes([max_pass_color_targets]ColorFormat);
+            for (pass.color_targets, targets[0..pass.color_targets.len]) |format, *target| {
+                target.* = switch (format) {
+                    .index => |i| config.color_textures[i],
+                    .swapchain => .Swapchain,
+                };
+            }
+            break :init targets;
+        };
 
         // Record drawcalls
-        for (pass.drawcalls) |drawcall| {
-            const key: PipelineKey = .{
-                .pipeline = drawcall.pipeline,
-                .vert_info = .{
-                    .num_samplers = @intCast(drawcall.vertex_samplers.len),
-                    .num_uniform_buffers = @intCast(drawcall.vertex_uniforms.len),
-                },
-                .frag_info = .{
-                    .num_samplers = @intCast(drawcall.fragment_samplers.len),
-                    .num_uniform_buffers = @intCast(drawcall.fragment_uniforms.len),
-                },
-                .color_targets_buf = color_targets,
-                .num_color_targets = @intCast(pass.color_targets.len),
-                .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
+        inline for (pass.drawcalls) |drawcall| {
+            const pipeline_index = comptime blk: {
+                const key: PipelineKey = .{
+                    .pipeline = drawcall.pipeline,
+                    .vert_info = .{
+                        .num_samplers = @intCast(drawcall.vertex_samplers.len),
+                        .num_uniform_buffers = @intCast(drawcall.vertex_uniforms.len),
+                    },
+                    .frag_info = .{
+                        .num_samplers = @intCast(drawcall.fragment_samplers.len),
+                        .num_uniform_buffers = @intCast(drawcall.fragment_uniforms.len),
+                    },
+                    .color_targets_buf = color_targets,
+                    .num_color_targets = @intCast(pass.color_targets.len),
+                    .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
+                };
+                break :blk pipeline_map.get(key);
             };
-            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines.get(key));
+            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
 
             // Bind vertex buffers
             if (drawcall.vertices) |vertices_index| {
