@@ -116,7 +116,7 @@ const Pipeline = struct {
 const Texture = union(enum) {
     color: usize,
     depth: usize,
-    image: usize,
+    image: []const u8,
 };
 
 const Pass = struct {
@@ -148,7 +148,6 @@ const VertexSource = union(enum) {
 };
 
 const Config = struct {
-    image_textures: []const []const u8 = &.{},
     color_textures: []const ColorFormat = &.{},
     depth_textures: []const DepthFormat = &.{},
     vertices: []const VertexSource,
@@ -232,6 +231,47 @@ const pipeline_keys = init: {
     break :init keys[0..num_keys].*;
 };
 
+// Generate a comptime array of all unique image samplers
+const image_keys = init: {
+    // Find upper bound for images defined in render config
+    var n = 0;
+    for (config.passes) |pass| {
+        for (pass.drawcalls) |drawcall| {
+            n += drawcall.vertex_samplers.len;
+            n += drawcall.fragment_samplers.len;
+        }
+    }
+
+    // Initialize unique map keys with O(n^2) filtering
+    var keys: [n][]const u8 = undefined;
+    var num_keys = 0;
+    for (config.passes) |pass| {
+        for (pass.drawcalls) |drawcall| {
+            for (.{
+                drawcall.vertex_samplers,
+                drawcall.fragment_samplers,
+            }) |samplers| {
+                outer: for (samplers) |sampler| {
+                    switch (sampler) {
+                        .image => |name| {
+                            for (keys[0..num_keys]) |key| {
+                                if (std.mem.eql(u8, name, key)) {
+                                    continue :outer;
+                                }
+                            }
+                            keys[num_keys] = name;
+                            num_keys += 1;
+                        },
+                        else => {},
+                    }
+                }
+            }
+        }
+    }
+
+    break :init keys[0..num_keys].*;
+};
+
 const main_config = @import("config.zon");
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
@@ -245,7 +285,7 @@ var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var pipelines: [pipeline_keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var image_textures: [config.image_textures.len]*c.SDL_GPUTexture = undefined;
+var image_textures: [image_keys.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
@@ -554,7 +594,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     output_buffer = try initColorTexture(.Swapchain);
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
-    for (config.image_textures, &image_textures) |name, *texture| {
+    for (image_keys, &image_textures) |name, *texture| {
         texture.* = try initImageTexture(name);
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
@@ -699,7 +739,7 @@ pub fn render(time: f32) !void {
 
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
-            const pipeline_index = comptime blk: {
+            const pipeline_index = comptime for (pipeline_keys, 0..) |plk, i| {
                 const key: PipelineKey = .{
                     .pipeline = drawcall.pipeline,
                     .vert_info = .{
@@ -712,16 +752,13 @@ pub fn render(time: f32) !void {
                     },
                     .color_targets_buf = color_targets,
                     .num_color_targets = @intCast(pass.color_targets.len),
-                    .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
+                    .depth_target = if (pass.depth_target) |j| config.depth_textures[j] else null,
                 };
-                for (pipeline_keys, 0..) |plk, i| {
-                    if (std.meta.eql(plk, key)) {
-                        break :blk i;
-                    }
+                if (std.meta.eql(plk, key)) {
+                    break i;
                 }
-                @compileError("No pipeline key defined for " ++
-                    drawcall.pipeline.vert ++ " and " ++ drawcall.pipeline.frag);
-            };
+            } else @compileError("No pipeline key defined for " ++
+                drawcall.pipeline.vert ++ " and " ++ drawcall.pipeline.frag);
             c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
 
             // Bind vertex buffers
@@ -752,15 +789,19 @@ pub fn render(time: f32) !void {
                     .tex = drawcall.fragment_samplers,
                 },
             }) |stage| {
-                for (stage.tex, 0..) |tex, slot| {
+                inline for (stage.tex, 0..) |tex, slot| {
                     stage.bind(render_pass, @intCast(slot), &.{
-                        .texture = blk: {
-                            const i, const textures = switch (tex) {
-                                .color => |i| .{ i, &color_textures },
-                                .depth => |i| .{ i, &depth_textures },
-                                .image => |i| .{ i, &image_textures },
-                            };
-                            break :blk textures[i];
+                        .texture = switch (tex) {
+                            .color => |i| color_textures[i],
+                            .depth => |i| depth_textures[i],
+                            .image => |name| blk: {
+                                const i = comptime for (image_keys, 0..) |key, i| {
+                                    if (std.mem.eql(u8, key, name)) {
+                                        break i;
+                                    }
+                                } else @compileError("No image key defined for " ++ name);
+                                break :blk image_textures[i];
+                            },
                         },
                         .sampler = nearest,
                     }, 1);
