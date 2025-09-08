@@ -7,6 +7,7 @@
   - [ ] HDR from file
   - [X] Simplex noise
 - [ ] Dual Kawase blur
+  - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
   - [ ] DoF
     - [ ] Bokeh sprites
