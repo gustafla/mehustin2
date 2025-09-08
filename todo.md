@@ -13,6 +13,7 @@
 - [ ] Text mesh rendering
   - [ ] stb_truetype
   - [ ] libtess2
+- [ ] Render scene to cubemap
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
