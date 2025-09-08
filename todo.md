@@ -5,6 +5,14 @@
   - [ ] Depth target
   - [X] RGBA from file
   - [ ] HDR from file
+  - [ ] Simplex noise
+- [ ] Dual Kawase blur
+  - [ ] Bloom
+  - [ ] DoF
+    - [ ] Bokeh sprites
+- [ ] Text mesh rendering
+  - [ ] stb_truetype
+  - [ ] libtess2
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
