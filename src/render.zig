@@ -691,7 +691,7 @@ pub fn render(time: f32) !void {
         // Initialize color target infos
         const color_target_infos = blk: {
             var infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
-            inline for (pass.color_targets, &infos) |target, *info| {
+            for (pass.color_targets, &infos) |target, *info| {
                 info.* = .{
                     .texture = switch (target) {
                         .index => |index| color_textures[index],
