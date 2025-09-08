@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const shader = @import("shader.zig");
 const math = @import("math.zig");
+const noise = @import("noise.zig");
 const resource = @import("resource.zig");
 const Allocator = std.mem.Allocator;
 pub const c = @cImport({
@@ -58,6 +59,7 @@ comptime {
 
 const ColorFormat = enum(c.SDL_GPUTextureFormat) {
     Default = 0,
+    R8Unorm = c.SDL_GPU_TEXTUREFORMAT_R8_UNORM,
     R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
     Swapchain,
 
@@ -118,6 +120,7 @@ const Texture = union(enum) {
     color: usize,
     depth: usize,
     image: []const u8,
+    simplex2,
 };
 
 const Pass = struct {
@@ -149,6 +152,8 @@ const Config = struct {
     depth_textures: []const DepthFormat = &.{},
     vertices: []const VertexSource,
     passes: []const Pass,
+    noise_size: u32 = 256,
+    noise_scale: f32 = 0.5,
 };
 
 const config: Config = @import("render.zon");
@@ -285,6 +290,8 @@ var pipelines: [pipeline_keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var image_textures: [image_keys.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
+var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
+var noise_texture: *c.SDL_GPUTexture = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
 
@@ -294,9 +301,8 @@ pub fn deinit() void {
             c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
         }
     }
-    for (pipelines) |pipeline| {
-        c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
-    }
+    c.SDL_ReleaseGPUTexture(device, noise_texture);
+    c.SDL_ReleaseGPUTransferBuffer(device, noise_transfer);
     for (depth_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
@@ -305,6 +311,9 @@ pub fn deinit() void {
     }
     for (image_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
+    }
+    for (pipelines) |pipeline| {
+        c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
     c.SDL_ReleaseGPUTexture(device, output_buffer);
     c.SDL_ReleaseGPUSampler(device, nearest);
@@ -387,7 +396,10 @@ fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
     return texture;
 }
 
-fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
+fn initColorTexture(
+    format: ColorFormat,
+    wh: struct { width: u32 = render_width, height: u32 = render_height },
+) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
         .format = switch (format) {
@@ -398,8 +410,8 @@ fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
             else => @intFromEnum(format),
         },
         .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-        .width = render_width,
-        .height = render_height,
+        .width = wh.width,
+        .height = wh.height,
         .layer_count_or_depth = 1,
         .num_levels = 1,
         .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
@@ -407,13 +419,16 @@ fn initColorTexture(format: ColorFormat) !*c.SDL_GPUTexture {
     }));
 }
 
-fn initDepthTexture(format: DepthFormat) !*c.SDL_GPUTexture {
+fn initDepthTexture(
+    format: DepthFormat,
+    wh: struct { width: u32 = render_width, height: u32 = render_height },
+) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
         .format = @intFromEnum(format),
         .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        .width = render_width,
-        .height = render_height,
+        .width = wh.width,
+        .height = wh.height,
         .layer_count_or_depth = 1,
         .num_levels = 1,
         .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
@@ -588,7 +603,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     )));
     errdefer c.SDL_ReleaseGPUSampler(device, nearest);
 
-    output_buffer = try initColorTexture(.Swapchain);
+    output_buffer = try initColorTexture(.Swapchain, .{});
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
     for (image_keys, &image_textures) |name, *texture| {
@@ -597,14 +612,23 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     }
 
     for (config.color_textures, &color_textures) |format, *texture| {
-        texture.* = try initColorTexture(format);
+        texture.* = try initColorTexture(format, .{});
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     for (config.depth_textures, &depth_textures) |format, *texture| {
-        texture.* = try initDepthTexture(format);
+        texture.* = try initDepthTexture(format, .{});
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
+
+    noise_transfer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+        .size = @intCast(config.noise_size * config.noise_size),
+        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    }));
+    noise_texture = try initColorTexture(
+        .R8Unorm,
+        .{ .width = config.noise_size, .height = config.noise_size },
+    );
 
     for (pipeline_keys, &pipelines) |key, *pipeline| {
         pipeline.* = try initPipeline(key);
@@ -685,6 +709,37 @@ pub fn render(time: f32) !void {
         .resolution = .{ render_width, render_height },
         .time = time,
     };
+
+    // Compute noise texture
+    const nd: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        noise_transfer,
+        true,
+    ))));
+    for (0..config.noise_size) |y| {
+        for (0..config.noise_size) |x| {
+            const scale = config.noise_scale;
+            const hash = std.hash.int(@as(u32, @bitCast(time)));
+            const noise_val = noise.simplex2(
+                (@as(f32, @floatFromInt(x)) * scale) + @as(f32, @floatFromInt(hash & 0x7fff)),
+                (@as(f32, @floatFromInt(y)) * scale),
+            );
+            nd[y * config.noise_size + x] =
+                @intFromFloat((noise_val * 0.5 + 0.5) * 256);
+        }
+    }
+    c.SDL_UnmapGPUTransferBuffer(device, noise_transfer);
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
+    c.SDL_UploadToGPUTexture(copy_pass, &.{
+        .offset = 0,
+        .transfer_buffer = noise_transfer,
+    }, &.{
+        .texture = noise_texture,
+        .w = config.noise_size,
+        .h = config.noise_size,
+        .d = 1,
+    }, true);
+    c.SDL_EndGPUCopyPass(copy_pass);
 
     // Render passes
     inline for (config.passes) |pass| {
@@ -810,6 +865,7 @@ pub fn render(time: f32) !void {
                                 } else @compileError("No image key defined for " ++ name);
                                 break :blk image_textures[i];
                             },
+                            .simplex2 => noise_texture,
                         },
                         .sampler = nearest,
                     }, 1);

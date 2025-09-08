@@ -39,7 +39,7 @@
             .drawcalls = .{
                 .{
                     .pipeline = .{ .frag = "post.frag" },
-                    .fragment_samplers = .{.{ .color = 0 }},
+                    .fragment_samplers = .{ .{ .color = 0 }, .simplex2 },
                     .fragment_uniforms = .{.Shadertoy},
                 },
             },

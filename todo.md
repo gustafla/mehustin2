@@ -5,7 +5,7 @@
   - [ ] Depth target
   - [X] RGBA from file
   - [ ] HDR from file
-  - [ ] Simplex noise
+  - [X] Simplex noise
 - [ ] Dual Kawase blur
   - [ ] Bloom
   - [ ] DoF

@@ -4,13 +4,13 @@ layout(location = 0) in vec2 FragCoord;
 layout(location = 0) out vec4 FragColor;
 
 layout(set = 2, binding = 0) uniform sampler2D u_InputTexture;
+layout(set = 2, binding = 1) uniform sampler2D u_NoiseTexture;
 
 layout(set = 3, binding = 0) uniform PushConstants {
     vec2 u_Resolution;
     float u_Time;
 };
 
-#include <lib/noise.glsl>
 #include <lib/color.glsl>
 
 vec3 bright(vec2 uv) {
@@ -38,9 +38,8 @@ void main() {
 
     // Noise
     float noise_amount = 0.06;
-    vec2 seed = gl_FragCoord.xy;
-    seed += vec2(noise(u_Time * 5.), noise(u_Time * 11.)) * u_Resolution;
-    color += (noise(seed) - .5) * noise_amount;
+    ivec2 noise_uv = ivec2(gl_FragCoord.xy) % 256;
+    color += texelFetch(u_NoiseTexture, noise_uv, 0).r * noise_amount;
 
     // Output
     // https://64.github.io/tonemapping/
