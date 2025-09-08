@@ -24,7 +24,10 @@
 
 # Backlog
 
-- [ ] Text renderer
+- [ ] imgui
+- [ ] More physically accurate chromatic aberration
+  - refract(), multiple channels
+  - https://gist.github.com/jjcastro/10bf80b5a5c740056b461f3010787ec1
 - [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
 - [ ] Use (games-by-mason) libraries?
   - [ ] Zex
