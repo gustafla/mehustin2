@@ -38,6 +38,7 @@ pub fn build(b: *Build) void {
 
     // Define variable for release setting
     const release_build = optimize != .Debug;
+    const lto: std.zig.LtoMode = if (release_build) .full else .none;
 
     // Define build options
     const system_sdl = b.option(
@@ -61,7 +62,7 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
         .preferred_linkage = .static,
         .strip = release_build,
-        .lto = release_build,
+        .lto = lto,
     });
     const sdl_lib = sdl_dep.artifact("SDL3");
 
@@ -152,7 +153,7 @@ pub fn build(b: *Build) void {
         .root_module = exe_mod,
     });
     exe.linkLibC();
-    exe.lto = if (release_build) .full else .none;
+    exe.lto = lto;
     b.installArtifact(exe);
 
     // Create glsl compiler run step for each shader
