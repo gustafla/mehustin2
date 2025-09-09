@@ -22,6 +22,7 @@ else
 
 const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const sdl_log = std.log.scoped(.sdl);
+const fps_log = std.log.scoped(.fps);
 const sdlerr = @import("err.zig").sdlerr;
 
 // Track deinitialization with a stack
@@ -44,6 +45,9 @@ const InitStep = enum {
 
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
+var frames: u32 = 0;
+var fps_ticks: u64 = 0;
+var fps_enabled: bool = false;
 
 // Private SDL symbols for hacking wayland mode emulation
 extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
@@ -164,6 +168,16 @@ fn sdlAppIterate() !c.SDL_AppResult {
         return c.SDL_APP_SUCCESS;
     }
 
+    // Measure FPS
+    if (builtin.mode == .Debug and fps_enabled) {
+        frames += 1;
+        if (fps_ticks + c.SDL_NS_PER_SECOND < time.raw_ns) {
+            fps_log.info("{} FPS", .{frames});
+            fps_ticks = time.raw_ns;
+            frames = 0;
+        }
+    }
+
     return c.SDL_APP_CONTINUE;
 }
 
@@ -193,6 +207,9 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDLK_R => if (builtin.mode == .Debug) {
                     render.deinit();
                     try render.init(@ptrCast(window), @ptrCast(device));
+                },
+                c.SDLK_GRAVE => if (builtin.mode == .Debug) {
+                    fps_enabled = !fps_enabled;
                 },
                 else => {},
             }

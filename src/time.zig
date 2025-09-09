@@ -4,11 +4,13 @@ const c = root.c;
 var start: u64 = 0;
 var offset: u64 = 0;
 pub var paused: bool = false;
+pub var raw_ns: u64 = 0;
 
 const ns_per_sec: f32 = @floatFromInt(c.SDL_NS_PER_SECOND);
 
 fn getTimeNS() u64 {
-    return if (paused) offset else (c.SDL_GetTicksNS() - start) + offset;
+    raw_ns = c.SDL_GetTicksNS();
+    return if (paused) offset else (raw_ns - start) + offset;
 }
 
 pub fn getTime() f32 {
