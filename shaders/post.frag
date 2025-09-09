@@ -38,7 +38,7 @@ void main() {
 
     // Noise
     float noise_amount = 0.06;
-    ivec2 noise_uv = ivec2(gl_FragCoord.xy) % 256;
+    ivec2 noise_uv = ivec2(gl_FragCoord.xy) % 64;
     color += texelFetch(u_NoiseTexture, noise_uv, 0).r * noise_amount;
 
     // Output
