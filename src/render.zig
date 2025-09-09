@@ -60,7 +60,9 @@ comptime {
 const ColorFormat = enum(c.SDL_GPUTextureFormat) {
     Default = 0,
     R8Unorm = c.SDL_GPU_TEXTUREFORMAT_R8_UNORM,
+    R8g8b8a8Unorm = c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
     R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+    R11g11b10Float = c.SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT,
     Swapchain,
 
     fn toSDL(self: ColorFormat) c.SDL_GPUTextureFormat {

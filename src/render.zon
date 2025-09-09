@@ -1,6 +1,6 @@
 .{
     .color_textures = .{
-        .R16g16b16a16Float,
+        .R11g11b10Float,
     },
     .depth_textures = .{
         .D16Unorm,
