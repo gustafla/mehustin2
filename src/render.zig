@@ -363,18 +363,6 @@ fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
-    { // TODO: Remove this workaround when SDL is updated from 3.2.20
-        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-        var w: u32 = undefined;
-        var h: u32 = undefined;
-        _ = c.SDL_AcquireGPUSwapchainTexture(
-            cmdbuf,
-            window,
-            &swapchain_texture,
-            &w,
-            &h,
-        );
-    }
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
     c.SDL_UploadToGPUTexture(
         copy_pass,
@@ -545,18 +533,6 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
     c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
 
     const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
-    { // TODO: Remove this workaround when SDL is updated from 3.2.20
-        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-        var width: u32 = undefined;
-        var height: u32 = undefined;
-        _ = c.SDL_AcquireGPUSwapchainTexture(
-            cmdbuf,
-            window,
-            &swapchain_texture,
-            &width,
-            &height,
-        );
-    }
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
     c.SDL_UploadToGPUBuffer(
         copy_pass,
