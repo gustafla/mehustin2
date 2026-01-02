@@ -1,20 +1,13 @@
 # High priority
 
-- [ ] Textures
-  - [X] Color target
-  - [ ] Depth target
-  - [X] RGBA from file
-  - [ ] HDR from file
-  - [X] Simplex noise
 - [ ] Dual Kawase blur
   - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
-  - [ ] DoF
-    - [ ] Bokeh sprites
-- [ ] Text mesh rendering
+- [ ] Text SDF rendering
   - [ ] stb_truetype
-  - [ ] libtess2
-- [ ] Render scene to cubemap
+- [ ] Particle sim rendering
+- [ ] Procedural mesh generation
+- [ ] Blending
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
@@ -26,7 +19,13 @@
 
 # Backlog
 
-- [ ] imgui
+- [ ] DoF
+  - [ ] Bokeh sprites
+- [ ] HDR textures from file
+- [ ] Render scene to cubemap
+- [ ] Text mesh rendering
+  - [ ] libtess2
+- [ ] imgui (dear_imgui_zig)
 - [ ] More physically accurate chromatic aberration
   - refract(), multiple channels
   - https://gist.github.com/jjcastro/10bf80b5a5c740056b461f3010787ec1
@@ -43,6 +42,11 @@
 
 # Done
 
+- [X] Textures
+  - [X] Color target
+  - [X] Depth target
+  - [X] RGBA from file
+  - [X] Simplex noise
 - [X] Post processing
 - [X] Music player
 - [X] Render abstractions
