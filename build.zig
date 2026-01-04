@@ -102,16 +102,20 @@ pub fn build(b: *Build) void {
     // Add stb_vorbis to exe
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
 
-    // Generate stb_image.c
-    const stbi_write = b.addWriteFile("stb_image.c",
+    // Generate stb_image.c, stb_truetype.c
+    const stb_write = b.addWriteFiles();
+    const stb_image_c = stb_write.add("stb_image.c",
         \\#define STB_IMAGE_IMPLEMENTATION
         \\#define STBI_NO_FAILURE_STRINGS
         \\#define STBI_ASSERT(x)
         \\#include <stb_image.h>
         \\
     );
-    const stbi_dir = stbi_write.getDirectory();
-    const stbi_c = stbi_dir.join(b.allocator, "stb_image.c") catch @panic("OOM");
+    const stb_truetype_c = stb_write.add("stb_truetype.c",
+        \\#define STB_TRUETYPE_IMPLEMENTATION
+        \\#include <stb_truetype.h>
+        \\
+    );
 
     // Set up render shared library
     if (render_dynlib) {
@@ -119,9 +123,8 @@ pub fn build(b: *Build) void {
         exe_mod.addRPath(.{ .cwd_relative = lib_path });
 
         render_mod.addOptions("options", options);
-        render_mod.addCSourceFile(.{
-            .file = stbi_c,
-        });
+        render_mod.addCSourceFile(.{ .file = stb_image_c });
+        render_mod.addCSourceFile(.{ .file = stb_truetype_c });
 
         const render = b.addLibrary(.{
             .name = "render",
@@ -131,9 +134,8 @@ pub fn build(b: *Build) void {
         render.linkLibC();
         b.installArtifact(render);
     } else {
-        exe_mod.addCSourceFile(.{
-            .file = stbi_c,
-        });
+        render_mod.addCSourceFile(.{ .file = stb_image_c });
+        render_mod.addCSourceFile(.{ .file = stb_truetype_c });
     }
 
     // Add target triple to executable name if target isn't native
