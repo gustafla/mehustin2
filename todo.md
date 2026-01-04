@@ -4,7 +4,7 @@
   - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
 - [ ] Text SDF rendering
-  - [ ] stb_truetype
+  - [X] stb_truetype
 - [ ] Particle sim rendering
 - [ ] Procedural mesh generation
 - [ ] Blending
