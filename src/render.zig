@@ -1,17 +1,23 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
-const shader = @import("shader.zig");
+
+const config: Config = @import("render.zon");
+const main_config = @import("config.zon");
+
 const math = @import("math.zig");
 const noise = @import("noise.zig");
 const resource = @import("resource.zig");
-const Allocator = std.mem.Allocator;
+const sdlerr = @import("err.zig").sdlerr;
+const shader = @import("shader.zig");
+const font = @import("font.zig");
+
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
     @cInclude("stb_image.h");
+    @cInclude("stb_truetype.h");
 });
-const sdlerr = @import("err.zig").sdlerr;
-
 const VertexAttributes = packed struct {
     coords: bool = false,
     normals: bool = false,
@@ -153,12 +159,11 @@ const Config = struct {
     color_textures: []const ColorFormat = &.{},
     depth_textures: []const DepthFormat = &.{},
     vertices: []const VertexSource,
+    fonts: []const []const u8,
     passes: []const Pass,
     noise_size: u32 = 256,
     noise_scale: f32 = 0.5,
 };
-
-const config: Config = @import("render.zon");
 
 // Compute upper bounds from config
 fn maxSliceLen(set: anytype, comptime field: []const u8) usize {
@@ -276,7 +281,6 @@ const image_keys = init: {
     break :init keys[0..num_keys].*;
 };
 
-const main_config = @import("config.zon");
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
 const render_aspect = render_width / render_height;
@@ -296,6 +300,8 @@ var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
 var noise_texture: *c.SDL_GPUTexture = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
+var font_textures: [config.fonts.len]*c.SDL_GPUTexture = undefined;
+var font_glyph_data: [config.fonts.len][128]font.GlyphInfo = undefined;
 
 pub fn deinit() void {
     for (vertex_buffers) |buf| {
@@ -319,11 +325,87 @@ pub fn deinit() void {
     }
     c.SDL_ReleaseGPUTexture(device, output_buffer);
     c.SDL_ReleaseGPUSampler(device, nearest);
+    for (font_textures) |texture| {
+        c.SDL_ReleaseGPUTexture(device, texture);
+    }
 
     // TODO: https://github.com/ziglang/zig/issues/25026
     // if (builtin.mode == .Debug) {
     //     _ = debug_allocator.detectLeaks();
     // }
+}
+
+fn initFont(
+    name: []const u8,
+    font_size: f32,
+    padding: u32,
+    dist_scale: f32,
+    width: u32,
+    height: u32,
+    glyph_data: *[128]font.GlyphInfo,
+) !*c.SDL_GPUTexture {
+    const path = try resource.dataFilePath(gpa, name);
+    defer gpa.free(path);
+    const ttf = try resource.loadFileZ(gpa, path);
+    defer gpa.free(ttf);
+
+    const texture = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+        .type = c.SDL_GPU_TEXTURETYPE_2D,
+        .format = c.SDL_GPU_TEXTUREFORMAT_R8_UNORM,
+        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        .width = @intCast(width),
+        .height = @intCast(height),
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+        .props = 0,
+    }));
+    errdefer c.SDL_ReleaseGPUTexture(device, texture);
+
+    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+        .size = @intCast(width * height),
+        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    }));
+    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+    const atlas: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        false,
+    ))));
+
+    try font.bakeSDFAtlas(
+        ttf.ptr,
+        font_size,
+        padding,
+        dist_scale,
+        width,
+        height,
+        glyph_data,
+        atlas,
+    );
+
+    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
+    c.SDL_UploadToGPUTexture(
+        copy_pass,
+        &.{
+            .offset = 0,
+            .transfer_buffer = transfer_buffer,
+        },
+        &.{
+            .texture = texture,
+            .w = @intCast(width),
+            .h = @intCast(height),
+            .d = 1,
+        },
+        false,
+    );
+    c.SDL_EndGPUCopyPass(copy_pass);
+    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+
+    return texture;
 }
 
 fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
@@ -625,6 +707,11 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         }
         // Divide by three because XYZ
         count.* = @intCast(data.coords.len / 3);
+    }
+
+    // TODO: parameters like size etc.
+    for (config.fonts, &font_textures, &font_glyph_data) |name, *texture, *glyph_data| {
+        texture.* = try initFont(name, 20, 5, 32, 1024, 1024, glyph_data);
     }
 }
 

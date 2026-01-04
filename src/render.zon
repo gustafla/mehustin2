@@ -72,5 +72,6 @@
         } },
         // zig fmt: on
     },
+    .fonts = .{"font.ttf"},
     .noise_size = 64,
 }
