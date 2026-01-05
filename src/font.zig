@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const c = @import("render.zig").c;
 
 const Error = error{

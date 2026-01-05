@@ -5,12 +5,12 @@ const builtin = @import("builtin");
 const config: Config = @import("render.zon");
 const main_config = @import("config.zon");
 
+const font = @import("font.zig");
 const math = @import("math.zig");
 const noise = @import("noise.zig");
 const resource = @import("resource.zig");
 const sdlerr = @import("err.zig").sdlerr;
 const shader = @import("shader.zig");
-const font = @import("font.zig");
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -18,6 +18,27 @@ pub const c = @cImport({
     @cInclude("stb_image.h");
     @cInclude("stb_truetype.h");
 });
+
+const VertexFormat = enum(c.SDL_GPUVertexElementFormat) {
+    Float = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
+    Vec2 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+    Vec3 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+    Vec4 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+
+    fn len(self: @This()) u32 {
+        return switch (self) {
+            .Float => @sizeOf(f32),
+            .Vec2 => @sizeOf(f32) * 2,
+            .Vec3 => @sizeOf(f32) * 3,
+            .Vec4 => @sizeOf(f32) * 4,
+        };
+    }
+
+    fn toSDL(self: @This()) c.SDL_GPUVertexElementFormat {
+        return @intFromEnum(self);
+    }
+};
+
 const VertexAttributes = packed struct {
     coords: bool = false,
     normals: bool = false,
@@ -116,6 +137,7 @@ const Pipeline = struct {
     vert: []const u8 = "quad.vert",
     frag: []const u8,
     vertex_attributes: VertexAttributes = .{},
+    instance_attributes: []const VertexFormat = &.{},
     primitive_type: PrimitiveType = .TriangleStrip,
     depth_test: ?struct {
         compare_op: CompareOp = .LessOrEqual,
@@ -131,19 +153,22 @@ const Texture = union(enum) {
     simplex2,
 };
 
+const DrawNum = union(enum) {
+    infer,
+    num: u32,
+};
+
 const Pass = struct {
     drawcalls: []const struct {
         pipeline: Pipeline,
         vertices: ?usize = null,
+        instances: ?usize = null,
         vertex_samplers: []const Texture = &.{},
         fragment_samplers: []const Texture = &.{},
         vertex_uniforms: []const UniformData = &.{},
         fragment_uniforms: []const UniformData = &.{},
-        num_vertices: union(enum) {
-            infer, // From first binding coords count, or 4 if no bindings
-            override: u32,
-        } = .infer,
-        num_instances: u32 = 1,
+        num_vertices: DrawNum = .infer,
+        num_instances: DrawNum = .infer,
         first_vertex: u32 = 0,
         first_instance: u32 = 0,
     },
@@ -151,31 +176,70 @@ const Pass = struct {
     depth_target: ?usize = null,
 };
 
+const Text = struct {
+    str: []const u8,
+    font: usize = 0,
+};
+
 const VertexSource = union(enum) {
     static: VertexData,
+};
+
+const InstanceSource = union(enum) {
+    text: Text,
+};
+
+const Font = struct {
+    ttf: []const u8,
+    size: f32,
+    padding: u32 = 5,
+    dist_scale: f32 = 32,
+    atlas_width: u32 = 1024,
+    atlas_height: u32 = 1024,
 };
 
 const Config = struct {
     color_textures: []const ColorFormat = &.{},
     depth_textures: []const DepthFormat = &.{},
     vertices: []const VertexSource,
-    fonts: []const []const u8,
+    instances: []const InstanceSource,
+    fonts: []const Font,
     passes: []const Pass,
     noise_size: u32 = 256,
     noise_scale: f32 = 0.5,
 };
 
 // Compute upper bounds from config
-fn maxSliceLen(set: anytype, comptime field: []const u8) usize {
-    var max: usize = 0;
-    for (set) |elem| {
-        const len = @field(elem, field).len;
-        max = @max(max, len);
+fn maxSliceLen(parent: anytype, comptime fields: []const []const u8) usize {
+    if (fields.len == 0) {
+        return parent.len;
     }
+
+    var max: usize = 0;
+
+    switch (@typeInfo(@TypeOf(parent))) {
+        .pointer => |p| {
+            switch (p.size) {
+                .slice => {
+                    for (parent) |elem| {
+                        const len = maxSliceLen(elem, fields);
+                        max = @max(max, len);
+                    }
+                },
+                else => @compileError("Pointer chasing is not implemented"),
+            }
+        },
+        .@"struct" => {
+            max = maxSliceLen(@field(parent, fields[0]), fields[1..]);
+        },
+        else => |t| @compileError("Only structs and slices implemented. Encountered: " ++ @typeName(@TypeOf(t))),
+    }
+
     return max;
 }
 
-const max_pass_color_targets = maxSliceLen(config.passes, "color_targets");
+const max_pass_color_targets = maxSliceLen(config.passes, &.{"color_targets"});
+const max_instance_attributes = maxSliceLen(config.passes, &.{ "drawcalls", "pipeline", "instance_attributes" });
 
 const ShaderInfo = struct {
     num_samplers: u32,
@@ -293,15 +357,16 @@ var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var pipelines: [pipeline_keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
+var font_textures: [config.fonts.len]*c.SDL_GPUTexture = undefined;
 var image_textures: [image_keys.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
 var noise_texture: *c.SDL_GPUTexture = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
+var instance_buffers: [config.instances.len]*c.SDL_GPUBuffer = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
-var font_textures: [config.fonts.len]*c.SDL_GPUTexture = undefined;
-var font_glyph_data: [config.fonts.len][128]font.GlyphInfo = undefined;
+var instance_counts: [config.instances.len]u32 = undefined;
 
 pub fn deinit() void {
     for (vertex_buffers) |buf| {
@@ -328,11 +393,66 @@ pub fn deinit() void {
     for (font_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
+    for (instance_buffers) |buffer| {
+        c.SDL_ReleaseGPUBuffer(device, buffer);
+    }
 
     // TODO: https://github.com/ziglang/zig/issues/25026
     // if (builtin.mode == .Debug) {
     //     _ = debug_allocator.detectLeaks();
     // }
+}
+
+fn initText(
+    str: []const u8,
+    size: f32,
+    glyphs: *[128]font.GlyphInfo,
+) !*c.SDL_GPUBuffer {
+    const Instance = extern struct {
+        uv_rect: [4]f32,
+        pos_rect: [4]f32,
+        color: [4]f32,
+    };
+    const buf = try gpa.alloc(Instance, str.len);
+    defer gpa.free(buf);
+
+    @memset(buf, std.mem.zeroes(Instance));
+
+    var x: f32 = 0;
+    var y: f32 = 0;
+
+    for (str, 0..) |char, i| {
+        const g = glyphs[char];
+
+        if (char == '\n') {
+            y += size;
+            x = 0;
+            continue;
+        }
+
+        if (char == ' ') {
+            x += size / 2;
+            continue;
+        }
+
+        const p_min_x = x + g.x_off;
+        const p_min_y = y + g.y_off;
+
+        buf[i] = .{
+            .uv_rect = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
+            .pos_rect = .{
+                p_min_x / size,
+                p_min_y / size,
+                (p_min_x + g.width) / size,
+                (p_min_y + g.height) / size,
+            },
+            .color = @splat(1),
+        };
+
+        x += g.advance;
+    }
+
+    return initBuffer(Instance, buf, c.SDL_GPU_BUFFERUSAGE_VERTEX);
 }
 
 fn initFont(
@@ -524,12 +644,15 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         target.* = .{ .format = format };
     }
 
-    // TODO: Instances
-    const max_attribs = @bitSizeOf(VertexAttributes);
+    // First 0..va_locations vertex input locations are for VertexAttributes,
+    // i.e. 0 = coords, 1 = normals, ...
+    // Each vertex attribute is read from separate buffers.
+    const va_locations = @bitSizeOf(VertexAttributes);
+    const max_attribs = va_locations + max_instance_attributes;
     var buffers: [max_attribs]c.SDL_GPUVertexBufferDescription = undefined;
     var attribs: [max_attribs]c.SDL_GPUVertexAttribute = undefined;
     var num_attribs: u32 = 0;
-    inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, i| {
+    inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, location| {
         const param = attribParameters(field.name);
         const enabled = @field(pipeline.vertex_attributes, field.name);
         if (enabled) {
@@ -540,7 +663,7 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
                 .instance_step_rate = 0,
             };
             attribs[num_attribs] = .{
-                .location = @intCast(i),
+                .location = @intCast(location),
                 .buffer_slot = num_attribs,
                 .format = param.format,
                 .offset = 0,
@@ -548,6 +671,27 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
             num_attribs += 1;
         }
     }
+
+    // Subsequent va_locations.. vertex input locations are for instance attributes.
+    // Only one instance buffer with interleaved attributes is supported.
+    const instance_buffer_slot = num_attribs;
+    var instance_attrib_offset: u32 = 0;
+    for (pipeline.instance_attributes, va_locations..) |attrib, location| {
+        attribs[num_attribs] = .{
+            .location = @intCast(location),
+            .buffer_slot = instance_buffer_slot,
+            .format = attrib.toSDL(),
+            .offset = instance_attrib_offset,
+        };
+        instance_attrib_offset += attrib.len();
+        num_attribs += 1;
+    }
+    buffers[instance_buffer_slot] = .{
+        .slot = instance_buffer_slot,
+        .pitch = instance_attrib_offset,
+        .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE,
+        .instance_step_rate = 0,
+    };
 
     return try sdlerr(c.SDL_CreateGPUGraphicsPipeline(device, &.{
         .vertex_shader = vert,
@@ -709,9 +853,25 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         count.* = @intCast(data.coords.len / 3);
     }
 
-    // TODO: parameters like size etc.
-    for (config.fonts, &font_textures, &font_glyph_data) |name, *texture, *glyph_data| {
-        texture.* = try initFont(name, 20, 5, 32, 1024, 1024, glyph_data);
+    var font_glyph_data: [config.fonts.len][128]font.GlyphInfo = undefined;
+    for (config.fonts, &font_textures, &font_glyph_data) |def, *texture, *glyph_data| {
+        texture.* = try initFont(
+            def.ttf,
+            def.size,
+            def.padding,
+            def.dist_scale,
+            def.atlas_width,
+            def.atlas_height,
+            glyph_data,
+        );
+    }
+
+    for (config.instances, &instance_buffers, &instance_counts) |def, *buffer, *count| {
+        const text = def.text;
+        const size = config.fonts[text.font].size;
+        const glyphs = &font_glyph_data[text.font];
+        buffer.* = try initText(text.str, size, glyphs);
+        count.* = @intCast(text.str.len);
     }
 }
 
@@ -867,6 +1027,7 @@ pub fn render(time: f32) !void {
 
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
+            // Find matching pipeline index from pipeline_keys at compile time
             const pipeline_index = comptime for (pipeline_keys, 0..) |plk, i| {
                 const key: PipelineKey = .{
                     .pipeline = drawcall.pipeline,
@@ -890,20 +1051,31 @@ pub fn render(time: f32) !void {
             c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
 
             // Bind vertex buffers
+            var buffer_slot: u32 = 0;
             if (drawcall.vertices) |vertices_index| {
-                var slot: u32 = 0;
                 inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
                     const buffer = @field(vertex_buffers[vertices_index], field.name);
                     if (buffer) |buf| {
                         c.SDL_BindGPUVertexBuffers(
                             render_pass,
-                            slot,
+                            buffer_slot,
                             &.{ .buffer = buf, .offset = 0 },
                             1,
                         );
-                        slot += 1;
+                        buffer_slot += 1;
                     }
                 }
+            }
+
+            // Bind instance buffers
+            if (drawcall.instances) |instances_index| {
+                c.SDL_BindGPUVertexBuffers(
+                    render_pass,
+                    buffer_slot,
+                    &.{ .buffer = instance_buffers[instances_index], .offset = 0 },
+                    1,
+                );
+                buffer_slot += 1;
             }
 
             // Bind textures
@@ -970,12 +1142,16 @@ pub fn render(time: f32) !void {
 
             const num_vertices = switch (drawcall.num_vertices) {
                 .infer => if (drawcall.vertices) |i| vertex_counts[i] else 4,
-                .override => |num| num,
+                .num => |num| num,
+            };
+            const num_instances = switch (drawcall.num_instances) {
+                .infer => if (drawcall.instances) |i| instance_counts[i] else 1,
+                .num => |num| num,
             };
             c.SDL_DrawGPUPrimitives(
                 render_pass,
                 num_vertices,
-                drawcall.num_instances,
+                num_instances,
                 drawcall.first_vertex,
                 drawcall.first_instance,
             );
@@ -1033,7 +1209,7 @@ fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
     };
 }
 
-// TODO: https://github.com/ziglang/zig/issues/25026
+// TODO: https://codeberg.org/ziglang/zig/issues/30048
 pub const std_options: std.Options = .{
     .log_level = .err,
 };
