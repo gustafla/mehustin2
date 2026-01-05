@@ -134,8 +134,8 @@ pub fn build(b: *Build) void {
         render.linkLibC();
         b.installArtifact(render);
     } else {
-        render_mod.addCSourceFile(.{ .file = stb_image_c });
-        render_mod.addCSourceFile(.{ .file = stb_truetype_c });
+        exe_mod.addCSourceFile(.{ .file = stb_image_c });
+        exe_mod.addCSourceFile(.{ .file = stb_truetype_c });
     }
 
     // Add target triple to executable name if target isn't native

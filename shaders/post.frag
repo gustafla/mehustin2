@@ -1,7 +1,9 @@
 #version 450
 
-layout(location = 0) in vec2 FragCoord;
-layout(location = 0) out vec4 FragColor;
+layout(location = 0) in vec2 in_pos;
+layout(location = 1) in vec2 in_uv;
+
+layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_InputTexture;
 layout(set = 2, binding = 1) uniform sampler2D u_NoiseTexture;
@@ -18,23 +20,21 @@ vec3 bright(vec2 uv) {
 }
 
 void main() {
-    vec2 uv = FragCoord * 0.5 + 0.5;
-
     // Chromatic aberration
     vec3 color = vec3(
-            texture(u_InputTexture, uv + vec2(-1. / u_Resolution.x, 0.)).r,
-            texture(u_InputTexture, uv).g,
-            texture(u_InputTexture, uv + vec2(1. / u_Resolution.x, 0.)).b
+            texture(u_InputTexture, in_uv + vec2(-1. / u_Resolution.x, 0.)).r,
+            texture(u_InputTexture, in_uv).g,
+            texture(u_InputTexture, in_uv + vec2(1. / u_Resolution.x, 0.)).b
         );
 
     // Radial blur
     for (int i = 0; i < 64; i++) {
         float prog = float(i) / 64.;
-        color += bright((FragCoord / (1 + prog)) * 0.5 + 0.5) * (1. / 32.) * (1 - prog);
+        color += bright((in_pos / (1 + prog)) * vec2(0.5, -0.5) + 0.5) * (1. / 32.) * (1 - prog);
     }
 
     // Vignette
-    color = color - length(FragCoord) * 0.2;
+    color = color - length(in_pos) * 0.2;
 
     // Noise
     float noise_amount = 0.06;
@@ -43,5 +43,5 @@ void main() {
 
     // Output
     // https://64.github.io/tonemapping/
-    FragColor = vec4(acesApprox(max(color, 0.)), 1.);
+    out_color = vec4(acesApprox(max(color, 0.)), 1.);
 }

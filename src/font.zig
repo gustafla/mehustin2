@@ -47,7 +47,7 @@ pub fn bakeSDFAtlas(
         var xoff: i32 = 0;
         var yoff: i32 = 0;
 
-        const sdf_bitmap = c.stbtt_GetGlyphSDF(
+        const sdf_bitmap = c.stbtt_GetCodepointSDF(
             &info,
             scale,
             @intCast(glyph),

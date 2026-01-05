@@ -149,6 +149,7 @@ const Pipeline = struct {
 const Texture = union(enum) {
     color: usize,
     depth: usize,
+    font: usize,
     image: []const u8,
     simplex2,
 };
@@ -441,10 +442,10 @@ fn initText(
         buf[i] = .{
             .uv_rect = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
             .pos_rect = .{
-                p_min_x / size,
-                p_min_y / size,
-                (p_min_x + g.width) / size,
-                (p_min_y + g.height) / size,
+                p_min_x,
+                p_min_y,
+                p_min_x + g.width,
+                p_min_y + g.height,
             },
             .color = @splat(1),
         };
@@ -651,54 +652,58 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const max_attribs = va_locations + max_instance_attributes;
     var buffers: [max_attribs]c.SDL_GPUVertexBufferDescription = undefined;
     var attribs: [max_attribs]c.SDL_GPUVertexAttribute = undefined;
+    var num_buffers: u32 = 0;
     var num_attribs: u32 = 0;
     inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, location| {
         const param = attribParameters(field.name);
         const enabled = @field(pipeline.vertex_attributes, field.name);
         if (enabled) {
-            buffers[num_attribs] = .{
-                .slot = num_attribs,
+            buffers[num_buffers] = .{
+                .slot = num_buffers,
                 .pitch = param.pitch,
                 .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
                 .instance_step_rate = 0,
             };
             attribs[num_attribs] = .{
                 .location = @intCast(location),
-                .buffer_slot = num_attribs,
+                .buffer_slot = num_buffers,
                 .format = param.format,
                 .offset = 0,
             };
+            num_buffers += 1;
             num_attribs += 1;
         }
     }
 
     // Subsequent va_locations.. vertex input locations are for instance attributes.
     // Only one instance buffer with interleaved attributes is supported.
-    const instance_buffer_slot = num_attribs;
-    var instance_attrib_offset: u32 = 0;
-    for (pipeline.instance_attributes, va_locations..) |attrib, location| {
-        attribs[num_attribs] = .{
-            .location = @intCast(location),
-            .buffer_slot = instance_buffer_slot,
-            .format = attrib.toSDL(),
-            .offset = instance_attrib_offset,
+    if (pipeline.instance_attributes.len > 0) {
+        var instance_attrib_offset: u32 = 0;
+        for (pipeline.instance_attributes, va_locations..) |attrib, location| {
+            attribs[num_attribs] = .{
+                .location = @intCast(location),
+                .buffer_slot = num_buffers,
+                .format = attrib.toSDL(),
+                .offset = instance_attrib_offset,
+            };
+            instance_attrib_offset += attrib.len();
+            num_attribs += 1;
+        }
+        buffers[num_buffers] = .{
+            .slot = num_buffers,
+            .pitch = instance_attrib_offset,
+            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE,
+            .instance_step_rate = 0,
         };
-        instance_attrib_offset += attrib.len();
-        num_attribs += 1;
+        num_buffers += 1;
     }
-    buffers[instance_buffer_slot] = .{
-        .slot = instance_buffer_slot,
-        .pitch = instance_attrib_offset,
-        .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE,
-        .instance_step_rate = 0,
-    };
 
     return try sdlerr(c.SDL_CreateGPUGraphicsPipeline(device, &.{
         .vertex_shader = vert,
         .fragment_shader = frag,
         .vertex_input_state = .{
             .vertex_buffer_descriptions = &buffers,
-            .num_vertex_buffers = num_attribs,
+            .num_vertex_buffers = num_buffers,
             .vertex_attributes = &attribs,
             .num_vertex_attributes = num_attribs,
         },
@@ -1094,6 +1099,7 @@ pub fn render(time: f32) !void {
                         .texture = switch (tex) {
                             .color => |i| color_textures[i],
                             .depth => |i| depth_textures[i],
+                            .font => |i| font_textures[i],
                             .image => |name| blk: {
                                 const i = comptime for (image_keys, 0..) |key, i| {
                                     if (std.mem.eql(u8, key, name)) {
