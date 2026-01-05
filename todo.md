@@ -3,8 +3,7 @@
 - [ ] Dual Kawase blur
   - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
-- [ ] Text SDF rendering
-  - [X] stb_truetype
+- [ ] Dynamic text buffers
 - [ ] Particle sim rendering
 - [ ] Procedural mesh generation
 - [ ] Blending
@@ -42,6 +41,8 @@
 
 # Done
 
+- [X] Text SDF rendering
+  - [X] stb_truetype
 - [X] Textures
   - [X] Color target
   - [X] Depth target
@@ -52,7 +53,7 @@
 - [X] Render abstractions
   - [X] Pass for post processing
   - [X] Mesh
-  - [ ] Instances
+  - [X] Instances
   - [X] Uniforms
 - [X] Dynamic library reloading
   - [X] Shader live editing
