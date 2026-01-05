@@ -407,8 +407,9 @@ pub fn deinit() void {
 fn initText(
     str: []const u8,
     size: f32,
+    buffer: **c.SDL_GPUBuffer,
     glyphs: *[128]font.GlyphInfo,
-) !*c.SDL_GPUBuffer {
+) !u32 {
     const Instance = extern struct {
         uv_rect: [4]f32,
         pos_rect: [4]f32,
@@ -421,8 +422,9 @@ fn initText(
 
     var x: f32 = 0;
     var y: f32 = size;
+    var instances: u32 = 0;
 
-    for (str, 0..) |char, i| {
+    for (str) |char| {
         const g = glyphs[char];
 
         if (char == '\n') {
@@ -439,7 +441,7 @@ fn initText(
         const p_min_x = x + g.x_off;
         const p_min_y = y + g.y_off;
 
-        buf[i] = .{
+        buf[instances] = .{
             .uv_rect = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
             .pos_rect = .{
                 p_min_x,
@@ -451,9 +453,11 @@ fn initText(
         };
 
         x += g.advance;
+        instances += 1;
     }
 
-    return initBuffer(Instance, buf, c.SDL_GPU_BUFFERUSAGE_VERTEX);
+    buffer.* = try initBuffer(Instance, buf, c.SDL_GPU_BUFFERUSAGE_VERTEX);
+    return instances;
 }
 
 fn initFont(
@@ -875,8 +879,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         const text = def.text;
         const size = config.fonts[text.font].size;
         const glyphs = &font_glyph_data[text.font];
-        buffer.* = try initText(text.str, size, glyphs);
-        count.* = @intCast(text.str.len);
+        count.* = try initText(text.str, size, buffer, glyphs);
     }
 }
 
