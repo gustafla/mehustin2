@@ -52,7 +52,7 @@ pub const Mat4 = extern struct {
     /// Camera Space (Right-Handed):
     /// * X is right
     /// * Y is up
-    /// * Z is forward
+    /// * Z is forward (looking out of screen)
     ///
     /// NDC Space:
     /// * X: [-1.0, 1.0]

@@ -134,7 +134,7 @@ const ColorTarget = union(enum) {
 };
 
 const Pipeline = struct {
-    vert: []const u8 = "quad.vert",
+    vert: []const u8 = "tri.vert",
     frag: []const u8,
     vertex_attributes: VertexAttributes = .{},
     instance_attributes: []const VertexFormat = &.{},
@@ -1147,7 +1147,7 @@ pub fn render(time: f32) !void {
             }
 
             const num_vertices = switch (drawcall.num_vertices) {
-                .infer => if (drawcall.vertices) |i| vertex_counts[i] else 4,
+                .infer => if (drawcall.vertices) |i| vertex_counts[i] else 3,
                 .num => |num| num,
             };
             const num_instances = switch (drawcall.num_instances) {

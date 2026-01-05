@@ -1,6 +1,8 @@
 #version 450
 
+// TODO: uv and ndc
 layout(location = 0) in vec2 FragCoord;
+
 layout(location = 0) out vec4 FragColor;
 
 layout(set = 3, binding = 0) uniform PushConstants {

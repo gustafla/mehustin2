@@ -16,13 +16,11 @@ void main() {
     out_color = in_color;
 
     vec2 corner = vec2(gl_VertexIndex >> 1, gl_VertexIndex & 1);
-
-    vec2 uv = mix(in_uv.xy, in_uv.zw, corner);
-    out_uv = uv;
+    out_uv = mix(in_uv.xy, in_uv.zw, corner);
 
     vec2 pos_px = mix(in_pos.xy, in_pos.zw, corner);
     vec2 pos_norm = pos_px / u_Resolution;
-    vec2 pos_ndc = pos_norm * 2.0 - 1.0;
+    vec2 pos_ndc = pos_norm * vec2(2, -2) - 1;
 
-    gl_Position = vec4(pos_ndc.x, -pos_ndc.y, 0., 1.);
+    gl_Position = vec4(pos_ndc, 0.0, 1.0);
 }
