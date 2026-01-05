@@ -15,12 +15,13 @@ layout(set = 1, binding = 0) uniform PushConstants {
 void main() {
     out_color = in_color;
 
+    // Generates: (0, 0), (0, 1), (1, 0), (1, 1)
     vec2 corner = vec2(gl_VertexIndex >> 1, gl_VertexIndex & 1);
     out_uv = mix(in_uv.xy, in_uv.zw, corner);
 
     vec2 pos_px = mix(in_pos.xy, in_pos.zw, corner);
     vec2 pos_norm = pos_px / u_Resolution;
-    vec2 pos_ndc = pos_norm * vec2(2, -2) - 1;
+    vec2 pos_ndc = pos_norm * vec2(2, -2) + vec2(-1, 1);
 
     gl_Position = vec4(pos_ndc, 0.0, 1.0);
 }

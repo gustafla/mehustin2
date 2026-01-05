@@ -420,7 +420,7 @@ fn initText(
     @memset(buf, std.mem.zeroes(Instance));
 
     var x: f32 = 0;
-    var y: f32 = 0;
+    var y: f32 = size;
 
     for (str, 0..) |char, i| {
         const g = glyphs[char];
