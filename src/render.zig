@@ -336,7 +336,7 @@ fn foldConfig(
     return acc;
 }
 
-const MaxField = struct {
+const max_field = struct {
     const init = 0;
     const T = @TypeOf(@This().init);
     fn op(acc: T, val: T) T {
@@ -344,7 +344,7 @@ const MaxField = struct {
     }
 };
 
-const SumField = struct {
+const sum_field = struct {
     const init = 0;
     const T = @TypeOf(@This().init);
     fn op(acc: T, val: T) T {
@@ -355,13 +355,13 @@ const SumField = struct {
 const max_color_targets = foldConfig(config.passes, &.{
     "color_targets",
     "len",
-}, MaxField);
+}, max_field);
 const max_instance_attributes = foldConfig(config.passes, &.{
     "drawcalls",
     "pipeline",
     "instance_attributes",
     "len",
-}, MaxField);
+}, max_field);
 
 const ShaderInfo = struct {
     num_samplers: u32,
@@ -382,7 +382,7 @@ const PipelineKey = struct {
 // Generate a comptime array of all unique pipeline keys from config
 const pipeline_keys = init: {
     // Find upper bound for pipelines defined in render config
-    const n = foldConfig(config.passes, &.{ "drawcalls", "len" }, SumField);
+    const n = foldConfig(config.passes, &.{ "drawcalls", "len" }, sum_field);
 
     // Initialize unique map keys with O(n^2) filtering
     var keys: [n]PipelineKey = undefined;
@@ -426,15 +426,15 @@ const pipeline_keys = init: {
 // Generate a comptime array of all unique image samplers
 const image_keys = init: {
     // Find upper bound for images defined in render config
-    const CountImages = struct {
+    const count_images = struct {
         const init: usize = 0;
-        const op = SumField.op;
+        const op = sum_field.op;
         fn map(texture: Texture) usize {
             return @intFromBool(texture == .image);
         }
     };
-    const n = foldConfig(config.passes, &.{ "drawcalls", "vertex_samplers" }, CountImages) +
-        foldConfig(config.passes, &.{ "drawcalls", "fragment_samplers" }, CountImages);
+    const n = foldConfig(config.passes, &.{ "drawcalls", "vertex_samplers" }, count_images) +
+        foldConfig(config.passes, &.{ "drawcalls", "fragment_samplers" }, count_images);
 
     // Initialize unique map keys with O(n^2) filtering
     var keys: [n][]const u8 = undefined;
