@@ -18,7 +18,6 @@
 # Backlog
 
 - [ ] `tri.frag`: Add corner rays for interpolator
-- [ ] Write comptime function for generating Zig enums from SDL GPU enums
 - [ ] DoF
   - [ ] Bokeh sprites
 - [ ] HDR textures from file
@@ -42,6 +41,7 @@
 
 # Done
 
+- [X] Write comptime function for generating Zig enums from SDL GPU enums
 - [X] Blending
 - [X] Text SDF rendering
   - [X] stb_truetype
