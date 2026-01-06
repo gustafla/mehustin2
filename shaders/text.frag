@@ -9,8 +9,9 @@ layout(set = 2, binding = 0) uniform sampler2D u_font_atlas;
 
 void main() {
     float sdf = texture(u_font_atlas, in_uv).r;
-    if (sdf < 0.5) {
-        discard;
-    }
-    out_color = in_color;
+    float alpha = smoothstep(0.0, 1.0, (sdf - 0.5) * 64.);
+    float shadow = max((sdf - 0.25) * 2., 0.);
+    shadow *= shadow;
+    out_color = in_color * alpha;
+    out_color.a = max(alpha, shadow);
 }

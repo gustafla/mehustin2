@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 
 const config: Config = @import("render.zon");
 const main_config = @import("config.zon");
+const options = @import("options");
 
 const font = @import("font.zig");
 const math = @import("math.zig");
@@ -25,7 +26,7 @@ const VertexFormat = enum(c.SDL_GPUVertexElementFormat) {
     Vec3 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
     Vec4 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
 
-    fn len(self: @This()) u32 {
+    pub fn len(self: @This()) u32 {
         return switch (self) {
             .Float => @sizeOf(f32),
             .Vec2 => @sizeOf(f32) * 2,
@@ -34,7 +35,7 @@ const VertexFormat = enum(c.SDL_GPUVertexElementFormat) {
         };
     }
 
-    fn toSDL(self: @This()) c.SDL_GPUVertexElementFormat {
+    pub fn toSDL(self: @This()) c.SDL_GPUVertexElementFormat {
         return @intFromEnum(self);
     }
 };
@@ -92,7 +93,7 @@ const ColorFormat = enum(c.SDL_GPUTextureFormat) {
     R11g11b10Float = c.SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT,
     Swapchain,
 
-    fn toSDL(self: ColorFormat) c.SDL_GPUTextureFormat {
+    pub fn toSDL(self: ColorFormat) c.SDL_GPUTextureFormat {
         return switch (self) {
             .Default => c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
             .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
@@ -123,6 +124,30 @@ const CompareOp = enum(c.SDL_GPUCompareOp) {
     LessOrEqual = c.SDL_GPU_COMPAREOP_LESS_OR_EQUAL,
 };
 
+const BlendFactor = enum(c.SDL_GPUBlendFactor) {
+    Zero = c.SDL_GPU_BLENDFACTOR_ZERO,
+    One = c.SDL_GPU_BLENDFACTOR_ONE,
+    SrcColor = c.SDL_GPU_BLENDFACTOR_SRC_COLOR,
+    OneMinusSrcColor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR,
+    DstColor = c.SDL_GPU_BLENDFACTOR_DST_COLOR,
+    OneMinusDstColor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_COLOR,
+    SrcAlpha = c.SDL_GPU_BLENDFACTOR_SRC_ALPHA,
+    OneMinusSrcAlpha = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+    DstAlpha = c.SDL_GPU_BLENDFACTOR_DST_ALPHA,
+    OneMinusDstAlpha = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA,
+    ConstantColor = c.SDL_GPU_BLENDFACTOR_CONSTANT_COLOR,
+    OneMinusConstantColor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR,
+    SrcAlphaSaturate = c.SDL_GPU_BLENDFACTOR_SRC_ALPHA_SATURATE,
+};
+
+const BlendOp = enum(c.SDL_GPUBlendOp) {
+    Add = c.SDL_GPU_BLENDOP_ADD,
+    Subtract = c.SDL_GPU_BLENDOP_SUBTRACT,
+    ReverseSubtract = c.SDL_GPU_BLENDOP_REVERSE_SUBTRACT,
+    Min = c.SDL_GPU_BLENDOP_MIN,
+    Max = c.SDL_GPU_BLENDOP_MAX,
+};
+
 const UniformData = enum {
     Matrices,
     Shadertoy,
@@ -131,6 +156,29 @@ const UniformData = enum {
 const ColorTarget = union(enum) {
     index: usize,
     swapchain,
+};
+
+const BlendState = struct {
+    src_color: BlendFactor = undefined,
+    dst_color: BlendFactor = undefined,
+    color_op: BlendOp = undefined,
+    src_alpha: BlendFactor = undefined,
+    dst_alpha: BlendFactor = undefined,
+    alpha_op: BlendOp = undefined,
+    enable: bool = false,
+
+    pub fn toSDL(self: @This()) c.SDL_GPUColorTargetBlendState {
+        return .{
+            .src_color_blendfactor = @intFromEnum(self.src_color),
+            .dst_color_blendfactor = @intFromEnum(self.dst_color),
+            .color_blend_op = @intFromEnum(self.color_op),
+            .src_alpha_blendfactor = @intFromEnum(self.src_alpha),
+            .dst_alpha_blendfactor = @intFromEnum(self.dst_alpha),
+            .alpha_blend_op = @intFromEnum(self.alpha_op),
+            .enable_blend = self.enable,
+            .enable_color_write_mask = false,
+        };
+    }
 };
 
 const Pipeline = struct {
@@ -144,6 +192,7 @@ const Pipeline = struct {
         enable: bool = true,
         write: bool = true,
     } = null,
+    blend_states: []const BlendState = &.{},
 };
 
 const Texture = union(enum) {
@@ -674,9 +723,16 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     for (
         key.color_targets_buf[0..key.num_color_targets],
         color_targets[0..key.num_color_targets],
-    ) |target_def, *target| {
+        0..,
+    ) |target_def, *target, blend_idx| {
         const format = target_def.toSDL();
-        target.* = .{ .format = format };
+        target.* = .{
+            .format = format,
+            .blend_state = if (blend_idx < pipeline.blend_states.len)
+                pipeline.blend_states[blend_idx].toSDL()
+            else
+                std.mem.zeroes(c.SDL_GPUColorTargetBlendState),
+        };
     }
 
     // First 0..va_locations vertex input locations are for VertexAttributes,
@@ -1274,7 +1330,6 @@ fn renderC(time: f32) callconv(.c) bool {
 var host_print: ?*const fn ([*]const u8, usize) callconv(.c) void = null;
 
 // Export symbols if build configuration requires
-const options = @import("options");
 comptime {
     if (options.render_dynlib) {
         @export(&deinitC, .{ .name = "deinit" });

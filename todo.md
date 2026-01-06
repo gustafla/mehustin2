@@ -6,7 +6,6 @@
 - [ ] Dynamic text buffers
 - [ ] Particle sim rendering
 - [ ] Procedural mesh generation
-- [ ] Blending
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
@@ -18,6 +17,8 @@
 
 # Backlog
 
+- [ ] `tri.frag`: Add corner rays for interpolator
+- [ ] Write comptime function for generating Zig enums from SDL GPU enums
 - [ ] DoF
   - [ ] Bokeh sprites
 - [ ] HDR textures from file
@@ -41,6 +42,7 @@
 
 # Done
 
+- [X] Blending
 - [X] Text SDF rendering
   - [X] stb_truetype
 - [X] Textures
