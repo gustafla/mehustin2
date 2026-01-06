@@ -9,19 +9,6 @@
         // Main render pass
         .{
             .drawcalls = .{
-                // Text in front of everything
-                .{
-                    .pipeline = .{
-                        .vert = "text.vert",
-                        .frag = "text.frag",
-                        .instance_attributes = .{ .Vec4, .Vec4, .Vec4 }, // The format for text instance buffers
-                        .depth_test = .{}, // Enable with defaults
-                    },
-                    .fragment_samplers = .{.{ .font = 0 }},
-                    .vertex_uniforms = .{.Shadertoy},
-                    .instances = 0,
-                    .num_vertices = .{ .num = 4 },
-                },
                 // Foreground mesh
                 .{
                     .pipeline = .{
@@ -50,12 +37,29 @@
         // Post processing output pass
         .{
             .drawcalls = .{
+                // Text in front of everything
                 .{
-                    .pipeline = .{ .frag = "post.frag" },
+                    .pipeline = .{
+                        .vert = "text.vert",
+                        .frag = "text.frag",
+                        .instance_attributes = .{ .Vec4, .Vec4, .Vec4 }, // The format for text instance buffers
+                        .depth_test = .{}, // Enable with defaults
+                    },
+                    .fragment_samplers = .{.{ .font = 0 }},
+                    .vertex_uniforms = .{.Shadertoy},
+                    .instances = 0,
+                    .num_vertices = .{ .num = 4 },
+                },
+                .{
+                    .pipeline = .{
+                        .frag = "post.frag",
+                        .depth_test = .{ .write = false },
+                    },
                     .fragment_samplers = .{ .{ .color = 0 }, .simplex2 },
                     .fragment_uniforms = .{.Shadertoy},
                 },
             },
+            .depth_target = 0,
         },
     },
     .fonts = .{

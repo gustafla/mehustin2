@@ -211,36 +211,67 @@ const Config = struct {
 };
 
 // Compute upper bounds from config
-fn maxSliceLen(parent: anytype, comptime fields: []const []const u8) usize {
-    if (fields.len == 0) {
-        return parent.len;
+fn foldConfig(
+    parent: anytype,
+    comptime fields: []const []const u8,
+    fold: anytype,
+) @TypeOf(fold.init) {
+    const Parent = @TypeOf(parent);
+    const info = @typeInfo(Parent);
+    const is_slice = info == .pointer and info.pointer.size == .slice;
+    const is_string = is_slice and info.pointer.child == u8;
+    const is_iterable = (is_slice or info == .array) and !is_string;
+
+    // Base case, at leaf, yield it's value, optionally transformed via `map`.
+    if (fields.len == 0 and !is_iterable) {
+        if (@hasDecl(fold, "map")) {
+            return fold.map(parent);
+        }
+        return parent;
     }
 
-    var max: usize = 0;
-
-    switch (@typeInfo(@TypeOf(parent))) {
-        .pointer => |p| {
-            switch (p.size) {
-                .slice => {
-                    for (parent) |elem| {
-                        const len = maxSliceLen(elem, fields);
-                        max = @max(max, len);
-                    }
-                },
-                else => @compileError("Pointer chasing is not implemented"),
-            }
-        },
-        .@"struct" => {
-            max = maxSliceLen(@field(parent, fields[0]), fields[1..]);
-        },
-        else => |t| @compileError("Only structs and slices implemented. Encountered: " ++ @typeName(@TypeOf(t))),
+    // Then, if current field access works, always descent (e.g. `[]T.len`)
+    if (fields.len > 0 and @hasField(Parent, fields[0])) {
+        const child = @field(parent, fields[0]);
+        return foldConfig(child, fields[1..], fold);
     }
 
-    return max;
+    // Finally, try iterating current parent
+    var acc = fold.init;
+    for (parent) |elem| {
+        const val = foldConfig(elem, fields, fold);
+        acc = fold.op(acc, val);
+    }
+
+    return acc;
 }
 
-const max_pass_color_targets = maxSliceLen(config.passes, &.{"color_targets"});
-const max_instance_attributes = maxSliceLen(config.passes, &.{ "drawcalls", "pipeline", "instance_attributes" });
+const MaxField = struct {
+    const init = 0;
+    const T = @TypeOf(@This().init);
+    fn op(acc: T, val: T) T {
+        return @max(acc, val);
+    }
+};
+
+const SumField = struct {
+    const init = 0;
+    const T = @TypeOf(@This().init);
+    fn op(acc: T, val: T) T {
+        return acc + val;
+    }
+};
+
+const max_color_targets = foldConfig(config.passes, &.{
+    "color_targets",
+    "len",
+}, MaxField);
+const max_instance_attributes = foldConfig(config.passes, &.{
+    "drawcalls",
+    "pipeline",
+    "instance_attributes",
+    "len",
+}, MaxField);
 
 const ShaderInfo = struct {
     num_samplers: u32,
@@ -253,7 +284,7 @@ const PipelineKey = struct {
     pipeline: Pipeline,
     vert_info: ShaderInfo,
     frag_info: ShaderInfo,
-    color_targets_buf: [max_pass_color_targets]ColorFormat,
+    color_targets_buf: [max_color_targets]ColorFormat,
     num_color_targets: u32,
     depth_target: ?DepthFormat,
 };
@@ -261,10 +292,7 @@ const PipelineKey = struct {
 // Generate a comptime array of all unique pipeline keys from config
 const pipeline_keys = init: {
     // Find upper bound for pipelines defined in render config
-    var n = 0;
-    for (config.passes) |pass| {
-        n += pass.drawcalls.len;
-    }
+    const n = foldConfig(config.passes, &.{ "drawcalls", "len" }, SumField);
 
     // Initialize unique map keys with O(n^2) filtering
     var keys: [n]PipelineKey = undefined;
@@ -308,13 +336,15 @@ const pipeline_keys = init: {
 // Generate a comptime array of all unique image samplers
 const image_keys = init: {
     // Find upper bound for images defined in render config
-    var n = 0;
-    for (config.passes) |pass| {
-        for (pass.drawcalls) |drawcall| {
-            n += drawcall.vertex_samplers.len;
-            n += drawcall.fragment_samplers.len;
+    const CountImages = struct {
+        const init: usize = 0;
+        const op = SumField.op;
+        fn map(texture: Texture) usize {
+            return @intFromBool(texture == .image);
         }
-    }
+    };
+    const n = foldConfig(config.passes, &.{ "drawcalls", "vertex_samplers" }, CountImages) +
+        foldConfig(config.passes, &.{ "drawcalls", "fragment_samplers" }, CountImages);
 
     // Initialize unique map keys with O(n^2) filtering
     var keys: [n][]const u8 = undefined;
@@ -640,7 +670,7 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const frag = try shader.loadShader(gpa, device, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    var color_targets: [max_pass_color_targets]c.SDL_GPUColorTargetDescription = undefined;
+    var color_targets: [max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
     for (
         key.color_targets_buf[0..key.num_color_targets],
         color_targets[0..key.num_color_targets],
@@ -1023,7 +1053,7 @@ pub fn render(time: f32) !void {
 
         // Construct color target format array for the pipeline key
         const color_targets = comptime init: {
-            var targets = std.mem.zeroes([max_pass_color_targets]ColorFormat);
+            var targets = std.mem.zeroes([max_color_targets]ColorFormat);
             for (pass.color_targets, targets[0..pass.color_targets.len]) |format, *target| {
                 target.* = switch (format) {
                     .index => |i| config.color_textures[i],
