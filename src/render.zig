@@ -73,7 +73,7 @@ const VertexBuffers = struct {
     uvs: ?*c.SDL_GPUBuffer,
 };
 
-// Statically assert that structs above have matching fields
+// Assert that structs above have matching fields
 comptime {
     const attributes_fields = @typeInfo(VertexAttributes).@"struct".fields;
     const data_fields = @typeInfo(VertexData).@"struct".fields;
@@ -298,10 +298,10 @@ const pipeline_keys = init: {
     var keys: [n]PipelineKey = undefined;
     var num_keys = 0;
     for (config.passes) |pass| {
-        var color_targets = std.mem.zeroes([pass.color_targets.len]ColorFormat);
-        for (pass.color_targets, color_targets[0..pass.color_targets.len]) |format, *target| {
-            target.* = switch (format) {
-                .index => |i| config.color_textures[i],
+        var color_targets = std.mem.zeroes([max_color_targets]ColorFormat);
+        for (pass.color_targets, 0..) |format, i| {
+            color_targets[i] = switch (format) {
+                .index => |idx| config.color_textures[idx],
                 .swapchain => .Swapchain,
             };
         }
@@ -770,7 +770,11 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     }));
 }
 
-fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SDL_GPUBuffer {
+fn initBuffer(
+    T: type,
+    data: []const T,
+    usage: c.SDL_GPUBufferUsageFlags,
+) !*c.SDL_GPUBuffer {
     const size: u32 = @intCast(data.len * @sizeOf(T));
 
     const buffer = try sdlerr(c.SDL_CreateGPUBuffer(
@@ -781,6 +785,7 @@ fn initBuffer(T: type, data: []const T, usage: c.SDL_GPUBufferUsageFlags) !*c.SD
             .props = 0,
         },
     ));
+    errdefer c.SDL_ReleaseGPUBuffer(device, buffer);
 
     const transferbuf = try sdlerr(c.SDL_CreateGPUTransferBuffer(
         device,
@@ -868,10 +873,12 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         .size = @intCast(config.noise_size * config.noise_size),
         .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
     }));
+    errdefer c.SDL_ReleaseGPUTransferBuffer(device, noise_transfer);
     noise_texture = try initColorTexture(
         .R8Unorm,
         .{ .width = config.noise_size, .height = config.noise_size },
     );
+    errdefer c.SDL_ReleaseGPUTexture(device, noise_texture);
 
     for (pipeline_keys, &pipelines) |key, *pipeline| {
         pipeline.* = try initPipeline(key);
@@ -903,6 +910,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             def.atlas_height,
             glyph_data,
         );
+        errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
     }
 
     for (config.instances, &instance_buffers, &instance_counts) |def, *buffer, *count| {
@@ -910,6 +918,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         const size = config.fonts[text.font].size;
         const glyphs = &font_glyph_data[text.font];
         count.* = try initText(text.str, size, buffer, glyphs);
+        errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
     }
 }
 
