@@ -4,7 +4,7 @@
   - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
 - [ ] Dynamic text buffers
-- [ ] Particle sim rendering
+- [ ] Particle rendering
 - [ ] Procedural mesh generation
 - [ ] Developer controls
   - [X] Time
@@ -30,6 +30,7 @@
   - https://gist.github.com/jjcastro/10bf80b5a5c740056b461f3010787ec1
 - [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
 - [ ] Marching cubes
+- [ ] Particle simulations
 - [ ] Use (games-by-mason) libraries?
   - [ ] Zex
   - [ ] shader_compiler
@@ -38,6 +39,7 @@
   - [ ] dear_imgui_zig
   - [ ] gbms
   - [ ] zm
+ - [ ] Refactor render.zig init for shared texture/buffer upload logic
 
 # Done
 
