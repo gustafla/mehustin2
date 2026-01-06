@@ -1257,11 +1257,6 @@ fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
     };
 }
 
-// TODO: https://codeberg.org/ziglang/zig/issues/30048
-pub const std_options: std.Options = .{
-    .log_level = .err,
-};
-
 fn deinitC() callconv(.c) void {
     deinit();
 }
@@ -1276,11 +1271,45 @@ fn renderC(time: f32) callconv(.c) bool {
     return true;
 }
 
+var host_print: ?*const fn ([*]const u8, usize) callconv(.c) void = null;
+
 // Export symbols if build configuration requires
+const options = @import("options");
 comptime {
-    if (@import("options").render_dynlib) {
+    if (options.render_dynlib) {
         @export(&deinitC, .{ .name = "deinit" });
         @export(&initC, .{ .name = "init" });
         @export(&renderC, .{ .name = "render" });
+        @export(&host_print, .{ .name = "host_print" });
     }
 }
+
+fn myLogFn(
+    comptime level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const print = host_print orelse return;
+
+    var buf: [1024]u8 = undefined;
+
+    const prefix = @tagName(level) ++
+        if (scope == std.log.default_log_scope)
+            ""
+        else
+            ("(" ++ @tagName(scope) ++ ")") ++
+                ": ";
+
+    const full_fmt = prefix ++ format ++ " (in dynlib)";
+    const msg = std.fmt.bufPrint(&buf, full_fmt, args) catch blk: {
+        break :blk "Log message too long";
+    };
+
+    print(msg.ptr, msg.len);
+}
+
+pub const std_options: std.Options = .{
+    .log_level = if (builtin.mode == .Debug) .debug else .err,
+    .logFn = if (options.render_dynlib) myLogFn else std.log.defaultLog,
+};

@@ -14,7 +14,15 @@ var api: struct {
     deinit: *const fn () callconv(.c) void,
     init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool,
     render: *const fn (f32) callconv(.c) bool,
+    host_print: *?*const fn ([*]const u8, usize) callconv(.c) void,
 } = undefined;
+
+const host_prefix = "host_";
+const host_functions = struct {
+    fn print(ptr: [*]const u8, len: usize) callconv(.c) void {
+        std.debug.print("{s}\n", .{ptr[0..len]});
+    }
+};
 
 pub fn deinit() void {
     if (init_ok) {
@@ -73,13 +81,28 @@ fn load() !void {
     log.info("Loading {s}", .{filename});
     dynlib = try std.DynLib.open("librender.so");
 
+    const api_fields = @typeInfo(@TypeOf(api)).@"struct".fields;
+
     // Lookup symbols
-    inline for (@typeInfo(@TypeOf(api)).@"struct".fields) |field| {
+    inline for (api_fields) |field| {
         log.info("Lookup {s}", .{field.name});
         @field(api, field.name) = dynlib.?.lookup(
             @TypeOf(@field(api, field.name)),
             field.name,
         ) orelse return error.SymbolNotFound;
+    }
+
+    // Set up host functions
+    inline for (api_fields) |field| {
+        if (!comptime std.mem.startsWith(u8, field.name, host_prefix)) {
+            continue;
+        }
+
+        const fun = field.name[host_prefix.len..];
+        if (@hasDecl(host_functions, fun)) {
+            log.info("Hookup {s}", .{field.name});
+            @field(api, field.name).* = @field(host_functions, fun);
+        }
     }
 }
 
