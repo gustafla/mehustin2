@@ -1,9 +1,9 @@
 const std = @import("std");
-const root = @import("root");
-const resource = @import("resource.zig");
-const sdlerr = @import("err.zig").sdlerr;
-const c = @import("render.zig").c;
 const Allocator = std.mem.Allocator;
+
+const sdlerr = @import("../err.zig").sdlerr;
+const resource = @import("../resource.zig");
+const c = @import("c.zig").c;
 
 const log = std.log.scoped(.shader);
 

@@ -6,465 +6,44 @@ const config: Config = @import("render.zon");
 const main_config = @import("config.zon");
 const options = @import("options");
 
-const font = @import("font.zig");
-const math = @import("math.zig");
-const noise = @import("noise.zig");
+const c = @import("render/c.zig").c;
+const font = @import("render/font.zig");
+const math = @import("render/math.zig");
+const noise = @import("render/noise.zig");
+const schema = @import("render/schema.zig");
+const Config = schema.Config;
+const Texture = schema.Texture;
+const Pipeline = schema.Pipeline;
+const PipelineKey = schema.PipelineKey;
+const shader = @import("render/shader.zig");
+const types = @import("render/types.zig");
+const VertexAttributes = types.VertexAttributes;
+const VertexFormat = types.VertexFormat;
+const PrimitiveType = types.PrimitiveType;
+const CompareOp = types.CompareOp;
+const BlendState = types.BlendState;
+const UniformData = types.UniformData;
+const ColorTarget = types.ColorTarget;
+const VertexData = types.VertexData;
+const TextureFormat = types.TextureFormat;
+const VertexBuffers = types.VertexBuffers;
 const resource = @import("resource.zig");
 const sdlerr = @import("err.zig").sdlerr;
-const shader = @import("shader.zig");
 
-pub const c = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL_gpu.h");
-    @cInclude("stb_image.h");
-    @cInclude("stb_truetype.h");
-});
-
-fn enumFieldNameFromC(
-    comptime name: []const u8,
-) [:0]u8 {
-    // Convert to lowercase
-    var buf: [name.len + 1]u8 = undefined;
-    for (name, 0..) |chr, i| {
-        buf[i] = std.ascii.toLower(chr);
-    }
-
-    buf[name.len] = 0;
-    return buf[0..name.len :0];
-}
-
-fn EnumFromC(
-    comptime type_name: []const u8,
-    comptime opt: struct {
-        prefix: []const u8 = "SDL_GPU",
-        extra_fields: []const @Type(.enum_literal) = &.{},
-    },
-) type {
-    @setEvalBranchQuota(100000);
-    const Tag = @field(c, opt.prefix ++ type_name);
-    const c_decls = @typeInfo(c).@"struct".decls;
-
-    // Type name: "VertexElementFormat"
-    // Variant: "VERTEXELEMENTFORMAT"
-    var variant: [type_name.len]u8 = undefined;
-    for (type_name, 0..) |chr, i| {
-        variant[i] = std.ascii.toUpper(chr);
-    }
-
-    var fields: [c_decls.len]std.builtin.Type.EnumField = undefined;
-    var index: usize = 0;
-    var max_val: Tag = 0;
-
-    // Search prefix: "SDL_GPU_VERTEXELEMENTFORMAT"
-    const search_prefix = opt.prefix ++ "_" ++ variant;
-    for (c_decls) |decl| {
-        if (std.mem.startsWith(u8, decl.name, search_prefix)) {
-            const val = @field(c, decl.name);
-            if (max_val < val) {
-                max_val = val;
-            }
-            const raw_name = decl.name[search_prefix.len + 1 ..];
-            fields[index] = .{
-                .name = enumFieldNameFromC(raw_name),
-                .value = val,
-            };
-            index += 1;
-        }
-    }
-
-    for (opt.extra_fields) |extra| {
-        max_val += 1;
-        fields[index] = .{
-            .name = @tagName(extra),
-            .value = max_val,
-        };
-        index += 1;
-    }
-
-    // TODO: Change this to @Enum in 0.16
-    return @Type(.{ .@"enum" = .{
-        .decls = &.{},
-        .tag_type = Tag,
-        .fields = fields[0..index],
-        .is_exhaustive = true,
-    } });
-}
-
-const VertexFormat = EnumFromC("VertexElementFormat", .{});
-
-fn vertexFormatLen(format: VertexFormat) u32 {
-    return switch (format) {
-        .invalid => unreachable,
-        inline else => |tag| comptime blk: {
-            @setEvalBranchQuota(10000);
-            const name = @tagName(tag);
-
-            var index: usize = 0;
-            while (index < name.len and std.ascii.isAlphabetic(name[index])) {
-                index += 1;
-            }
-
-            const scalar_str = name[0..index];
-            const Scalar = enum { byte, ubyte, short, ushort, half, int, uint, float };
-            const scalar_tag = std.meta.stringToEnum(Scalar, scalar_str) orelse unreachable;
-
-            const scalar_len = switch (scalar_tag) {
-                .byte, .ubyte => 1,
-                .short, .ushort, .half => 2,
-                .int, .uint, .float => 4,
-            };
-
-            const count: u32 = if (index < name.len and std.ascii.isDigit(name[index]))
-                name[index] - '0'
-            else
-                1;
-
-            break :blk scalar_len * count;
-        },
-    };
-}
-
-const VertexAttributes = packed struct {
-    coords: bool = false,
-    normals: bool = false,
-    colors: bool = false,
-    uvs: bool = false,
-};
-
-fn attribFormat(comptime attrib_name: []const u8) VertexFormat {
-    const field = std.meta.stringToEnum(
-        std.meta.FieldEnum(VertexAttributes),
-        attrib_name,
-    ) orelse unreachable;
-    return switch (field) {
-        .coords => .float3,
-        .normals => .float3,
-        .colors => .float3,
-        .uvs => .float2,
-    };
-}
-
-const VertexData = struct {
-    coords: []const f32,
-    normals: []const f32 = &.{},
-    colors: []const f32 = &.{},
-    uvs: []const f32 = &.{},
-};
-
-const VertexBuffers = struct {
-    coords: ?*c.SDL_GPUBuffer,
-    normals: ?*c.SDL_GPUBuffer,
-    colors: ?*c.SDL_GPUBuffer,
-    uvs: ?*c.SDL_GPUBuffer,
-};
-
-// Assert that structs above have matching fields
-comptime {
-    const attributes_fields = @typeInfo(VertexAttributes).@"struct".fields;
-    const data_fields = @typeInfo(VertexData).@"struct".fields;
-    const buffers_fields = @typeInfo(VertexBuffers).@"struct".fields;
-    for (attributes_fields, data_fields, buffers_fields) |a, d, b| {
-        std.debug.assert(std.mem.eql(u8, a.name, d.name));
-        std.debug.assert(std.mem.eql(u8, a.name, b.name));
-    }
-}
-
-const TextureFormat = EnumFromC(
-    "TextureFormat",
-    .{ .extra_fields = &.{.swapchain} },
-);
-
-fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
-    return switch (format) {
-        .swapchain => c.SDL_GetGPUSwapchainTextureFormat(
-            device,
-            window,
-        ),
-        else => @intFromEnum(format),
-    };
-}
-
-const PrimitiveType = EnumFromC("PrimitiveType", .{});
-const CompareOp = EnumFromC("CompareOp", .{});
-const BlendFactor = EnumFromC("BlendFactor", .{});
-const BlendOp = EnumFromC("BlendOp", .{});
-
-const UniformData = enum {
-    matrices,
-    shadertoy,
-};
-
-const ColorTarget = union(enum) {
-    index: usize,
-    swapchain,
-};
-
-const BlendState = struct {
-    src_color: BlendFactor = .src_alpha,
-    dst_color: BlendFactor = .one_minus_src_alpha,
-    color_op: BlendOp = .add,
-    src_alpha: BlendFactor = .one,
-    dst_alpha: BlendFactor = .one_minus_src_alpha,
-    alpha_op: BlendOp = .add,
-    enable: bool = false,
-
-    pub fn toSDL(self: @This()) c.SDL_GPUColorTargetBlendState {
-        return .{
-            .src_color_blendfactor = @intFromEnum(self.src_color),
-            .dst_color_blendfactor = @intFromEnum(self.dst_color),
-            .color_blend_op = @intFromEnum(self.color_op),
-            .src_alpha_blendfactor = @intFromEnum(self.src_alpha),
-            .dst_alpha_blendfactor = @intFromEnum(self.dst_alpha),
-            .alpha_blend_op = @intFromEnum(self.alpha_op),
-            .enable_blend = self.enable,
-            .enable_color_write_mask = false,
-        };
-    }
-};
-
-const Pipeline = struct {
-    vert: []const u8 = "tri.vert",
-    frag: []const u8,
-    vertex_attributes: VertexAttributes = .{},
-    instance_attributes: []const VertexFormat = &.{},
-    primitive_type: PrimitiveType = .trianglestrip,
-    depth_test: ?struct {
-        compare_op: CompareOp = .less_or_equal,
-        enable: bool = true,
-        write: bool = true,
-    } = null,
-    blend_states: []const BlendState = &.{},
-};
-
-const Texture = union(enum) {
-    color: usize,
-    depth: usize,
-    font: usize,
-    image: []const u8,
-    simplex2,
-};
-
-const DrawNum = union(enum) {
-    infer,
-    num: u32,
-};
-
-const Pass = struct {
-    drawcalls: []const struct {
-        pipeline: Pipeline,
-        vertices: ?usize = null,
-        instances: ?usize = null,
-        vertex_samplers: []const Texture = &.{},
-        fragment_samplers: []const Texture = &.{},
-        vertex_uniforms: []const UniformData = &.{},
-        fragment_uniforms: []const UniformData = &.{},
-        num_vertices: DrawNum = .infer,
-        num_instances: DrawNum = .infer,
-        first_vertex: u32 = 0,
-        first_instance: u32 = 0,
-    },
-    color_targets: []const ColorTarget = &.{.swapchain},
-    depth_target: ?usize = null,
-};
-
-const Text = struct {
-    str: []const u8,
-    font: usize = 0,
-};
-
-const VertexSource = union(enum) {
-    static: VertexData,
-};
-
-const InstanceSource = union(enum) {
-    text: Text,
-};
-
-const Font = struct {
-    ttf: []const u8,
-    size: f32,
-    padding: u32 = 5,
-    dist_scale: f32 = 32,
-    atlas_width: u32 = 1024,
-    atlas_height: u32 = 1024,
-};
-
-const Config = struct {
-    color_textures: []const TextureFormat = &.{},
-    depth_textures: []const TextureFormat = &.{},
-    vertices: []const VertexSource,
-    instances: []const InstanceSource,
-    fonts: []const Font,
-    passes: []const Pass,
-    noise_size: u32 = 256,
-    noise_scale: f32 = 0.5,
-};
-
-// Compute upper bounds from config
-fn foldConfig(
-    parent: anytype,
-    comptime fields: []const []const u8,
-    fold: anytype,
-) @TypeOf(fold.init) {
-    const Parent = @TypeOf(parent);
-    const info = @typeInfo(Parent);
-    const is_slice = info == .pointer and info.pointer.size == .slice;
-    const is_string = is_slice and info.pointer.child == u8;
-    const is_iterable = (is_slice or info == .array) and !is_string;
-
-    // Base case, at leaf, yield it's value, optionally transformed via `map`.
-    if (fields.len == 0 and !is_iterable) {
-        if (@hasDecl(fold, "map")) {
-            return fold.map(parent);
-        }
-        return parent;
-    }
-
-    // Then, if current field access works, always descent (e.g. `[]T.len`)
-    if (fields.len > 0 and @hasField(Parent, fields[0])) {
-        const child = @field(parent, fields[0]);
-        return foldConfig(child, fields[1..], fold);
-    }
-
-    // Finally, try iterating current parent
-    var acc = fold.init;
-    for (parent) |elem| {
-        const val = foldConfig(elem, fields, fold);
-        acc = fold.op(acc, val);
-    }
-
-    return acc;
-}
-
-const max_field = struct {
-    const init = 0;
-    const T = @TypeOf(@This().init);
-    fn op(acc: T, val: T) T {
-        return @max(acc, val);
-    }
-};
-
-const sum_field = struct {
-    const init = 0;
-    const T = @TypeOf(@This().init);
-    fn op(acc: T, val: T) T {
-        return acc + val;
-    }
-};
-
-const max_color_targets = foldConfig(config.passes, &.{
+const max_color_targets = schema.fold(config.passes, &.{
     "color_targets",
     "len",
-}, max_field);
-const max_instance_attributes = foldConfig(config.passes, &.{
+}, schema.max_field);
+const max_instance_attributes = schema.fold(config.passes, &.{
     "drawcalls",
     "pipeline",
     "instance_attributes",
     "len",
-}, max_field);
+}, schema.max_field);
 
-const ShaderInfo = struct {
-    num_samplers: u32,
-    num_storage_textures: u32 = 0,
-    num_storage_buffers: u32 = 0,
-    num_uniform_buffers: u32,
-};
-
-const PipelineKey = struct {
-    pipeline: Pipeline,
-    vert_info: ShaderInfo,
-    frag_info: ShaderInfo,
-    color_targets_buf: [max_color_targets]TextureFormat,
-    num_color_targets: u32,
-    depth_target: ?TextureFormat,
-};
-
-// Generate a comptime array of all unique pipeline keys from config
-const pipeline_keys = init: {
-    // Find upper bound for pipelines defined in render config
-    const n = foldConfig(config.passes, &.{ "drawcalls", "len" }, sum_field);
-
-    // Initialize unique map keys with O(n^2) filtering
-    var keys: [n]PipelineKey = undefined;
-    var num_keys = 0;
-    for (config.passes) |pass| {
-        var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
-        for (pass.color_targets, 0..) |format, i| {
-            color_targets[i] = switch (format) {
-                .index => |idx| config.color_textures[idx],
-                .swapchain => .swapchain,
-            };
-        }
-        outer: for (pass.drawcalls) |drawcall| {
-            const candidate: PipelineKey = .{
-                .pipeline = drawcall.pipeline,
-                .vert_info = .{
-                    .num_samplers = drawcall.vertex_samplers.len,
-                    .num_uniform_buffers = drawcall.vertex_uniforms.len,
-                },
-                .frag_info = .{
-                    .num_samplers = drawcall.fragment_samplers.len,
-                    .num_uniform_buffers = drawcall.fragment_uniforms.len,
-                },
-                .color_targets_buf = color_targets,
-                .num_color_targets = pass.color_targets.len,
-                .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
-            };
-            for (keys[0..num_keys]) |key| {
-                if (std.meta.eql(key, candidate)) {
-                    continue :outer;
-                }
-            }
-            keys[num_keys] = candidate;
-            num_keys += 1;
-        }
-    }
-
-    break :init keys[0..num_keys].*;
-};
-
-// Generate a comptime array of all unique image samplers
-const image_keys = init: {
-    // Find upper bound for images defined in render config
-    const count_images = struct {
-        const init: usize = 0;
-        const op = sum_field.op;
-        fn map(texture: Texture) usize {
-            return @intFromBool(texture == .image);
-        }
-    };
-    const n = foldConfig(config.passes, &.{ "drawcalls", "vertex_samplers" }, count_images) +
-        foldConfig(config.passes, &.{ "drawcalls", "fragment_samplers" }, count_images);
-
-    // Initialize unique map keys with O(n^2) filtering
-    var keys: [n][]const u8 = undefined;
-    var num_keys = 0;
-    for (config.passes) |pass| {
-        for (pass.drawcalls) |drawcall| {
-            for (.{
-                drawcall.vertex_samplers,
-                drawcall.fragment_samplers,
-            }) |samplers| {
-                outer: for (samplers) |sampler| {
-                    switch (sampler) {
-                        .image => |name| {
-                            for (keys[0..num_keys]) |key| {
-                                if (std.mem.eql(u8, name, key)) {
-                                    continue :outer;
-                                }
-                            }
-                            keys[num_keys] = name;
-                            num_keys += 1;
-                        },
-                        else => {},
-                    }
-                }
-            }
-        }
-    }
-
-    break :init keys[0..num_keys].*;
-};
+// Generate arrays of all unique pipeline configurations and image textures
+const pipeline_set = schema.initPipelineSet(config, max_color_targets)[0..].*;
+const image_set = schema.initImageSet(config)[0..].*;
 
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
@@ -477,9 +56,9 @@ var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
-var pipelines: [pipeline_keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
+var pipelines: [pipeline_set.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var font_textures: [config.fonts.len]*c.SDL_GPUTexture = undefined;
-var image_textures: [image_keys.len]*c.SDL_GPUTexture = undefined;
+var image_textures: [image_set.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
@@ -713,6 +292,16 @@ fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
     return texture;
 }
 
+fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
+    return switch (format) {
+        .swapchain => c.SDL_GetGPUSwapchainTextureFormat(
+            device,
+            window,
+        ),
+        else => @intFromEnum(format),
+    };
+}
+
 fn initColorTexture(
     format: TextureFormat,
     wh: struct { width: u32 = render_width, height: u32 = render_height },
@@ -747,7 +336,7 @@ fn initDepthTexture(
     }));
 }
 
-fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
+fn initPipeline(key: PipelineKey(max_color_targets)) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
     const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
@@ -779,12 +368,12 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     var num_buffers: u32 = 0;
     var num_attribs: u32 = 0;
     inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, location| {
-        const vertex_format = attribFormat(field.name);
+        const vertex_format = types.attribFormat(field.name);
         const enabled = @field(pipeline.vertex_attributes, field.name);
         if (enabled) {
             buffers[num_buffers] = .{
                 .slot = num_buffers,
-                .pitch = vertexFormatLen(vertex_format),
+                .pitch = types.vertexFormatLen(vertex_format),
                 .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
                 .instance_step_rate = 0,
             };
@@ -810,7 +399,7 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
                 .format = @intFromEnum(attrib),
                 .offset = instance_attrib_offset,
             };
-            instance_attrib_offset += vertexFormatLen(attrib);
+            instance_attrib_offset += types.vertexFormatLen(attrib);
             num_attribs += 1;
         }
         buffers[num_buffers] = .{
@@ -944,7 +533,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     output_buffer = try initColorTexture(.swapchain, .{});
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
-    for (image_keys, &image_textures) |name, *texture| {
+    for (image_set, &image_textures) |name, *texture| {
         texture.* = try initImageTexture(name);
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
@@ -970,7 +559,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     );
     errdefer c.SDL_ReleaseGPUTexture(device, noise_texture);
 
-    for (pipeline_keys, &pipelines) |key, *pipeline| {
+    for (pipeline_set, &pipelines) |key, *pipeline| {
         pipeline.* = try initPipeline(key);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
@@ -1165,15 +754,19 @@ pub fn render(time: f32) !void {
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
             // Find matching pipeline index from pipeline_keys at compile time
-            const pipeline_index = comptime for (pipeline_keys, 0..) |plk, i| {
-                const key: PipelineKey = .{
+            const pipeline_index = comptime for (pipeline_set, 0..) |plk, i| {
+                const key: PipelineKey(max_color_targets) = .{
                     .pipeline = drawcall.pipeline,
                     .vert_info = .{
                         .num_samplers = @intCast(drawcall.vertex_samplers.len),
+                        .num_storage_textures = 0,
+                        .num_storage_buffers = 0,
                         .num_uniform_buffers = @intCast(drawcall.vertex_uniforms.len),
                     },
                     .frag_info = .{
                         .num_samplers = @intCast(drawcall.fragment_samplers.len),
+                        .num_storage_textures = 0,
+                        .num_storage_buffers = 0,
                         .num_uniform_buffers = @intCast(drawcall.fragment_uniforms.len),
                     },
                     .color_targets_buf = color_targets,
@@ -1233,7 +826,7 @@ pub fn render(time: f32) !void {
                             .depth => |i| depth_textures[i],
                             .font => |i| font_textures[i],
                             .image => |name| blk: {
-                                const i = comptime for (image_keys, 0..) |key, i| {
+                                const i = comptime for (image_set, 0..) |key, i| {
                                     if (std.mem.eql(u8, key, name)) {
                                         break i;
                                     }

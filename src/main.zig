@@ -1,6 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
+const config = @import("config.zon");
 const options = @import("options");
+
+const audio = @import("audio.zig");
+const sdlerr = @import("err.zig").sdlerr;
+const time = @import("time.zig");
+
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
     @cInclude("SDL3/SDL.h");
@@ -10,10 +17,6 @@ pub const c = @cImport({
     @cDefine("STB_VORBIS_HEADER_ONLY", {});
     @cInclude("stb_vorbis.c");
 });
-const config = @import("config.zon");
-const audio = @import("audio.zig");
-const time = @import("time.zig");
-
 // Render is defined as dynlib.zig or render.zig depending on build configuration
 const render = if (options.render_dynlib)
     @import("dynlib.zig")
@@ -23,8 +26,6 @@ else
 const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const sdl_log = std.log.scoped(.sdl);
 const fps_log = std.log.scoped(.fps);
-const sdlerr = @import("err.zig").sdlerr;
-
 // Track deinitialization with a stack
 const InitStep = enum {
     window,

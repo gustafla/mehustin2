@@ -1,9 +1,10 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const root = @import("root");
+const c = root.c;
+
 const resource = @import("resource.zig");
 const sdlerr = @import("err.zig").sdlerr;
-const c = root.c;
-const Allocator = std.mem.Allocator;
 
 pub const log = std.log.scoped(.audio);
 

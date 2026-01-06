@@ -1,6 +1,7 @@
 //! Loading, unloading and calling into librender.so
 const std = @import("std");
 const c = @import("root").c;
+
 const sdlerr = @import("err.zig").sdlerr;
 
 const filename = "librender.so";
