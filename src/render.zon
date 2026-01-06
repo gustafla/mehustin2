@@ -1,9 +1,9 @@
 .{
     .color_textures = .{
-        .R11g11b10Float,
+        .r11g11b10_ufloat,
     },
     .depth_textures = .{
-        .D16Unorm,
+        .d16_unorm,
     },
     .passes = .{
         // Main render pass
@@ -15,11 +15,11 @@
                         .vert = "3d.vert",
                         .frag = "3d.frag",
                         .vertex_attributes = .{ .coords = true, .colors = true },
-                        .primitive_type = .TriangleList,
+                        .primitive_type = .trianglelist,
                         .depth_test = .{}, // Enable with defaults
                     },
                     .vertices = 0,
-                    .vertex_uniforms = .{ .Matrices, .Shadertoy },
+                    .vertex_uniforms = .{ .matrices, .shadertoy },
                     .num_instances = .{ .num = 512 },
                 },
                 // Background shader, render last for optimal depth test
@@ -28,7 +28,7 @@
                         .frag = "shader.frag",
                         .depth_test = .{ .write = false },
                     },
-                    .fragment_uniforms = .{.Shadertoy},
+                    .fragment_uniforms = .{.shadertoy},
                 },
             },
             .color_targets = .{.{ .index = 0 }},
@@ -42,26 +42,20 @@
                         .frag = "post.frag",
                     },
                     .fragment_samplers = .{ .{ .color = 0 }, .simplex2 },
-                    .fragment_uniforms = .{.Shadertoy},
+                    .fragment_uniforms = .{.shadertoy},
                 },
                 // Text in front of everything
                 .{
                     .pipeline = .{
                         .vert = "text.vert",
                         .frag = "text.frag",
-                        .instance_attributes = .{ .Vec4, .Vec4, .Vec4 }, // The format for text instance buffers
+                        .instance_attributes = .{ .float4, .float4, .float4 }, // The format for text instance buffers
                         .blend_states = .{.{
                             .enable = true,
-                            .src_color = .SrcAlpha,
-                            .dst_color = .OneMinusSrcAlpha,
-                            .color_op = .Add,
-                            .src_alpha = .One,
-                            .dst_alpha = .OneMinusSrcAlpha,
-                            .alpha_op = .Add,
                         }},
                     },
                     .fragment_samplers = .{.{ .font = 0 }},
-                    .vertex_uniforms = .{.Shadertoy},
+                    .vertex_uniforms = .{.shadertoy},
                     .instances = 0,
                     .num_vertices = .{ .num = 4 },
                 },

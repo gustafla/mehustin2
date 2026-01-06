@@ -20,25 +20,87 @@ pub const c = @cImport({
     @cInclude("stb_truetype.h");
 });
 
-const VertexFormat = enum(c.SDL_GPUVertexElementFormat) {
-    Float = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-    Vec2 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-    Vec3 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-    Vec4 = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+fn enumFieldNameFromC(
+    comptime name: []const u8,
+) [:0]u8 {
+    // Convert to lowercase
+    var buf: [name.len + 1]u8 = undefined;
+    for (name, 0..) |chr, i| {
+        buf[i] = std.ascii.toLower(chr);
+    }
 
-    pub fn len(self: @This()) u32 {
-        return switch (self) {
-            .Float => @sizeOf(f32),
-            .Vec2 => @sizeOf(f32) * 2,
-            .Vec3 => @sizeOf(f32) * 3,
-            .Vec4 => @sizeOf(f32) * 4,
+    buf[name.len] = 0;
+    return buf[0..name.len :0];
+}
+
+fn EnumFromC(
+    comptime type_name: []const u8,
+    comptime opt: struct {
+        prefix: []const u8 = "SDL_GPU",
+        extra_fields: []const @Type(.enum_literal) = &.{},
+    },
+) type {
+    @setEvalBranchQuota(100000);
+    const Tag = @field(c, opt.prefix ++ type_name);
+    const c_decls = @typeInfo(c).@"struct".decls;
+
+    // Type name: "VertexElementFormat"
+    // Variant: "VERTEXELEMENTFORMAT"
+    var variant: [type_name.len]u8 = undefined;
+    for (type_name, 0..) |chr, i| {
+        variant[i] = std.ascii.toUpper(chr);
+    }
+
+    var fields: [c_decls.len]std.builtin.Type.EnumField = undefined;
+    var index: usize = 0;
+    var max_val: Tag = 0;
+
+    // Search prefix: "SDL_GPU_VERTEXELEMENTFORMAT"
+    const search_prefix = opt.prefix ++ "_" ++ variant;
+    for (c_decls) |decl| {
+        if (std.mem.startsWith(u8, decl.name, search_prefix)) {
+            const val = @field(c, decl.name);
+            if (max_val < val) {
+                max_val = val;
+            }
+            const raw_name = decl.name[search_prefix.len + 1 ..];
+            fields[index] = .{
+                .name = enumFieldNameFromC(raw_name),
+                .value = val,
+            };
+            index += 1;
+        }
+    }
+
+    for (opt.extra_fields) |extra| {
+        max_val += 1;
+        fields[index] = .{
+            .name = @tagName(extra),
+            .value = max_val,
         };
+        index += 1;
     }
 
-    pub fn toSDL(self: @This()) c.SDL_GPUVertexElementFormat {
-        return @intFromEnum(self);
-    }
-};
+    // TODO: Change this to @Enum in 0.16
+    return @Type(.{ .@"enum" = .{
+        .decls = &.{},
+        .tag_type = Tag,
+        .fields = fields[0..index],
+        .is_exhaustive = true,
+    } });
+}
+
+const VertexFormat = EnumFromC("VertexElementFormat", .{});
+
+fn vertexFormatLen(format: VertexFormat) u32 {
+    return switch (format) {
+        .float => @sizeOf(f32),
+        .float2 => @sizeOf(f32) * 2,
+        .float3 => @sizeOf(f32) * 3,
+        .float4 => @sizeOf(f32) * 4,
+        else => @panic("Not implemented"),
+    };
+}
 
 const VertexAttributes = packed struct {
     coords: bool = false,
@@ -47,16 +109,16 @@ const VertexAttributes = packed struct {
     uvs: bool = false,
 };
 
-fn attribParameters(comptime attrib_name: []const u8) struct {
-    pitch: u32,
-    format: c.SDL_GPUVertexElementFormat,
-} {
-    const field = std.meta.stringToEnum(std.meta.FieldEnum(VertexAttributes), attrib_name);
-    return switch (field orelse @panic("parameters not found for attrib name")) {
-        .coords => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
-        .normals => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
-        .colors => .{ .pitch = @sizeOf(f32) * 3, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3 },
-        .uvs => .{ .pitch = @sizeOf(f32) * 2, .format = c.SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2 },
+fn attribFormat(comptime attrib_name: []const u8) VertexFormat {
+    const field = std.meta.stringToEnum(
+        std.meta.FieldEnum(VertexAttributes),
+        attrib_name,
+    ) orelse unreachable;
+    return switch (field) {
+        .coords => .float3,
+        .normals => .float3,
+        .colors => .float3,
+        .uvs => .float2,
     };
 }
 
@@ -85,72 +147,29 @@ comptime {
     }
 }
 
-const ColorFormat = enum(c.SDL_GPUTextureFormat) {
-    Default = 0,
-    R8Unorm = c.SDL_GPU_TEXTUREFORMAT_R8_UNORM,
-    R8g8b8a8Unorm = c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-    R16g16b16a16Float = c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
-    R11g11b10Float = c.SDL_GPU_TEXTUREFORMAT_R11G11B10_UFLOAT,
-    Swapchain,
+const TextureFormat = EnumFromC(
+    "TextureFormat",
+    .{ .extra_fields = &.{.swapchain} },
+);
 
-    pub fn toSDL(self: ColorFormat) c.SDL_GPUTextureFormat {
-        return switch (self) {
-            .Default => c.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
-            .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
-                device,
-                window,
-            ),
-            else => @intFromEnum(self),
-        };
-    }
-};
+fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
+    return switch (format) {
+        .swapchain => c.SDL_GetGPUSwapchainTextureFormat(
+            device,
+            window,
+        ),
+        else => @intFromEnum(format),
+    };
+}
 
-const DepthFormat = enum(c.SDL_GPUTextureFormat) {
-    D16Unorm = c.SDL_GPU_TEXTUREFORMAT_D16_UNORM,
-    D24Unorm = c.SDL_GPU_TEXTUREFORMAT_D24_UNORM,
-    D32Float = c.SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
-};
-
-const PrimitiveType = enum(c.SDL_GPUPrimitiveType) {
-    TriangleList = c.SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-    TriangleStrip = c.SDL_GPU_PRIMITIVETYPE_TRIANGLESTRIP,
-    LineList = c.SDL_GPU_PRIMITIVETYPE_LINELIST,
-    LineStrip = c.SDL_GPU_PRIMITIVETYPE_LINESTRIP,
-    PointList = c.SDL_GPU_PRIMITIVETYPE_POINTLIST,
-};
-
-const CompareOp = enum(c.SDL_GPUCompareOp) {
-    Less = c.SDL_GPU_COMPAREOP_LESS,
-    LessOrEqual = c.SDL_GPU_COMPAREOP_LESS_OR_EQUAL,
-};
-
-const BlendFactor = enum(c.SDL_GPUBlendFactor) {
-    Zero = c.SDL_GPU_BLENDFACTOR_ZERO,
-    One = c.SDL_GPU_BLENDFACTOR_ONE,
-    SrcColor = c.SDL_GPU_BLENDFACTOR_SRC_COLOR,
-    OneMinusSrcColor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR,
-    DstColor = c.SDL_GPU_BLENDFACTOR_DST_COLOR,
-    OneMinusDstColor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_COLOR,
-    SrcAlpha = c.SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-    OneMinusSrcAlpha = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-    DstAlpha = c.SDL_GPU_BLENDFACTOR_DST_ALPHA,
-    OneMinusDstAlpha = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA,
-    ConstantColor = c.SDL_GPU_BLENDFACTOR_CONSTANT_COLOR,
-    OneMinusConstantColor = c.SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR,
-    SrcAlphaSaturate = c.SDL_GPU_BLENDFACTOR_SRC_ALPHA_SATURATE,
-};
-
-const BlendOp = enum(c.SDL_GPUBlendOp) {
-    Add = c.SDL_GPU_BLENDOP_ADD,
-    Subtract = c.SDL_GPU_BLENDOP_SUBTRACT,
-    ReverseSubtract = c.SDL_GPU_BLENDOP_REVERSE_SUBTRACT,
-    Min = c.SDL_GPU_BLENDOP_MIN,
-    Max = c.SDL_GPU_BLENDOP_MAX,
-};
+const PrimitiveType = EnumFromC("PrimitiveType", .{});
+const CompareOp = EnumFromC("CompareOp", .{});
+const BlendFactor = EnumFromC("BlendFactor", .{});
+const BlendOp = EnumFromC("BlendOp", .{});
 
 const UniformData = enum {
-    Matrices,
-    Shadertoy,
+    matrices,
+    shadertoy,
 };
 
 const ColorTarget = union(enum) {
@@ -159,12 +178,12 @@ const ColorTarget = union(enum) {
 };
 
 const BlendState = struct {
-    src_color: BlendFactor = undefined,
-    dst_color: BlendFactor = undefined,
-    color_op: BlendOp = undefined,
-    src_alpha: BlendFactor = undefined,
-    dst_alpha: BlendFactor = undefined,
-    alpha_op: BlendOp = undefined,
+    src_color: BlendFactor = .src_alpha,
+    dst_color: BlendFactor = .one_minus_src_alpha,
+    color_op: BlendOp = .add,
+    src_alpha: BlendFactor = .one,
+    dst_alpha: BlendFactor = .one_minus_src_alpha,
+    alpha_op: BlendOp = .add,
     enable: bool = false,
 
     pub fn toSDL(self: @This()) c.SDL_GPUColorTargetBlendState {
@@ -186,9 +205,9 @@ const Pipeline = struct {
     frag: []const u8,
     vertex_attributes: VertexAttributes = .{},
     instance_attributes: []const VertexFormat = &.{},
-    primitive_type: PrimitiveType = .TriangleStrip,
+    primitive_type: PrimitiveType = .trianglestrip,
     depth_test: ?struct {
-        compare_op: CompareOp = .LessOrEqual,
+        compare_op: CompareOp = .less_or_equal,
         enable: bool = true,
         write: bool = true,
     } = null,
@@ -249,8 +268,8 @@ const Font = struct {
 };
 
 const Config = struct {
-    color_textures: []const ColorFormat = &.{},
-    depth_textures: []const DepthFormat = &.{},
+    color_textures: []const TextureFormat = &.{},
+    depth_textures: []const TextureFormat = &.{},
     vertices: []const VertexSource,
     instances: []const InstanceSource,
     fonts: []const Font,
@@ -333,9 +352,9 @@ const PipelineKey = struct {
     pipeline: Pipeline,
     vert_info: ShaderInfo,
     frag_info: ShaderInfo,
-    color_targets_buf: [max_color_targets]ColorFormat,
+    color_targets_buf: [max_color_targets]TextureFormat,
     num_color_targets: u32,
-    depth_target: ?DepthFormat,
+    depth_target: ?TextureFormat,
 };
 
 // Generate a comptime array of all unique pipeline keys from config
@@ -347,11 +366,11 @@ const pipeline_keys = init: {
     var keys: [n]PipelineKey = undefined;
     var num_keys = 0;
     for (config.passes) |pass| {
-        var color_targets = std.mem.zeroes([max_color_targets]ColorFormat);
+        var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
         for (pass.color_targets, 0..) |format, i| {
             color_targets[i] = switch (format) {
                 .index => |idx| config.color_textures[idx],
-                .swapchain => .Swapchain,
+                .swapchain => .swapchain,
             };
         }
         outer: for (pass.drawcalls) |drawcall| {
@@ -673,18 +692,12 @@ fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
 }
 
 fn initColorTexture(
-    format: ColorFormat,
+    format: TextureFormat,
     wh: struct { width: u32 = render_width, height: u32 = render_height },
 ) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
-        .format = switch (format) {
-            .Swapchain => c.SDL_GetGPUSwapchainTextureFormat(
-                device,
-                window,
-            ),
-            else => @intFromEnum(format),
-        },
+        .format = resolveTextureFormat(format),
         .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
         .width = wh.width,
         .height = wh.height,
@@ -696,12 +709,12 @@ fn initColorTexture(
 }
 
 fn initDepthTexture(
-    format: DepthFormat,
+    format: TextureFormat,
     wh: struct { width: u32 = render_width, height: u32 = render_height },
 ) !*c.SDL_GPUTexture {
     return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
         .type = c.SDL_GPU_TEXTURETYPE_2D,
-        .format = @intFromEnum(format),
+        .format = resolveTextureFormat(format),
         .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
         .width = wh.width,
         .height = wh.height,
@@ -725,9 +738,8 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         color_targets[0..key.num_color_targets],
         0..,
     ) |target_def, *target, blend_idx| {
-        const format = target_def.toSDL();
         target.* = .{
-            .format = format,
+            .format = resolveTextureFormat(target_def),
             .blend_state = if (blend_idx < pipeline.blend_states.len)
                 pipeline.blend_states[blend_idx].toSDL()
             else
@@ -745,19 +757,19 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     var num_buffers: u32 = 0;
     var num_attribs: u32 = 0;
     inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, location| {
-        const param = attribParameters(field.name);
+        const vertex_format = attribFormat(field.name);
         const enabled = @field(pipeline.vertex_attributes, field.name);
         if (enabled) {
             buffers[num_buffers] = .{
                 .slot = num_buffers,
-                .pitch = param.pitch,
+                .pitch = vertexFormatLen(vertex_format),
                 .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
                 .instance_step_rate = 0,
             };
             attribs[num_attribs] = .{
                 .location = @intCast(location),
                 .buffer_slot = num_buffers,
-                .format = param.format,
+                .format = @intFromEnum(vertex_format),
                 .offset = 0,
             };
             num_buffers += 1;
@@ -773,10 +785,10 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
             attribs[num_attribs] = .{
                 .location = @intCast(location),
                 .buffer_slot = num_buffers,
-                .format = attrib.toSDL(),
+                .format = @intFromEnum(attrib),
                 .offset = instance_attrib_offset,
             };
-            instance_attrib_offset += attrib.len();
+            instance_attrib_offset += vertexFormatLen(attrib);
             num_attribs += 1;
         }
         buffers[num_buffers] = .{
@@ -907,7 +919,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     )));
     errdefer c.SDL_ReleaseGPUSampler(device, nearest);
 
-    output_buffer = try initColorTexture(.Swapchain, .{});
+    output_buffer = try initColorTexture(.swapchain, .{});
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
     for (image_keys, &image_textures) |name, *texture| {
@@ -931,7 +943,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     }));
     errdefer c.SDL_ReleaseGPUTransferBuffer(device, noise_transfer);
     noise_texture = try initColorTexture(
-        .R8Unorm,
+        .r8_unorm,
         .{ .width = config.noise_size, .height = config.noise_size },
     );
     errdefer c.SDL_ReleaseGPUTexture(device, noise_texture);
@@ -1118,11 +1130,11 @@ pub fn render(time: f32) !void {
 
         // Construct color target format array for the pipeline key
         const color_targets = comptime init: {
-            var targets = std.mem.zeroes([max_color_targets]ColorFormat);
+            var targets = std.mem.zeroes([max_color_targets]TextureFormat);
             for (pass.color_targets, targets[0..pass.color_targets.len]) |format, *target| {
                 target.* = switch (format) {
                     .index => |i| config.color_textures[i],
-                    .swapchain => .Swapchain,
+                    .swapchain => .swapchain,
                 };
             }
             break :init targets;
@@ -1226,11 +1238,11 @@ pub fn render(time: f32) !void {
             }) |stage| {
                 inline for (stage.ufms, 0..) |ufm, slot| {
                     const param: struct { *const anyopaque, u32 } = switch (ufm) {
-                        .Matrices => .{
+                        .matrices => .{
                             @ptrCast(&matrices),
                             @sizeOf(@TypeOf(matrices)),
                         },
-                        .Shadertoy => .{
+                        .shadertoy => .{
                             @ptrCast(&uniforms),
                             @sizeOf(@TypeOf(uniforms)),
                         },
