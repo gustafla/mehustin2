@@ -94,11 +94,33 @@ const VertexFormat = EnumFromC("VertexElementFormat", .{});
 
 fn vertexFormatLen(format: VertexFormat) u32 {
     return switch (format) {
-        .float => @sizeOf(f32),
-        .float2 => @sizeOf(f32) * 2,
-        .float3 => @sizeOf(f32) * 3,
-        .float4 => @sizeOf(f32) * 4,
-        else => @panic("Not implemented"),
+        .invalid => unreachable,
+        inline else => |tag| comptime blk: {
+            @setEvalBranchQuota(10000);
+            const name = @tagName(tag);
+
+            var index: usize = 0;
+            while (index < name.len and std.ascii.isAlphabetic(name[index])) {
+                index += 1;
+            }
+
+            const scalar_str = name[0..index];
+            const Scalar = enum { byte, ubyte, short, ushort, half, int, uint, float };
+            const scalar_tag = std.meta.stringToEnum(Scalar, scalar_str) orelse unreachable;
+
+            const scalar_len = switch (scalar_tag) {
+                .byte, .ubyte => 1,
+                .short, .ushort, .half => 2,
+                .int, .uint, .float => 4,
+            };
+
+            const count: u32 = if (index < name.len and std.ascii.isDigit(name[index]))
+                name[index] - '0'
+            else
+                1;
+
+            break :blk scalar_len * count;
+        },
     };
 }
 
