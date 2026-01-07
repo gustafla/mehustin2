@@ -13,20 +13,15 @@ pub const VertexSource = union(enum) {
     static: VertexData,
 };
 
-pub const Text = struct {
-    str: []const u8,
-    font: usize = 0,
-};
-
 pub const InstanceSource = union(enum) {
-    text: Text,
+    text: []const u8,
 };
 
 pub const Font = struct {
     ttf: []const u8,
     size: f32,
-    padding: u32 = 5,
-    dist_scale: f32 = 32,
+    padding: u32 = 8,
+    dist_scale: f32 = 8,
     atlas_width: u32 = 1024,
     atlas_height: u32 = 1024,
 };
@@ -63,25 +58,24 @@ pub const ColorTarget = union(enum) {
 pub const Texture = union(enum) {
     color: usize,
     depth: usize,
-    font: usize,
+    font: Font,
     image: []const u8,
     simplex2,
 };
 
-pub const Drawcall =
-    struct {
-        pipeline: Pipeline,
-        vertices: ?usize = null,
-        instances: ?usize = null,
-        vertex_samplers: []const Texture = &.{},
-        fragment_samplers: []const Texture = &.{},
-        vertex_uniforms: []const UniformData = &.{},
-        fragment_uniforms: []const UniformData = &.{},
-        num_vertices: DrawNum = .infer,
-        num_instances: DrawNum = .infer,
-        first_vertex: u32 = 0,
-        first_instance: u32 = 0,
-    };
+pub const Drawcall = struct {
+    pipelines: []const Pipeline,
+    vertices: ?usize = null,
+    instances: ?InstanceSource = null,
+    vertex_samplers: []const Texture = &.{},
+    fragment_samplers: []const Texture = &.{},
+    vertex_uniforms: []const UniformData = &.{},
+    fragment_uniforms: []const UniformData = &.{},
+    num_vertices: DrawNum = .infer,
+    num_instances: DrawNum = .infer,
+    first_vertex: u32 = 0,
+    first_instance: u32 = 0,
+};
 
 pub const Pass = struct {
     drawcalls: []const Drawcall,
@@ -93,8 +87,6 @@ pub const Config = struct {
     color_textures: []const TextureFormat = &.{},
     depth_textures: []const TextureFormat = &.{},
     vertices: []const VertexSource,
-    instances: []const InstanceSource,
-    fonts: []const Font,
     passes: []const Pass,
     noise_size: u32 = 256,
     noise_scale: f32 = 0.5,
@@ -102,7 +94,7 @@ pub const Config = struct {
 
 // Compute upper bounds by traversing structures
 pub fn fold(
-    parent: anytype,
+    comptime parent: anytype,
     comptime fields: []const []const u8,
     opt: anytype,
 ) @TypeOf(opt.init) {
@@ -127,13 +119,15 @@ pub fn fold(
     }
 
     // Finally, try iterating current parent
-    var acc = opt.init;
-    for (parent) |elem| {
-        const val = fold(elem, fields, opt);
-        acc = opt.op(acc, val);
+    if (is_iterable) {
+        var acc = opt.init;
+        for (parent) |elem| {
+            const val = fold(elem, fields, opt);
+            acc = opt.op(acc, val);
+        }
+        return acc;
     }
-
-    return acc;
+    @compileError(fields[0] ++ " not found in " ++ @typeName(Parent));
 }
 
 pub const max_field = struct {
@@ -152,11 +146,11 @@ pub const sum_field = struct {
     }
 };
 
-pub const count_images = struct {
+pub const count_nonnull = struct {
     const init: usize = 0;
     const op = sum_field.op;
-    fn map(texture: Texture) usize {
-        return @intFromBool(texture == .image);
+    pub fn map(field: anytype) usize {
+        return @intFromBool(field != null);
     }
 };
 
@@ -184,22 +178,38 @@ pub fn PipelineKey(comptime config: Config) type {
         pub const Iterator = struct {
             pass_idx: usize = 0,
             draw_idx: usize = 0,
+            pipe_idx: usize = 0,
 
             pub fn next(self: *@This()) ?PipelineKey(config) {
-                if (self.pass_idx >= config.passes.len) return null;
+                while (self.pass_idx < config.passes.len) {
+                    const pass = config.passes[self.pass_idx];
 
-                const pass = config.passes[self.pass_idx];
-                const drawcall = pass.drawcalls[self.draw_idx];
+                    if (self.draw_idx >= pass.drawcalls.len) {
+                        self.pass_idx += 1;
+                        self.draw_idx = 0;
+                        continue;
+                    }
 
-                const key = init(pass, drawcall);
+                    const drawcall = pass.drawcalls[self.draw_idx];
 
-                self.draw_idx += 1;
-                if (self.draw_idx >= pass.drawcalls.len) {
-                    self.draw_idx = 0;
-                    self.pass_idx += 1;
+                    // Iterate over the pipelines within the drawcall
+                    if (self.pipe_idx < drawcall.pipelines.len) {
+                        const pipeline = drawcall.pipelines[self.pipe_idx];
+
+                        // Pass the specific pipeline to init
+                        // The drawcall data is shared
+                        const key = init(pass, drawcall, pipeline);
+
+                        self.pipe_idx += 1;
+                        return key;
+                    }
+
+                    // Finished all pipelines for this drawcall, move to next
+                    self.pipe_idx = 0;
+                    self.draw_idx += 1;
                 }
 
-                return key;
+                return null;
             }
         };
 
@@ -208,6 +218,7 @@ pub fn PipelineKey(comptime config: Config) type {
         pub fn init(
             comptime pass: Pass,
             comptime drawcall: Drawcall,
+            comptime pipeline: Pipeline,
         ) @This() {
             var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
             for (pass.color_targets, 0..) |format, i| {
@@ -217,7 +228,7 @@ pub fn PipelineKey(comptime config: Config) type {
                 };
             }
             return .{
-                .pipeline = drawcall.pipeline,
+                .pipeline = pipeline,
                 .vert_info = .{
                     .num_samplers = drawcall.vertex_samplers.len,
                     .num_storage_textures = 0,
@@ -280,6 +291,66 @@ pub fn ImageKey(comptime config: Config) type {
                                 return .{ .name = path };
                             },
                             else => continue, // Skip non-images, keep looping
+                        }
+                    }
+
+                    // End of current list reached: reset sampler, move to next stage
+                    self.sampler_idx = 0;
+                    self.stage_idx += 1;
+
+                    // If we finished both stages (0 and 1), move to next drawcall
+                    if (self.stage_idx > 1) {
+                        self.stage_idx = 0;
+                        self.draw_idx += 1;
+                    }
+                }
+
+                return null;
+            }
+        };
+    };
+}
+
+pub fn FontKey(comptime config: Config) type {
+    return struct {
+        font: Font,
+
+        pub const eql = std.meta.eql;
+
+        pub const Iterator = struct {
+            pass_idx: usize = 0,
+            draw_idx: usize = 0,
+            stage_idx: usize = 0, // 0 = vertex_samplers, 1 = fragment_samplers
+            sampler_idx: usize = 0,
+
+            pub fn next(self: *@This()) ?FontKey(config) {
+                // Loop until we find a valid .font or exhaust the config
+                while (self.pass_idx < config.passes.len) {
+                    const pass = config.passes[self.pass_idx];
+
+                    if (self.draw_idx >= pass.drawcalls.len) {
+                        self.pass_idx += 1;
+                        self.draw_idx = 0;
+                        continue;
+                    }
+
+                    const draw = pass.drawcalls[self.draw_idx];
+
+                    // Select the list based on current stage
+                    const current_list = if (self.stage_idx == 0)
+                        draw.vertex_samplers
+                    else
+                        draw.fragment_samplers;
+
+                    // Iterate through the current sampler list
+                    if (self.sampler_idx < current_list.len) {
+                        const sampler = current_list[self.sampler_idx];
+                        self.sampler_idx += 1; // Advance index immediately
+                        switch (sampler) {
+                            .font => |font| {
+                                return .{ .font = font };
+                            },
+                            else => continue, // Skip non-fonts, keep looping
                         }
                     }
 

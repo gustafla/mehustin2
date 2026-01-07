@@ -34,13 +34,19 @@ const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
 const ImageKey = schema.ImageKey(config);
 const image_set = schema.ComptimeSet(ImageKey);
+const FontKey = schema.FontKey(config);
+const font_set = schema.ComptimeSet(FontKey);
 
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
 const render_aspect = render_width / render_height;
+const num_instance_buffers = schema.fold(config.passes, &.{
+    "drawcalls",
+    "instances",
+}, schema.count_nonnull);
 const max_instance_attributes = schema.fold(config.passes, &.{
     "drawcalls",
-    "pipeline",
+    "pipelines",
     "instance_attributes",
     "len",
 }, schema.max_field);
@@ -53,16 +59,16 @@ var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var font_textures: [config.fonts.len]*c.SDL_GPUTexture = undefined;
+var font_textures: [font_set.keys.len]*c.SDL_GPUTexture = undefined;
 var image_textures: [image_set.keys.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
 var noise_texture: *c.SDL_GPUTexture = undefined;
 var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
-var instance_buffers: [config.instances.len]*c.SDL_GPUBuffer = undefined;
+var instance_buffers: [num_instance_buffers]*c.SDL_GPUBuffer = undefined;
 var vertex_counts: [config.vertices.len]u32 = undefined;
-var instance_counts: [config.instances.len]u32 = undefined;
+var instance_counts: [num_instance_buffers]u32 = undefined;
 
 pub fn deinit() void {
     for (vertex_buffers) |buf| {
@@ -574,26 +580,46 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         count.* = @intCast(data.coords.len / 3);
     }
 
-    var font_glyph_data: [config.fonts.len][128]font.GlyphInfo = undefined;
-    for (config.fonts, &font_textures, &font_glyph_data) |def, *texture, *glyph_data| {
+    var font_glyph_data: [font_set.keys.len][128]font.GlyphInfo = undefined;
+    for (font_set.keys, &font_textures, &font_glyph_data) |key, *texture, *glyph_data| {
         texture.* = try initFont(
-            def.ttf,
-            def.size,
-            def.padding,
-            def.dist_scale,
-            def.atlas_width,
-            def.atlas_height,
+            key.font.ttf,
+            key.font.size,
+            key.font.padding,
+            key.font.dist_scale,
+            key.font.atlas_width,
+            key.font.atlas_height,
             glyph_data,
         );
         errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
     }
 
-    for (config.instances, &instance_buffers, &instance_counts) |def, *buffer, *count| {
-        const text = def.text;
-        const size = config.fonts[text.font].size;
-        const glyphs = &font_glyph_data[text.font];
-        count.* = try initText(text.str, size, buffer, glyphs);
-        errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+    comptime var instance_idx = 0;
+    inline for (config.passes) |pass| {
+        inline for (pass.drawcalls) |drawcall| {
+            if (drawcall.instances) |instances| {
+                switch (instances) {
+                    .text => |str| {
+                        const font_sampler = comptime blk: {
+                            for (drawcall.fragment_samplers) |s| {
+                                if (s == .font) break :blk s.font;
+                            }
+                            @compileError("Text instance defined without font sampler!");
+                        };
+                        const font_idx = comptime font_set.getIndex(.{ .font = font_sampler });
+                        const glyphs = &font_glyph_data[font_idx];
+                        instance_counts[instance_idx] = try initText(
+                            str,
+                            font_sampler.size,
+                            &instance_buffers[instance_idx],
+                            glyphs,
+                        );
+                        errdefer c.SDL_ReleaseGPUBuffer(device, instance_buffers[instance_idx]);
+                    },
+                }
+                instance_idx += 1;
+            }
+        }
     }
 }
 
@@ -689,6 +715,8 @@ pub fn render(time: f32) !void {
     c.SDL_EndGPUCopyPass(copy_pass);
 
     // Render passes
+    comptime var instance_buffer_idx = 0;
+
     inline for (config.passes) |pass| {
         // Initialize color target infos
         const color_target_infos = blk: {
@@ -737,11 +765,6 @@ pub fn render(time: f32) !void {
 
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
-            // Find matching pipeline index from pipeline_keys at compile time
-            const pipeline_key = comptime PipelineKey.init(pass, drawcall);
-            const pipeline_index = comptime pipeline_set.getIndex(pipeline_key);
-            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
-
             // Bind vertex buffers
             var buffer_slot: u32 = 0;
             if (drawcall.vertices) |vertices_index| {
@@ -759,16 +782,28 @@ pub fn render(time: f32) !void {
                 }
             }
 
-            // Bind instance buffers
-            if (drawcall.instances) |instances_index| {
-                c.SDL_BindGPUVertexBuffers(
-                    render_pass,
-                    buffer_slot,
-                    &.{ .buffer = instance_buffers[instances_index], .offset = 0 },
-                    1,
-                );
-                buffer_slot += 1;
-            }
+            // Bind instance buffers, yielding number of instances to draw
+            const num_instances = blk: {
+                if (drawcall.instances) |_| {
+                    const idx = instance_buffer_idx;
+                    c.SDL_BindGPUVertexBuffers(
+                        render_pass,
+                        buffer_slot,
+                        &.{ .buffer = instance_buffers[idx], .offset = 0 },
+                        1,
+                    );
+                    buffer_slot += 1;
+                    instance_buffer_idx += 1;
+                    if (drawcall.num_instances == .infer) {
+                        break :blk instance_counts[idx];
+                    }
+                }
+
+                break :blk if (drawcall.num_instances == .num)
+                    drawcall.num_instances.num
+                else
+                    1; // Default to 1 instance if no instance buffer
+            };
 
             // Bind textures
             inline for (.{
@@ -786,8 +821,8 @@ pub fn render(time: f32) !void {
                         .texture = switch (tex) {
                             .color => |i| color_textures[i],
                             .depth => |i| depth_textures[i],
-                            .font => |i| font_textures[i],
-                            .image => |name| image_textures[comptime image_set.getIndex(.{ .name = name })],
+                            .font => |f| font_textures[comptime font_set.getIndex(.{ .font = f })],
+                            .image => |s| image_textures[comptime image_set.getIndex(.{ .name = s })],
                             .simplex2 => noise_texture,
                         },
                         .sampler = nearest,
@@ -830,17 +865,20 @@ pub fn render(time: f32) !void {
                 .infer => if (drawcall.vertices) |i| vertex_counts[i] else 3,
                 .num => |num| num,
             };
-            const num_instances = switch (drawcall.num_instances) {
-                .infer => if (drawcall.instances) |i| instance_counts[i] else 1,
-                .num => |num| num,
-            };
-            c.SDL_DrawGPUPrimitives(
-                render_pass,
-                num_vertices,
-                num_instances,
-                drawcall.first_vertex,
-                drawcall.first_instance,
-            );
+
+            inline for (drawcall.pipelines) |pipeline| {
+                // Find matching pipeline index from pipeline_keys at compile time
+                const pipeline_key = comptime PipelineKey.init(pass, drawcall, pipeline);
+                const pipeline_index = comptime pipeline_set.getIndex(pipeline_key);
+                c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
+                c.SDL_DrawGPUPrimitives(
+                    render_pass,
+                    num_vertices,
+                    num_instances,
+                    drawcall.first_vertex,
+                    drawcall.first_instance,
+                );
+            }
         }
 
         c.SDL_EndGPURenderPass(render_pass);

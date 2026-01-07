@@ -11,23 +11,23 @@
             .drawcalls = .{
                 // Foreground mesh
                 .{
-                    .pipeline = .{
+                    .pipelines = .{.{
                         .vert = "3d.vert",
                         .frag = "3d.frag",
                         .vertex_attributes = .{ .coords = true, .colors = true },
                         .primitive_type = .trianglelist,
                         .depth_test = .{}, // Enable with defaults
-                    },
+                    }},
                     .vertices = 0,
                     .vertex_uniforms = .{ .matrices, .shadertoy },
                     .num_instances = .{ .num = 512 },
                 },
                 // Background shader, render last for optimal depth test
                 .{
-                    .pipeline = .{
+                    .pipelines = .{.{
                         .frag = "shader.frag",
                         .depth_test = .{ .write = false },
-                    },
+                    }},
                     .fragment_uniforms = .{.shadertoy},
                 },
             },
@@ -38,41 +38,42 @@
         .{
             .drawcalls = .{
                 .{
-                    .pipeline = .{
+                    .pipelines = .{.{
                         .frag = "post.frag",
-                    },
+                    }},
                     .fragment_samplers = .{ .{ .color = 0 }, .simplex2 },
                     .fragment_uniforms = .{.shadertoy},
                 },
                 // Text in front of everything
                 .{
-                    .pipeline = .{
-                        .vert = "text.vert",
-                        .frag = "text.frag",
-                        .instance_attributes = .{ .float4, .float4, .float4 }, // The format for text instance buffers
-                        .blend_states = .{.{
-                            .enable = true,
-                        }},
+                    .pipelines = .{
+                        .{
+                            .vert = "text.vert",
+                            .frag = "text_shadow.frag",
+                            .instance_attributes = .{ .float4, .float4, .float4 },
+                            .blend_states = .{.{ .enable = true }},
+                        },
+                        .{
+                            .vert = "text.vert",
+                            .frag = "text_opaque.frag",
+                            .instance_attributes = .{ .float4, .float4, .float4 },
+                            .blend_states = .{.{ .enable = true }},
+                        },
                     },
-                    .fragment_samplers = .{ .{ .font = 0 }, .{ .image = "hello.jpg" } },
+                    .fragment_samplers = .{.{
+                        .font = .{
+                            .ttf = "Unitblock.ttf",
+                            .size = 128,
+                            .padding = 20,
+                            .dist_scale = 4,
+                        },
+                    }},
                     .vertex_uniforms = .{.shadertoy},
-                    .instances = 0,
+                    .instances = .{ .text = "Mehu\nMehu\nMehu" },
                     .num_vertices = .{ .num = 4 },
                 },
             },
         },
-    },
-    .fonts = .{
-        .{
-            .ttf = "Unitblock.ttf",
-            .size = 128,
-            .padding = 20,
-            .dist_scale = 4,
-        },
-    },
-    .instances = .{
-        .{ .text = .{ .str = "Mehu\nMehu\nMehu" } },
-        .{ .text = .{ .str = "Abyss" } },
     },
     .vertices = .{
         // zig fmt: off
