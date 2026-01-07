@@ -68,8 +68,8 @@ pub const Texture = union(enum) {
     simplex2,
 };
 
-pub const Pass = struct {
-    drawcalls: []const struct {
+pub const Drawcall =
+    struct {
         pipeline: Pipeline,
         vertices: ?usize = null,
         instances: ?usize = null,
@@ -81,7 +81,10 @@ pub const Pass = struct {
         num_instances: DrawNum = .infer,
         first_vertex: u32 = 0,
         first_instance: u32 = 0,
-    },
+    };
+
+pub const Pass = struct {
+    drawcalls: []const Drawcall,
     color_targets: []const ColorTarget = &.{.swapchain},
     depth_target: ?usize = null,
 };
@@ -164,7 +167,7 @@ const ShaderInfo = struct {
     num_uniform_buffers: u32,
 };
 
-pub fn PipelineKey(max_color_targets: usize) type {
+pub fn PipelineKey(comptime config: Config) type {
     return struct {
         pipeline: Pipeline,
         vert_info: ShaderInfo,
@@ -172,29 +175,48 @@ pub fn PipelineKey(max_color_targets: usize) type {
         color_targets_buf: [max_color_targets]TextureFormat,
         num_color_targets: u32,
         depth_target: ?TextureFormat,
-    };
-}
 
-pub fn initPipelineSet(
-    comptime config: Config,
-    max_color_targets: usize,
-) []const PipelineKey(max_color_targets) {
-    // Find upper bound for pipelines defined in config
-    const n = fold(config.passes, &.{ "drawcalls", "len" }, sum_field);
+        pub const max_color_targets = fold(config.passes, &.{
+            "color_targets",
+            "len",
+        }, max_field);
 
-    // Initialize unique map keys with O(n^2) filtering
-    var keys: [n]PipelineKey(max_color_targets) = undefined;
-    var num_keys = 0;
-    for (config.passes) |pass| {
-        var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
-        for (pass.color_targets, 0..) |format, i| {
-            color_targets[i] = switch (format) {
-                .index => |idx| config.color_textures[idx],
-                .swapchain => .swapchain,
-            };
-        }
-        outer: for (pass.drawcalls) |drawcall| {
-            const candidate: PipelineKey(max_color_targets) = .{
+        pub const Iterator = struct {
+            pass_idx: usize = 0,
+            draw_idx: usize = 0,
+
+            pub fn next(self: *@This()) ?PipelineKey(config) {
+                if (self.pass_idx >= config.passes.len) return null;
+
+                const pass = config.passes[self.pass_idx];
+                const drawcall = pass.drawcalls[self.draw_idx];
+
+                const key = init(pass, drawcall);
+
+                self.draw_idx += 1;
+                if (self.draw_idx >= pass.drawcalls.len) {
+                    self.draw_idx = 0;
+                    self.pass_idx += 1;
+                }
+
+                return key;
+            }
+        };
+
+        pub const eql = std.meta.eql;
+
+        pub fn init(
+            comptime pass: Pass,
+            comptime drawcall: Drawcall,
+        ) @This() {
+            var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
+            for (pass.color_targets, 0..) |format, i| {
+                color_targets[i] = switch (format) {
+                    .index => |idx| config.color_textures[idx],
+                    .swapchain => .swapchain,
+                };
+            }
+            return .{
                 .pipeline = drawcall.pipeline,
                 .vert_info = .{
                     .num_samplers = drawcall.vertex_samplers.len,
@@ -212,50 +234,100 @@ pub fn initPipelineSet(
                 .num_color_targets = pass.color_targets.len,
                 .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
             };
-            for (keys[0..num_keys]) |key| {
-                if (std.meta.eql(key, candidate)) {
-                    continue :outer;
-                }
-            }
-            keys[num_keys] = candidate;
-            num_keys += 1;
         }
-    }
-
-    return keys[0..num_keys];
+    };
 }
 
-pub fn initImageSet(comptime config: Config) []const []const u8 {
-    // Find upper bound for images defined in render config
-    const n = fold(config.passes, &.{ "drawcalls", "vertex_samplers" }, count_images) +
-        fold(config.passes, &.{ "drawcalls", "fragment_samplers" }, count_images);
+pub fn ImageKey(comptime config: Config) type {
+    return struct {
+        name: []const u8,
 
-    // Initialize unique map keys with O(n^2) filtering
-    var keys: [n][]const u8 = undefined;
-    var num_keys = 0;
-    for (config.passes) |pass| {
-        for (pass.drawcalls) |drawcall| {
-            for (.{
-                drawcall.vertex_samplers,
-                drawcall.fragment_samplers,
-            }) |samplers| {
-                outer: for (samplers) |sampler| {
-                    switch (sampler) {
-                        .image => |name| {
-                            for (keys[0..num_keys]) |key| {
-                                if (std.mem.eql(u8, name, key)) {
-                                    continue :outer;
-                                }
-                            }
-                            keys[num_keys] = name;
-                            num_keys += 1;
-                        },
-                        else => {},
+        pub fn eql(a: @This(), b: @This()) bool {
+            return std.mem.eql(u8, a.name, b.name);
+        }
+
+        pub const Iterator = struct {
+            pass_idx: usize = 0,
+            draw_idx: usize = 0,
+            stage_idx: usize = 0, // 0 = vertex_samplers, 1 = fragment_samplers
+            sampler_idx: usize = 0,
+
+            pub fn next(self: *@This()) ?ImageKey(config) {
+                // Loop until we find a valid .image or exhaust the config
+                while (self.pass_idx < config.passes.len) {
+                    const pass = config.passes[self.pass_idx];
+
+                    if (self.draw_idx >= pass.drawcalls.len) {
+                        self.pass_idx += 1;
+                        self.draw_idx = 0;
+                        continue;
+                    }
+
+                    const draw = pass.drawcalls[self.draw_idx];
+
+                    // Select the list based on current stage
+                    const current_list = if (self.stage_idx == 0)
+                        draw.vertex_samplers
+                    else
+                        draw.fragment_samplers;
+
+                    // Iterate through the current sampler list
+                    if (self.sampler_idx < current_list.len) {
+                        const sampler = current_list[self.sampler_idx];
+                        self.sampler_idx += 1; // Advance index immediately
+                        switch (sampler) {
+                            .image => |path| {
+                                return .{ .name = path };
+                            },
+                            else => continue, // Skip non-images, keep looping
+                        }
+                    }
+
+                    // End of current list reached: reset sampler, move to next stage
+                    self.sampler_idx = 0;
+                    self.stage_idx += 1;
+
+                    // If we finished both stages (0 and 1), move to next drawcall
+                    if (self.stage_idx > 1) {
+                        self.stage_idx = 0;
+                        self.draw_idx += 1;
                     }
                 }
+
+                return null;
             }
+        };
+    };
+}
+
+pub fn ComptimeSet(comptime T: type) type {
+    var count_iter: T.Iterator = .{};
+    var max_count = 0;
+    while (count_iter.next()) |_| : (max_count += 1) {}
+
+    var keys_buf: [max_count]T = undefined;
+    var unique_count = 0;
+
+    var collect_iter: T.Iterator = .{};
+    outer: while (collect_iter.next()) |candidate| {
+        for (keys_buf[0..unique_count]) |existing| {
+            if (T.eql(existing, candidate)) continue :outer;
         }
+        keys_buf[unique_count] = candidate;
+        unique_count += 1;
     }
 
-    return keys[0..num_keys];
+    const keys_array = keys_buf[0..unique_count].*;
+
+    return struct {
+        pub const keys = keys_array;
+
+        pub fn getIndex(key: T) usize {
+            for (keys, 0..) |k, i| {
+                if (T.eql(k, key)) return i;
+            }
+            @compileError("Key not found in ComptimeSet: " ++
+                std.fmt.comptimePrint("{any}", .{key}));
+        }
+    };
 }

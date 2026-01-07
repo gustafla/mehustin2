@@ -14,7 +14,6 @@ const schema = @import("render/schema.zig");
 const Config = schema.Config;
 const Texture = schema.Texture;
 const Pipeline = schema.Pipeline;
-const PipelineKey = schema.PipelineKey;
 const shader = @import("render/shader.zig");
 const types = @import("render/types.zig");
 const VertexAttributes = types.VertexAttributes;
@@ -30,24 +29,21 @@ const VertexBuffers = types.VertexBuffers;
 const resource = @import("resource.zig");
 const sdlerr = @import("err.zig").sdlerr;
 
-const max_color_targets = schema.fold(config.passes, &.{
-    "color_targets",
-    "len",
-}, schema.max_field);
+// Generate sets of all unique configurations
+const PipelineKey = schema.PipelineKey(config);
+const pipeline_set = schema.ComptimeSet(PipelineKey);
+const ImageKey = schema.ImageKey(config);
+const image_set = schema.ComptimeSet(ImageKey);
+
+const render_width: f32 = @floatFromInt(main_config.width);
+const render_height: f32 = @floatFromInt(main_config.height);
+const render_aspect = render_width / render_height;
 const max_instance_attributes = schema.fold(config.passes, &.{
     "drawcalls",
     "pipeline",
     "instance_attributes",
     "len",
 }, schema.max_field);
-
-// Generate arrays of all unique pipeline configurations and image textures
-const pipeline_set = schema.initPipelineSet(config, max_color_targets)[0..].*;
-const image_set = schema.initImageSet(config)[0..].*;
-
-const render_width: f32 = @floatFromInt(main_config.width);
-const render_height: f32 = @floatFromInt(main_config.height);
-const render_aspect = render_width / render_height;
 
 // TODO: https://github.com/ziglang/zig/issues/25026
 // var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
@@ -56,9 +52,9 @@ var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var nearest: *c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
-var pipelines: [pipeline_set.len]*c.SDL_GPUGraphicsPipeline = undefined;
+var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var font_textures: [config.fonts.len]*c.SDL_GPUTexture = undefined;
-var image_textures: [image_set.len]*c.SDL_GPUTexture = undefined;
+var image_textures: [image_set.keys.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
 var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
@@ -336,14 +332,14 @@ fn initDepthTexture(
     }));
 }
 
-fn initPipeline(key: PipelineKey(max_color_targets)) !*c.SDL_GPUGraphicsPipeline {
+fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
     const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
     const frag = try shader.loadShader(gpa, device, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    var color_targets: [max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
+    var color_targets: [PipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
     for (
         key.color_targets_buf[0..key.num_color_targets],
         color_targets[0..key.num_color_targets],
@@ -533,8 +529,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     output_buffer = try initColorTexture(.swapchain, .{});
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
-    for (image_set, &image_textures) |name, *texture| {
-        texture.* = try initImageTexture(name);
+    for (image_set.keys, &image_textures) |key, *texture| {
+        texture.* = try initImageTexture(key.name);
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
@@ -559,7 +555,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     );
     errdefer c.SDL_ReleaseGPUTexture(device, noise_texture);
 
-    for (pipeline_set, &pipelines) |key, *pipeline| {
+    for (pipeline_set.keys, &pipelines) |key, *pipeline| {
         pipeline.* = try initPipeline(key);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
@@ -739,45 +735,11 @@ pub fn render(time: f32) !void {
             c.SDL_SetGPUViewport(render_pass, &swapchain_viewport);
         }
 
-        // Construct color target format array for the pipeline key
-        const color_targets = comptime init: {
-            var targets = std.mem.zeroes([max_color_targets]TextureFormat);
-            for (pass.color_targets, targets[0..pass.color_targets.len]) |format, *target| {
-                target.* = switch (format) {
-                    .index => |i| config.color_textures[i],
-                    .swapchain => .swapchain,
-                };
-            }
-            break :init targets;
-        };
-
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
             // Find matching pipeline index from pipeline_keys at compile time
-            const pipeline_index = comptime for (pipeline_set, 0..) |plk, i| {
-                const key: PipelineKey(max_color_targets) = .{
-                    .pipeline = drawcall.pipeline,
-                    .vert_info = .{
-                        .num_samplers = @intCast(drawcall.vertex_samplers.len),
-                        .num_storage_textures = 0,
-                        .num_storage_buffers = 0,
-                        .num_uniform_buffers = @intCast(drawcall.vertex_uniforms.len),
-                    },
-                    .frag_info = .{
-                        .num_samplers = @intCast(drawcall.fragment_samplers.len),
-                        .num_storage_textures = 0,
-                        .num_storage_buffers = 0,
-                        .num_uniform_buffers = @intCast(drawcall.fragment_uniforms.len),
-                    },
-                    .color_targets_buf = color_targets,
-                    .num_color_targets = @intCast(pass.color_targets.len),
-                    .depth_target = if (pass.depth_target) |j| config.depth_textures[j] else null,
-                };
-                if (std.meta.eql(plk, key)) {
-                    break i;
-                }
-            } else @compileError("No pipeline key defined for " ++
-                drawcall.pipeline.vert ++ " and " ++ drawcall.pipeline.frag);
+            const pipeline_key = comptime PipelineKey.init(pass, drawcall);
+            const pipeline_index = comptime pipeline_set.getIndex(pipeline_key);
             c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
 
             // Bind vertex buffers
@@ -825,14 +787,7 @@ pub fn render(time: f32) !void {
                             .color => |i| color_textures[i],
                             .depth => |i| depth_textures[i],
                             .font => |i| font_textures[i],
-                            .image => |name| blk: {
-                                const i = comptime for (image_set, 0..) |key, i| {
-                                    if (std.mem.eql(u8, key, name)) {
-                                        break i;
-                                    }
-                                } else @compileError("No image key defined for " ++ name);
-                                break :blk image_textures[i];
-                            },
+                            .image => |name| image_textures[comptime image_set.getIndex(.{ .name = name })],
                             .simplex2 => noise_texture,
                         },
                         .sampler = nearest,

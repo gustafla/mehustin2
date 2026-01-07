@@ -54,7 +54,7 @@
                             .enable = true,
                         }},
                     },
-                    .fragment_samplers = .{.{ .font = 0 }},
+                    .fragment_samplers = .{ .{ .font = 0 }, .{ .image = "hello.jpg" } },
                     .vertex_uniforms = .{.shadertoy},
                     .instances = 0,
                     .num_vertices = .{ .num = 4 },
