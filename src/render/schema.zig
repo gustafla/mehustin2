@@ -371,6 +371,69 @@ pub fn FontKey(comptime config: Config) type {
     };
 }
 
+pub fn InstanceKey(comptime config: Config) type {
+    return struct {
+        data: union(enum) {
+            text: struct {
+                str: []const u8,
+                // Font defines the geometry generation
+                font_key: FontKey(config),
+            },
+        },
+
+        pub const eql = std.meta.eql;
+
+        pub const Iterator = struct {
+            pass_idx: usize = 0,
+            draw_idx: usize = 0,
+
+            pub fn next(self: *@This()) ?InstanceKey(config) {
+                while (self.pass_idx < config.passes.len) {
+                    const pass = config.passes[self.pass_idx];
+
+                    if (self.draw_idx >= pass.drawcalls.len) {
+                        self.pass_idx += 1;
+                        self.draw_idx = 0;
+                        continue;
+                    }
+
+                    const draw = pass.drawcalls[self.draw_idx];
+
+                    // Only yield a key if this drawcall has instances
+                    if (draw.instances) |inst| {
+                        const key = init(draw, inst);
+                        // 1 instance buffer per drawcall
+                        self.draw_idx += 1;
+                        return key;
+                    }
+
+                    self.draw_idx += 1;
+                }
+                return null;
+            }
+        };
+
+        fn findFontKey(drawcall: Drawcall) FontKey(config) {
+            for (drawcall.fragment_samplers) |s| {
+                if (s == .font) return .{ .font = s.font };
+            }
+            @compileError("Drawcall has text instances but no .font sampler found!");
+        }
+
+        pub fn init(
+            comptime drawcall: Drawcall,
+            comptime instances: InstanceSource,
+        ) @This() {
+            return .{ .data = switch (instances) {
+                .text => |str| .{ .text = .{
+                    .str = str,
+                    .font_key = findFontKey(drawcall),
+                } },
+            } };
+        }
+    };
+}
+
 pub fn ComptimeSet(comptime T: type) type {
     var count_iter: T.Iterator = .{};
     var max_count = 0;
