@@ -592,18 +592,14 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
     }
 
-    inline for (instance_set.keys, 0..) |key, i| {
-        switch (key.data) {
-            .text => |text| {
-                const font_idx = comptime font_set.getIndex(text.font_key);
+    inline for (instance_set.keys, &instance_buffers, &instance_counts) |key, *buffer, *count| {
+        switch (key.instances) {
+            .text => |str| {
+                const font_key = comptime key.font_key.?;
+                const font_idx = comptime font_set.getIndex(font_key);
                 const glyphs = &font_glyph_data[font_idx];
-                instance_counts[i] = try initText(
-                    text.str,
-                    text.font_key.font.size,
-                    &instance_buffers[i],
-                    glyphs,
-                );
-                errdefer c.SDL_ReleaseGPUBuffer(device, instance_buffers[i]);
+                count.* = try initText(str, font_key.font.size, buffer, glyphs);
+                errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
             },
         }
     }

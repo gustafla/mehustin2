@@ -365,13 +365,8 @@ pub fn FontKey(comptime config: Config) type {
 
 pub fn InstanceKey(comptime config: Config) type {
     return struct {
-        data: union(enum) {
-            text: struct {
-                str: []const u8,
-                // Font defines the geometry generation
-                font_key: FontKey(config),
-            },
-        },
+        instances: InstanceSource,
+        font_key: ?FontKey(config) = null, // Only valid for .text
 
         pub const Iterator = struct {
             pass_idx: usize = 0,
@@ -407,19 +402,17 @@ pub fn InstanceKey(comptime config: Config) type {
             for (drawcall.fragment_samplers) |s| {
                 if (s == .font) return .{ .font = s.font };
             }
-            @compileError("Drawcall has text instances but no .font sampler found!");
+            @compileError("Drawcall has text instances but no .font sampler!");
         }
 
         pub fn init(
             comptime drawcall: Drawcall,
             comptime instances: InstanceSource,
         ) @This() {
-            return .{ .data = switch (instances) {
-                .text => |str| .{ .text = .{
-                    .str = str,
-                    .font_key = findFontKey(drawcall),
-                } },
-            } };
+            return .{
+                .instances = instances,
+                .font_key = if (instances == .text) findFontKey(drawcall) else null,
+            };
         }
     };
 }
@@ -446,7 +439,7 @@ pub fn ComptimeSet(comptime T: type) type {
     return struct {
         pub const keys = keys_array;
 
-        pub fn getIndex(key: T) usize {
+        pub fn getIndex(comptime key: T) usize {
             for (keys, 0..) |k, i| {
                 if (std.meta.eql(k, key)) return i;
             }
