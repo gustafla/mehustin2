@@ -213,8 +213,6 @@ pub fn PipelineKey(comptime config: Config) type {
             }
         };
 
-        pub const eql = std.meta.eql;
-
         pub fn init(
             comptime pass: Pass,
             comptime drawcall: Drawcall,
@@ -252,10 +250,6 @@ pub fn PipelineKey(comptime config: Config) type {
 pub fn ImageKey(comptime config: Config) type {
     return struct {
         name: []const u8,
-
-        pub fn eql(a: @This(), b: @This()) bool {
-            return std.mem.eql(u8, a.name, b.name);
-        }
 
         pub const Iterator = struct {
             pass_idx: usize = 0,
@@ -314,8 +308,6 @@ pub fn ImageKey(comptime config: Config) type {
 pub fn FontKey(comptime config: Config) type {
     return struct {
         font: Font,
-
-        pub const eql = std.meta.eql;
 
         pub const Iterator = struct {
             pass_idx: usize = 0,
@@ -381,8 +373,6 @@ pub fn InstanceKey(comptime config: Config) type {
             },
         },
 
-        pub const eql = std.meta.eql;
-
         pub const Iterator = struct {
             pass_idx: usize = 0,
             draw_idx: usize = 0,
@@ -445,7 +435,7 @@ pub fn ComptimeSet(comptime T: type) type {
     var collect_iter: T.Iterator = .{};
     outer: while (collect_iter.next()) |candidate| {
         for (keys_buf[0..unique_count]) |existing| {
-            if (T.eql(existing, candidate)) continue :outer;
+            if (std.meta.eql(existing, candidate)) continue :outer;
         }
         keys_buf[unique_count] = candidate;
         unique_count += 1;
@@ -458,7 +448,7 @@ pub fn ComptimeSet(comptime T: type) type {
 
         pub fn getIndex(key: T) usize {
             for (keys, 0..) |k, i| {
-                if (T.eql(k, key)) return i;
+                if (std.meta.eql(k, key)) return i;
             }
             @compileError("Key not found in ComptimeSet: " ++
                 std.fmt.comptimePrint("{any}", .{key}));
