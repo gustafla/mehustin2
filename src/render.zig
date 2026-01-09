@@ -425,6 +425,7 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
             .fill_mode = c.SDL_GPU_FILLMODE_FILL,
             .cull_mode = c.SDL_GPU_CULLMODE_BACK,
             .front_face = c.SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
+            .enable_depth_clip = true,
         },
         .multisample_state = .{
             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
