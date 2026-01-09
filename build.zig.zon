@@ -37,8 +37,8 @@
     // internet connectivity.
     .dependencies = .{
         .sdl = .{
-            .url = "https://github.com/castholm/SDL/archive/refs/tags/v0.3.3+3.2.28.tar.gz",
-            .hash = "sdl-0.3.3+3.2.28-7uIn9MiRfwFhqxnwBi_vCQlKr82YpwkQBVwdz2uy46S1",
+            .url = "https://github.com/castholm/SDL/archive/refs/tags/v0.4.0+3.4.0.tar.gz",
+            .hash = "sdl-0.4.0+3.4.0-SDL--u6yowGyvoiJ5qkFm_T1-MpmvnHShh2q2mTZf1fo",
         },
         .stb = .{
             .url = "git+https://github.com/nothings/stb.git#f58f558c120e9b32c217290b80bad1a0729fbb2c",
