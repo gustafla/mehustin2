@@ -126,12 +126,18 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
     InitStep.push(.window);
 
+    // Configure GPU initialization properties
+    const gpu_properties = try sdlerr(c.SDL_CreateProperties());
+    defer c.SDL_DestroyProperties(gpu_properties);
+    try sdlerr(c.SDL_SetBooleanProperty(gpu_properties, c.SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, builtin.mode == .Debug));
+    try sdlerr(c.SDL_SetBooleanProperty(gpu_properties, c.SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true));
+    try sdlerr(c.SDL_SetBooleanProperty(gpu_properties, c.SDL_PROP_GPU_DEVICE_CREATE_FEATURE_CLIP_DISTANCE_BOOLEAN, false));
+    try sdlerr(c.SDL_SetBooleanProperty(gpu_properties, c.SDL_PROP_GPU_DEVICE_CREATE_FEATURE_DEPTH_CLAMPING_BOOLEAN, false));
+    try sdlerr(c.SDL_SetBooleanProperty(gpu_properties, c.SDL_PROP_GPU_DEVICE_CREATE_FEATURE_INDIRECT_DRAW_FIRST_INSTANCE_BOOLEAN, false));
+    try sdlerr(c.SDL_SetBooleanProperty(gpu_properties, c.SDL_PROP_GPU_DEVICE_CREATE_FEATURE_ANISOTROPY_BOOLEAN, false));
+
     // Init GPU device & claim window
-    device = try sdlerr(c.SDL_CreateGPUDevice(
-        c.SDL_GPU_SHADERFORMAT_SPIRV,
-        builtin.mode == .Debug,
-        null,
-    ));
+    device = try sdlerr(c.SDL_CreateGPUDeviceWithProperties(gpu_properties));
     InitStep.push(.device);
     try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window));
     InitStep.push(.claim_window);
