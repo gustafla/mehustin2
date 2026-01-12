@@ -59,9 +59,11 @@ inline fn pause() void {
     if (time.paused) {
         audio.play() catch unreachable;
         time.pause(false);
+        std.log.info("Playing", .{});
     } else {
         audio.pause() catch unreachable;
         time.pause(true);
+        std.log.info("Paused", .{});
     }
 }
 
@@ -194,9 +196,9 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
             return c.SDL_APP_SUCCESS;
         },
         c.SDL_EVENT_KEY_DOWN => {
-            switch (event.key.key) {
-                c.SDLK_ESCAPE, c.SDLK_Q => return c.SDL_APP_SUCCESS,
-                c.SDLK_F => if (builtin.mode == .Debug) {
+            switch (event.key.scancode) {
+                c.SDL_SCANCODE_ESCAPE, c.SDL_SCANCODE_Q => return c.SDL_APP_SUCCESS,
+                c.SDL_SCANCODE_F => if (builtin.mode == .Debug) {
                     const flags = c.SDL_GetWindowFlags(window);
                     if (flags & c.SDL_WINDOW_FULLSCREEN != 0) {
                         try sdlerr(c.SDL_SetWindowFullscreen(window, false));
@@ -205,20 +207,22 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                         try fullscreen();
                     }
                 },
-                c.SDLK_SPACE => pause(),
-                c.SDLK_LEFT => seek(time.getTime() - 1),
-                c.SDLK_RIGHT => seek(time.getTime() + 1),
-                c.SDLK_PAGEUP => seek(time.getTime() - 8),
-                c.SDLK_PAGEDOWN => seek(time.getTime() + 8),
-                c.SDLK_HOME => seek(0),
-                c.SDLK_R => if (builtin.mode == .Debug) {
+                c.SDL_SCANCODE_SPACE => pause(),
+                c.SDL_SCANCODE_LEFT => seek(time.getTime() - 1),
+                c.SDL_SCANCODE_RIGHT => seek(time.getTime() + 1),
+                c.SDL_SCANCODE_PAGEUP => seek(time.getTime() - 8),
+                c.SDL_SCANCODE_PAGEDOWN => seek(time.getTime() + 8),
+                c.SDL_SCANCODE_HOME => seek(0),
+                c.SDL_SCANCODE_R => if (builtin.mode == .Debug) {
                     render.deinit();
                     try render.init(@ptrCast(window), @ptrCast(device));
                 },
-                c.SDLK_GRAVE => if (builtin.mode == .Debug) {
+                c.SDL_SCANCODE_GRAVE => if (builtin.mode == .Debug) {
                     fps_enabled = !fps_enabled;
                 },
-                else => {},
+                else => |k| {
+                    std.log.debug("Unhandled keycode 0x{X}", .{k});
+                },
             }
         },
         c.SDL_EVENT_MOUSE_WHEEL => seek(time.getTime() - event.wheel.y),
