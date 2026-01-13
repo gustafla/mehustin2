@@ -49,6 +49,7 @@ var device: *c.SDL_GPUDevice = undefined;
 var frames: u32 = 0;
 var fps_ticks: u64 = 0;
 var fps_enabled: bool = false;
+var step_frame: bool = false;
 
 // Private SDL symbols for hacking wayland mode emulation
 extern fn SDL_GetVideoDisplay(display: c.SDL_DisplayID) ?*anyopaque;
@@ -73,6 +74,7 @@ inline fn seek(to_sec: f32) void {
     const normalized = @max(to_sec, 0);
     time.seek(normalized);
     audio.seek(normalized) catch unreachable;
+    step_frame = true;
 }
 
 fn fullscreen() !void {
@@ -170,6 +172,15 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 }
 
 fn sdlAppIterate() !c.SDL_AppResult {
+    const is_paused = (builtin.mode == .Debug) and time.paused;
+
+    // Save power when paused
+    if (is_paused and !step_frame) {
+        c.SDL_Delay(c.SDL_MS_PER_SECOND / 60);
+        return c.SDL_APP_CONTINUE;
+    }
+    step_frame = false;
+
     try render.render(time.getTime() * bps);
 
     // Quit if done
@@ -216,6 +227,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDL_SCANCODE_R => if (builtin.mode == .Debug) {
                     render.deinit();
                     try render.init(@ptrCast(window), @ptrCast(device));
+                    step_frame = true;
                 },
                 c.SDL_SCANCODE_GRAVE => if (builtin.mode == .Debug) {
                     fps_enabled = !fps_enabled;
@@ -226,6 +238,10 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
             }
         },
         c.SDL_EVENT_MOUSE_WHEEL => seek(time.getTime() - event.wheel.y),
+        c.SDL_EVENT_WINDOW_FIRST...c.SDL_EVENT_WINDOW_LAST,
+        => if (builtin.mode == .Debug) {
+            step_frame = true;
+        },
         else => {},
     }
 
