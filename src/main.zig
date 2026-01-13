@@ -221,7 +221,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                     fps_enabled = !fps_enabled;
                 },
                 else => |k| {
-                    std.log.debug("Unhandled keycode 0x{X}", .{k});
+                    std.log.debug("Unhandled scancode 0x{X}", .{k});
                 },
             }
         },
