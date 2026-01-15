@@ -9,7 +9,6 @@ layout(set = 1, binding = 0) uniform Matrices {
 };
 
 layout(set = 1, binding = 1) uniform PushConstants {
-    vec2 u_Resolution;
     float u_Time;
 };
 

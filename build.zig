@@ -1,35 +1,11 @@
 const std = @import("std");
 const Build = std.Build;
 
+const config = @import("src/config.zon");
+
 const log = std.log.scoped(.build);
 
-const Config = struct {
-    data_dir: []const u8,
-    shader_dir: []const u8,
-
-    pub const path = "src/config.zon";
-
-    fn init(b: *Build) !Config {
-        log.info("Loading {s}", .{path});
-        const file = try b.build_root.handle.openFile(path, .{});
-        defer file.close();
-        const stat = try file.stat();
-        const buffer = try b.allocator.allocSentinel(u8, stat.size, 0);
-        std.debug.assert(try file.readAll(buffer[0..]) == stat.size);
-        return try std.zon.parse.fromSlice(
-            Config,
-            b.allocator,
-            buffer,
-            null,
-            .{ .ignore_unknown_fields = true },
-        );
-    }
-};
-
 pub fn build(b: *Build) void {
-    // Load config
-    const config = Config.init(b) catch @panic("Failed to load config");
-
     // Use standard target options
     const target = b.standardTargetOptions(.{});
 
@@ -179,7 +155,12 @@ pub fn build(b: *Build) void {
         ) catch @panic("OOM");
 
         // Create run step
-        const shaderc_run = b.addSystemCommand(&.{ "glslc", "-O" });
+        const shaderc_run = b.addSystemCommand(&.{
+            "glslc",
+            "-O",
+            std.fmt.comptimePrint("-DWIDTH={}", .{config.width}),
+            std.fmt.comptimePrint("-DHEIGHT={}", .{config.height}),
+        });
         shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
         const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
         shaderc_run.addFileArg(b.path(input_path));

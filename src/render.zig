@@ -659,10 +659,8 @@ pub fn render(time: f32) !void {
 
     // Initialize uniforms
     const uniforms: extern struct {
-        resolution: [2]f32,
         time: f32,
     } = .{
-        .resolution = .{ render_width, render_height },
         .time = time,
     };
 

@@ -7,7 +7,6 @@ layout(location = 0) out vec4 FragColor;
 
 layout(set = 3, binding = 0) uniform PushConstants {
     float u_Time;
-    vec2 u_Resolution;
 };
 
 #define EPSILON 0.001
@@ -25,7 +24,7 @@ float sine(float x, float f, float t) {
     return cos(x * f + t) * 0.5 + 0.5;
 }
 float aspectRatio() {
-    return u_Resolution.x / u_Resolution.y;
+    return float(WIDTH) / float(HEIGHT);
 }
 mat3 viewMatrix(vec3 target, vec3 origin) {
     vec3 f = normalize(target - origin);

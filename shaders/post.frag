@@ -9,7 +9,6 @@ layout(set = 2, binding = 0) uniform sampler2D u_InputTexture;
 layout(set = 2, binding = 1) uniform sampler2D u_NoiseTexture;
 
 layout(set = 3, binding = 0) uniform PushConstants {
-    vec2 u_Resolution;
     float u_Time;
 };
 
@@ -26,9 +25,9 @@ vec2 ndc_to_uv(vec2 ndc) {
 void main() {
     // Chromatic aberration
     vec3 color = vec3(
-            texture(u_InputTexture, in_uv + vec2(-1. / u_Resolution.x, 0.)).r,
+            texture(u_InputTexture, in_uv + vec2(-1. / WIDTH, 0.)).r,
             texture(u_InputTexture, in_uv).g,
-            texture(u_InputTexture, in_uv + vec2(1. / u_Resolution.x, 0.)).b
+            texture(u_InputTexture, in_uv + vec2(1. / WIDTH, 0.)).b
         );
 
     // Radial blur

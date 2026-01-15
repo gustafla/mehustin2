@@ -4,7 +4,6 @@ layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 3, binding = 0) uniform PushConstants {
-    vec2 u_Resolution;
     float u_Time;
 };
 
