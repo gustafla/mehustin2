@@ -1,6 +1,7 @@
 # High priority
 
 - [ ] Remove uniform bindings from render config (https://wiki.libsdl.org/SDL3/CategoryGPU#uniform-data)
+- [ ] Sampler configuration (sampler set)
 - [ ] Dual Kawase blur
   - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
