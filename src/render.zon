@@ -19,7 +19,6 @@
                         .depth_test = .{}, // Enable with defaults
                     }},
                     .vertices = 0,
-                    .vertex_uniforms = .{ .matrices, .shadertoy },
                     .num_instances = .{ .num = 512 },
                 },
                 // Background shader, render last for optimal depth test
@@ -28,7 +27,6 @@
                         .frag = "shader.frag",
                         .depth_test = .{ .write = false },
                     }},
-                    .fragment_uniforms = .{.shadertoy},
                 },
             },
             .color_targets = .{.{ .index = 0 }},
@@ -41,8 +39,10 @@
                     .pipelines = .{.{
                         .frag = "post.frag",
                     }},
-                    .fragment_samplers = .{ .{ .color = 0 }, .simplex2 },
-                    .fragment_uniforms = .{.shadertoy},
+                    .fragment_samplers = .{
+                        .{ .texture = .{ .color = 0 } },
+                        .{ .texture = .simplex2 },
+                    },
                 },
                 // Text in front of everything
                 .{
@@ -60,15 +60,16 @@
                             .blend_states = .{.{ .enable = true }},
                         },
                     },
-                    .fragment_samplers = .{.{
-                        .font = .{
-                            .ttf = "Unitblock.ttf",
-                            .size = 128,
-                            .padding = 20,
-                            .dist_scale = 4,
-                        },
-                    }},
-                    .vertex_uniforms = .{.shadertoy},
+                    .fragment_samplers = .{
+                        .{ .texture = .{
+                            .font = .{
+                                .ttf = "Unitblock.ttf",
+                                .size = 128,
+                                .padding = 20,
+                                .dist_scale = 4,
+                            },
+                        } },
+                    },
                     .instances = .{ .text = "Mehu\nMehu\nMehu" },
                     .num_vertices = .{ .num = 4 },
                 },

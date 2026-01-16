@@ -5,4 +5,5 @@
     .height = 600,
     .audio = "music.ogg",
     .bpm = 140,
+    .max_lights = 64,
 }

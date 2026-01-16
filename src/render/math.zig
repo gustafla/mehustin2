@@ -45,6 +45,31 @@ pub const Mat4 = extern struct {
     /// | `col[0][3]` | `col[1][3]` | `col[2][3]` | `col[3][3]` |
     col: [4][4]f32,
 
+    /// Computes the result of `self * other`.
+    pub fn mmul(self: Mat4, other: Mat4) Mat4 {
+        var result: Mat4 = undefined;
+
+        // Iterate over the columns of the 'other' matrix
+        inline for (0..4) |i| {
+            // We use @Vector to enable SIMD instructions.
+            // Zig arrays [4]f32 coerce implicitly to @Vector(4, f32)
+            var acc: @Vector(4, f32) = @splat(0.0);
+
+            inline for (0..4) |k| {
+                // column k of self * scalar k of other's column i
+                const self_col: @Vector(4, f32) = self.col[k];
+                const scalar: @Vector(4, f32) = @splat(other.col[i][k]);
+
+                // Fused multiply-add if hardware supports it
+                acc = @mulAdd(@Vector(4, f32), self_col, scalar, acc);
+            }
+
+            result.col[i] = acc;
+        }
+
+        return result;
+    }
+
     /// Constructs a perspective projection matrix.
     ///
     /// The matrix transforms vertices from camera space to clip space.

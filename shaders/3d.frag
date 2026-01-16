@@ -1,9 +1,9 @@
 #version 450
 
-layout(location = 0) in vec3 Color;
+layout(location = 0) in vec3 in_color;
 
-layout(location = 0) out vec3 FragColor;
+layout(location = 0) out vec3 out_color;
 
 void main() {
-    FragColor = Color;
+    out_color = in_color;
 }

@@ -3,20 +3,22 @@
 layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
-layout(set = 3, binding = 0) uniform PushConstants {
-    float u_Time;
+layout(std140, set = 3, binding = 0) uniform FragmentPushData {
+    vec4 u_sun_dir_intensity;
+    vec4 u_sun_color_ambient;
+    float u_time;
 };
 
 void main() {
     out_color = vec4(vec3(0.4), 1.);
 
-    if (u_Time > 55.) {
+    if (u_time > 55.) {
         vec2 uv = vec2(in_uv.x + sin(in_uv.y * 4.45) * 3., in_uv.y + cos(in_uv.x * 2.1));
-        uv.y += u_Time + sin(uv.x + u_Time * 2.1);
-        uv.x += u_Time * 0.8 + sin(uv.y + u_Time * 1.1);
+        uv.y += u_time + sin(uv.x + u_time * 2.1);
+        uv.x += u_time * 0.8 + sin(uv.y + u_time * 1.1);
         uv.y *= 0.1;
         uv.y *= 0.2;
-        float primary = sin(sin(uv.x * 4.) + sin(uv.y * 3. + u_Time) + u_Time);
+        float primary = sin(sin(uv.x * 4.) + sin(uv.y * 3. + u_time) + u_time);
         float pattern = max(sin(primary * primary) * 8. - 4., 0.);
         out_color = vec4(vec3(pattern), 1.);
     }

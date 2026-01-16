@@ -8,6 +8,11 @@ const VertexFormat = types.VertexFormat;
 const PrimitiveType = types.PrimitiveType;
 const CompareOp = types.CompareOp;
 const BlendState = types.BlendState;
+const Filter = types.Filter;
+const SamplerMipmapMode = types.SamplerMipmapMode;
+const SamplerAddressMode = types.SamplerAddressMode;
+
+pub const num_uniform_buffers = 1;
 
 pub const VertexSource = union(enum) {
     static: VertexData,
@@ -40,11 +45,6 @@ pub const Pipeline = struct {
     blend_states: []const BlendState = &.{},
 };
 
-pub const UniformData = enum {
-    matrices,
-    shadertoy,
-};
-
 pub const DrawNum = union(enum) {
     infer,
     num: u32,
@@ -63,14 +63,33 @@ pub const Texture = union(enum) {
     simplex2,
 };
 
+pub const Sampler = struct {
+    min_filter: Filter = .nearest,
+    mag_filter: Filter = .nearest,
+    mipmap_mode: SamplerMipmapMode = .nearest,
+    address_mode_u: SamplerAddressMode = .mirrored_repeat,
+    address_mode_v: SamplerAddressMode = .mirrored_repeat,
+    address_mode_w: SamplerAddressMode = .clamp_to_edge,
+    mip_lod_bias: f32 = 0,
+    max_anisotropy: f32 = 0,
+    compare_op: CompareOp = .less_or_equal,
+    min_lod: f32 = 0,
+    max_lod: f32 = 1024,
+    enable_anisotropy: bool = false,
+    enable_compare: bool = false,
+};
+
+pub const TextureSamplerBinding = struct {
+    texture: Texture,
+    sampler: Sampler = .{},
+};
+
 pub const Drawcall = struct {
     pipelines: []const Pipeline,
     vertices: ?usize = null,
     instances: ?InstanceSource = null,
-    vertex_samplers: []const Texture = &.{},
-    fragment_samplers: []const Texture = &.{},
-    vertex_uniforms: []const UniformData = &.{},
-    fragment_uniforms: []const UniformData = &.{},
+    vertex_samplers: []const TextureSamplerBinding = &.{},
+    fragment_samplers: []const TextureSamplerBinding = &.{},
     num_vertices: DrawNum = .infer,
     num_instances: DrawNum = .infer,
     first_vertex: u32 = 0,
@@ -231,13 +250,13 @@ pub fn PipelineKey(comptime config: Config) type {
                     .num_samplers = drawcall.vertex_samplers.len,
                     .num_storage_textures = 0,
                     .num_storage_buffers = 0,
-                    .num_uniform_buffers = drawcall.vertex_uniforms.len,
+                    .num_uniform_buffers = num_uniform_buffers,
                 },
                 .frag_info = .{
                     .num_samplers = drawcall.fragment_samplers.len,
                     .num_storage_textures = 0,
                     .num_storage_buffers = 0,
-                    .num_uniform_buffers = drawcall.fragment_uniforms.len,
+                    .num_uniform_buffers = num_uniform_buffers,
                 },
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
@@ -280,7 +299,7 @@ pub fn ImageKey(comptime config: Config) type {
                     if (self.sampler_idx < current_list.len) {
                         const sampler = current_list[self.sampler_idx];
                         self.sampler_idx += 1; // Advance index immediately
-                        switch (sampler) {
+                        switch (sampler.texture) {
                             .image => |path| {
                                 return .{ .name = path };
                             },
@@ -338,7 +357,7 @@ pub fn FontKey(comptime config: Config) type {
                     if (self.sampler_idx < current_list.len) {
                         const sampler = current_list[self.sampler_idx];
                         self.sampler_idx += 1; // Advance index immediately
-                        switch (sampler) {
+                        switch (sampler.texture) {
                             .font => |font| {
                                 return .{ .font = font };
                             },
@@ -400,7 +419,7 @@ pub fn InstanceKey(comptime config: Config) type {
 
         fn findFontKey(drawcall: Drawcall) FontKey(config) {
             for (drawcall.fragment_samplers) |s| {
-                if (s == .font) return .{ .font = s.font };
+                if (s.texture == .font) return .{ .font = s.texture.font };
             }
             @compileError("Drawcall has text instances but no .font sampler!");
         }
@@ -414,6 +433,58 @@ pub fn InstanceKey(comptime config: Config) type {
                 .font_key = if (instances == .text) findFontKey(drawcall) else null,
             };
         }
+    };
+}
+
+pub fn SamplerKey(comptime config: Config) type {
+    return struct {
+        sampler: Sampler,
+
+        pub const Iterator = struct {
+            pass_idx: usize = 0,
+            draw_idx: usize = 0,
+            stage_idx: usize = 0, // 0 = vertex_samplers, 1 = fragment_samplers
+            sampler_idx: usize = 0,
+
+            pub fn next(self: *@This()) ?SamplerKey(config) {
+                while (self.pass_idx < config.passes.len) {
+                    const pass = config.passes[self.pass_idx];
+
+                    if (self.draw_idx >= pass.drawcalls.len) {
+                        self.pass_idx += 1;
+                        self.draw_idx = 0;
+                        continue;
+                    }
+
+                    const draw = pass.drawcalls[self.draw_idx];
+
+                    // Select the list based on current stage
+                    const current_list = if (self.stage_idx == 0)
+                        draw.vertex_samplers
+                    else
+                        draw.fragment_samplers;
+
+                    // Iterate through the current sampler list
+                    if (self.sampler_idx < current_list.len) {
+                        const sampler = current_list[self.sampler_idx];
+                        self.sampler_idx += 1; // Advance index immediately
+                        return .{ .sampler = sampler.sampler };
+                    }
+
+                    // End of current list reached: reset sampler, move to next stage
+                    self.sampler_idx = 0;
+                    self.stage_idx += 1;
+
+                    // If we finished both stages (0 and 1), move to next drawcall
+                    if (self.stage_idx > 1) {
+                        self.stage_idx = 0;
+                        self.draw_idx += 1;
+                    }
+                }
+
+                return null;
+            }
+        };
     };
 }
 

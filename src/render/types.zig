@@ -111,6 +111,8 @@ pub const VertexAttributes = packed struct {
     normals: bool = false,
     colors: bool = false,
     uvs: bool = false,
+    tangents: bool = false,
+    bitangents: bool = false,
 };
 
 pub fn attribFormat(comptime attrib_name: []const u8) VertexFormat {
@@ -123,6 +125,8 @@ pub fn attribFormat(comptime attrib_name: []const u8) VertexFormat {
         .normals => .float3,
         .colors => .float3,
         .uvs => .float2,
+        .tangents => .float3,
+        .bitangents => .float3,
     };
 }
 
@@ -131,6 +135,8 @@ pub const VertexData = struct {
     normals: []const f32 = &.{},
     colors: []const f32 = &.{},
     uvs: []const f32 = &.{},
+    tangents: []const f32 = &.{},
+    bitangents: []const f32 = &.{},
 };
 
 pub const VertexBuffers = struct {
@@ -138,6 +144,8 @@ pub const VertexBuffers = struct {
     normals: ?*c.SDL_GPUBuffer,
     colors: ?*c.SDL_GPUBuffer,
     uvs: ?*c.SDL_GPUBuffer,
+    tangents: ?*c.SDL_GPUBuffer,
+    bitangents: ?*c.SDL_GPUBuffer,
 };
 
 // Assert that structs above have matching fields
@@ -183,3 +191,7 @@ pub const BlendState = struct {
         };
     }
 };
+
+pub const Filter = EnumFromC("Filter", .{});
+pub const SamplerMipmapMode = EnumFromC("SamplerMipmapMode", .{});
+pub const SamplerAddressMode = EnumFromC("SamplerAddressMode", .{});

@@ -5,17 +5,13 @@ layout(location = 1) in vec2 in_ndc;
 
 layout(location = 0) out vec4 out_color;
 
-layout(set = 2, binding = 0) uniform sampler2D u_InputTexture;
-layout(set = 2, binding = 1) uniform sampler2D u_NoiseTexture;
-
-layout(set = 3, binding = 0) uniform PushConstants {
-    float u_Time;
-};
+layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
+layout(set = 2, binding = 1) uniform sampler2D u_noise_texture;
 
 #include <lib/color.glsl>
 
 vec3 bright(vec2 uv) {
-    return max(texture(u_InputTexture, uv).rgb - 1., 0.);
+    return max(texture(u_input_texture, uv).rgb - 1., 0.);
 }
 
 vec2 ndc_to_uv(vec2 ndc) {
@@ -25,9 +21,9 @@ vec2 ndc_to_uv(vec2 ndc) {
 void main() {
     // Chromatic aberration
     vec3 color = vec3(
-            texture(u_InputTexture, in_uv + vec2(-1. / WIDTH, 0.)).r,
-            texture(u_InputTexture, in_uv).g,
-            texture(u_InputTexture, in_uv + vec2(1. / WIDTH, 0.)).b
+            texture(u_input_texture, in_uv + vec2(-1. / WIDTH, 0.)).r,
+            texture(u_input_texture, in_uv).g,
+            texture(u_input_texture, in_uv + vec2(1. / WIDTH, 0.)).b
         );
 
     // Radial blur
@@ -43,7 +39,7 @@ void main() {
     // Noise
     float noise_amount = 0.06;
     ivec2 noise_uv = ivec2(gl_FragCoord.xy) % 64;
-    color += texelFetch(u_NoiseTexture, noise_uv, 0).r * noise_amount;
+    color += texelFetch(u_noise_texture, noise_uv, 0).r * noise_amount;
 
     // Output
     // https://64.github.io/tonemapping/

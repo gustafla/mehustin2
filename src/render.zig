@@ -30,6 +30,8 @@ const FontKey = schema.FontKey(config);
 const font_set = schema.ComptimeSet(FontKey);
 const InstanceKey = schema.InstanceKey(config);
 const instance_set = schema.ComptimeSet(InstanceKey);
+const SamplerKey = schema.SamplerKey(config);
+const sampler_set = schema.ComptimeSet(SamplerKey);
 
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
@@ -46,7 +48,7 @@ const max_instance_attributes = schema.fold(config.passes, &.{
 var gpa: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
-var nearest: *c.SDL_GPUSampler = undefined;
+var samplers: [sampler_set.keys.len]*c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var font_textures: [font_set.keys.len]*c.SDL_GPUTexture = undefined;
@@ -81,7 +83,9 @@ pub fn deinit() void {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
     c.SDL_ReleaseGPUTexture(device, output_buffer);
-    c.SDL_ReleaseGPUSampler(device, nearest);
+    for (samplers) |sampler| {
+        c.SDL_ReleaseGPUSampler(device, sampler);
+    }
     for (font_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
@@ -509,19 +513,25 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     window = win;
     device = dev;
 
-    nearest = try sdlerr(c.SDL_CreateGPUSampler(device, &std.mem.zeroInit(
-        c.SDL_GPUSamplerCreateInfo,
-        .{
-            .min_filter = c.SDL_GPU_FILTER_NEAREST,
-            .mag_filter = c.SDL_GPU_FILTER_NEAREST,
-            .mipmap_mode = c.SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
-            .address_mode_u = c.SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,
-            .address_mode_v = c.SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,
-            .address_mode_w = c.SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT,
-            // .max_lod =
-        },
-    )));
-    errdefer c.SDL_ReleaseGPUSampler(device, nearest);
+    for (sampler_set.keys, &samplers) |key, *sampler| {
+        const s = key.sampler;
+        sampler.* = try sdlerr(c.SDL_CreateGPUSampler(device, &.{
+            .min_filter = @intFromEnum(s.min_filter),
+            .mag_filter = @intFromEnum(s.mag_filter),
+            .mipmap_mode = @intFromEnum(s.mipmap_mode),
+            .address_mode_u = @intFromEnum(s.address_mode_u),
+            .address_mode_v = @intFromEnum(s.address_mode_v),
+            .address_mode_w = @intFromEnum(s.address_mode_w),
+            .mip_lod_bias = s.mip_lod_bias,
+            .max_anisotropy = s.max_anisotropy,
+            .compare_op = @intFromEnum(s.compare_op),
+            .min_lod = s.min_lod,
+            .max_lod = s.max_lod,
+            .enable_anisotropy = s.enable_anisotropy,
+            .enable_compare = s.enable_compare,
+        }));
+        errdefer c.SDL_ReleaseGPUSampler(device, sampler.*);
+    }
 
     output_buffer = try initColorTexture(.swapchain, .{});
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
@@ -627,18 +637,18 @@ pub fn render(time: f32) !void {
     // Compute viewport preserving aspect ratio rendering to swapchain
     const swapchain_viewport = viewport(width, height);
 
-    // Compute view & projection matrices
-    const matrices: extern struct {
-        projection: math.Mat4,
-        view: math.Mat4,
+    // Initialize vertex shader uniform buffer
+    const vertex_uniforms: extern struct {
+        view_projection: math.Mat4,
+        cam_pos: [4]f32,
+        time: f32,
     } = .{
-        .projection = math.Mat4.perspective(
+        .view_projection = math.Mat4.perspective(
             math.radians(90),
             render_aspect,
             1,
             4096,
-        ),
-        .view = math.Mat4.lookAt(
+        ).mmul(math.Mat4.lookAt(
             if (time > 14) .{
                 @sin((time - 14) / 4 * std.math.pi) * 3,
                 @sin((time - 14) / 8 * std.math.pi) * 2,
@@ -646,15 +656,37 @@ pub fn render(time: f32) !void {
             } else .{ 0, 0, 4 },
             math.vec3.ZERO,
             math.vec3.YUP,
-        ),
-    };
-
-    // Initialize uniforms
-    const uniforms: extern struct {
-        time: f32,
-    } = .{
+        )),
+        .cam_pos = .{ 0, 0, 0, 1 },
         .time = time,
     };
+
+    // Initialize fragment shader uniform buffer
+    const fragment_uniforms: extern struct {
+        sun_dir_intensity: [4]f32,
+        sun_color_ambient: [4]f32,
+        time: f32,
+    } = .{
+        .sun_dir_intensity = .{ 0, -1, 0, 1 },
+        .sun_color_ambient = .{ 1, 1, 1, 0.25 },
+        .time = time,
+    };
+
+    // Push uniforms
+    // Reminder, 1 uniform buffer per shader is hardcoded at shader creation:
+    comptime std.debug.assert(schema.num_uniform_buffers == 1);
+    c.SDL_PushGPUVertexUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&vertex_uniforms),
+        @sizeOf(@TypeOf(vertex_uniforms)),
+    );
+    c.SDL_PushGPUFragmentUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&fragment_uniforms),
+        @sizeOf(@TypeOf(fragment_uniforms)),
+    );
 
     // Compute noise texture
     const nd: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
@@ -785,47 +817,17 @@ pub fn render(time: f32) !void {
                 },
             }) |stage| {
                 inline for (stage.tex, 0..) |tex, slot| {
+                    const sampler_idx = comptime sampler_set.getIndex(.{ .sampler = tex.sampler });
                     stage.bind(render_pass, @intCast(slot), &.{
-                        .texture = switch (tex) {
+                        .texture = switch (tex.texture) {
                             .color => |i| color_textures[i],
                             .depth => |i| depth_textures[i],
                             .font => |f| font_textures[comptime font_set.getIndex(.{ .font = f })],
                             .image => |s| image_textures[comptime image_set.getIndex(.{ .name = s })],
                             .simplex2 => noise_texture,
                         },
-                        .sampler = nearest,
+                        .sampler = samplers[sampler_idx],
                     }, 1);
-                }
-            }
-
-            // Push uniforms
-            inline for (.{
-                .{
-                    .push = c.SDL_PushGPUVertexUniformData,
-                    .ufms = drawcall.vertex_uniforms,
-                },
-                .{
-                    .push = c.SDL_PushGPUFragmentUniformData,
-                    .ufms = drawcall.fragment_uniforms,
-                },
-            }) |stage| {
-                inline for (stage.ufms, 0..) |ufm, slot| {
-                    const param: struct { *const anyopaque, u32 } = switch (ufm) {
-                        .matrices => .{
-                            @ptrCast(&matrices),
-                            @sizeOf(@TypeOf(matrices)),
-                        },
-                        .shadertoy => .{
-                            @ptrCast(&uniforms),
-                            @sizeOf(@TypeOf(uniforms)),
-                        },
-                    };
-                    stage.push(
-                        cmdbuf,
-                        @intCast(slot),
-                        param[0],
-                        param[1],
-                    );
                 }
             }
 
