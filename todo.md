@@ -1,8 +1,7 @@
 # High priority
 
-- [ ] Remove uniform bindings from render config (https://wiki.libsdl.org/SDL3/CategoryGPU#uniform-data)
-- [ ] Sampler configuration (sampler set)
-- [ ] Dual Kawase blur
+- [X] Dual Kawase blur
+  - [ ] Add pass chain macro to render.zon syntax
   - https://blog.frost.kiwi/dual-kawase/
   - [ ] Bloom
 - [ ] Dynamic text buffers
@@ -45,6 +44,8 @@
 
 # Done
 
+- [X] Remove uniform bindings from render config (https://wiki.libsdl.org/SDL3/CategoryGPU#uniform-data)
+- [X] Sampler configuration (sampler set)
 - [X] Write comptime function for generating Zig enums from SDL GPU enums
 - [X] Blending
 - [X] Text SDF rendering
