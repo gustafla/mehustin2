@@ -644,7 +644,7 @@ pub fn render(time: f32) !void {
     const swapchain_viewport = viewport(width, height);
 
     // Initialize vertex shader uniform buffer
-    const vertex_uniforms: extern struct {
+    const vertex_frame_uniforms: extern struct {
         view_projection: math.Mat4,
         cam_pos: [4]f32,
         time: f32,
@@ -668,7 +668,7 @@ pub fn render(time: f32) !void {
     };
 
     // Initialize fragment shader uniform buffer
-    const fragment_uniforms: extern struct {
+    const fragment_frame_uniforms: extern struct {
         sun_dir_intensity: [4]f32,
         sun_color_ambient: [4]f32,
         time: f32,
@@ -678,20 +678,21 @@ pub fn render(time: f32) !void {
         .time = time,
     };
 
-    // Push uniforms
-    // Reminder, 1 uniform buffer per shader is hardcoded at shader creation:
-    comptime std.debug.assert(schema.num_uniform_buffers == 1);
+    // Push frame uniforms
+    // Reminder, per shader uniform counts are hardcoded at shader creation:
+    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
+    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
     c.SDL_PushGPUVertexUniformData(
         cmdbuf,
         0,
-        @ptrCast(&vertex_uniforms),
-        @sizeOf(@TypeOf(vertex_uniforms)),
+        @ptrCast(&vertex_frame_uniforms),
+        @sizeOf(@TypeOf(vertex_frame_uniforms)),
     );
     c.SDL_PushGPUFragmentUniformData(
         cmdbuf,
         0,
-        @ptrCast(&fragment_uniforms),
-        @sizeOf(@TypeOf(fragment_uniforms)),
+        @ptrCast(&fragment_frame_uniforms),
+        @sizeOf(@TypeOf(fragment_frame_uniforms)),
     );
 
     // Compute noise texture
@@ -747,6 +748,26 @@ pub fn render(time: f32) !void {
             }
             break :blk infos;
         };
+
+        // Push pass uniforms
+        const p: f32, const q: f32 = switch (pass.color_targets[0]) {
+            .index => |index| .{
+                @floatFromInt(config.color_textures[index].p),
+                @floatFromInt(config.color_textures[index].q),
+            },
+            .swapchain => .{ 1, 1 },
+        };
+        const fragment_pass_uniforms: extern struct {
+            target_scale: f32,
+        } = .{
+            .target_scale = p / q,
+        };
+        c.SDL_PushGPUFragmentUniformData(
+            cmdbuf,
+            1,
+            @ptrCast(&fragment_pass_uniforms),
+            @sizeOf(@TypeOf(fragment_pass_uniforms)),
+        );
 
         // Begin render pass
         const render_pass = c.SDL_BeginGPURenderPass(

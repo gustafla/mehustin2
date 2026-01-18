@@ -5,8 +5,10 @@ layout(location = 0) in vec2 FragCoord;
 
 layout(location = 0) out vec4 FragColor;
 
-layout(set = 3, binding = 0) uniform PushConstants {
-    float u_Time;
+layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
+    vec4 u_sun_dir_intensity;
+    vec4 u_sun_color_ambient;
+    float u_time;
 };
 
 #define EPSILON 0.001
@@ -86,8 +88,8 @@ vec3 aces_approx(vec3 v) {
     return clamp((v * (a * v + b)) / (v * (c * v + d) + e), 0.0f, 1.0f);
 }
 void main() {
-    vec3 cam_pos = vec3(sin(u_Time * 0.2), sin(u_Time * 0.3), sin(u_Time * 0.4));
-    vec3 cam_target = vec3(sin(u_Time * 0.54), sin(u_Time * 0.31), sin(u_Time * 0.14)) / 3. + vec3(0., 0., 3.);
+    vec3 cam_pos = vec3(sin(u_time * 0.2), sin(u_time * 0.3), sin(u_time * 0.4));
+    vec3 cam_target = vec3(sin(u_time * 0.54), sin(u_time * 0.31), sin(u_time * 0.14)) / 3. + vec3(0., 0., 3.);
 
     vec3 ray = viewMatrix(cam_target, cam_pos) * cameraRay();
 
@@ -96,9 +98,9 @@ void main() {
     vec2 uv = vec2(atan(pos.y, pos.x) + PI, pos.z / RADIUS) / (2. * PI);
 
     vec4 plights[3] = vec4[](
-            vec4(sine(u_Time, 0.34, 0.) * RADIUS * 0.5, sine(u_Time, 0.49, 0.) * RADIUS * 0.5, -sine(u_Time, 0.13, 0.) * 80. - 20., 190.),
-            vec4(sine(u_Time, 0.19, 0.) * RADIUS * 0.5, sine(u_Time, 0.44, 0.) * RADIUS * 0.5, -sine(u_Time, 0.21, 0.) * 100. - 20., 300.),
-            vec4(sine(u_Time, 0.10, 0.) * RADIUS * 0.5, sine(u_Time, 0.53, 0.) * RADIUS * 0.5, -sine(u_Time, 0.54, 0.) * 45. - 20., 100.)
+            vec4(sine(u_time, 0.34, 0.) * RADIUS * 0.5, sine(u_time, 0.49, 0.) * RADIUS * 0.5, -sine(u_time, 0.13, 0.) * 80. - 20., 190.),
+            vec4(sine(u_time, 0.19, 0.) * RADIUS * 0.5, sine(u_time, 0.44, 0.) * RADIUS * 0.5, -sine(u_time, 0.21, 0.) * 100. - 20., 300.),
+            vec4(sine(u_time, 0.10, 0.) * RADIUS * 0.5, sine(u_time, 0.53, 0.) * RADIUS * 0.5, -sine(u_time, 0.54, 0.) * 45. - 20., 100.)
         );
 
     float light = 0.;
@@ -113,6 +115,6 @@ void main() {
             ) * plights[i].w;
     }
 
-    vec3 albedo = tex(uv, u_Time) * sine(uv.x, 2. * PI, PI) + tex(vec2(mod(uv.x + 0.5, 1.), uv.y), u_Time) * sine(uv.x, 2. * PI, 0.);
+    vec3 albedo = tex(uv, u_time) * sine(uv.x, 2. * PI, PI) + tex(vec2(mod(uv.x + 0.5, 1.), uv.y), u_time) * sine(uv.x, 2. * PI, 0.);
     FragColor = vec4(aces_approx(light * albedo + direct), 1.);
 }

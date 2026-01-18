@@ -12,7 +12,8 @@ const Filter = types.Filter;
 const SamplerMipmapMode = types.SamplerMipmapMode;
 const SamplerAddressMode = types.SamplerAddressMode;
 
-pub const num_uniform_buffers = 1;
+pub const num_vertex_uniform_buffers = 1;
+pub const num_fragment_uniform_buffers = 2;
 
 pub const VertexSource = union(enum) {
     static: VertexData,
@@ -256,13 +257,13 @@ pub fn PipelineKey(comptime config: Config) type {
                     .num_samplers = drawcall.vertex_samplers.len,
                     .num_storage_textures = 0,
                     .num_storage_buffers = 0,
-                    .num_uniform_buffers = num_uniform_buffers,
+                    .num_uniform_buffers = num_vertex_uniform_buffers,
                 },
                 .frag_info = .{
                     .num_samplers = drawcall.fragment_samplers.len,
                     .num_storage_textures = 0,
                     .num_storage_buffers = 0,
-                    .num_uniform_buffers = num_uniform_buffers,
+                    .num_uniform_buffers = num_fragment_uniform_buffers,
                 },
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,

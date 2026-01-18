@@ -3,7 +3,7 @@
 layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
-layout(std140, set = 3, binding = 0) uniform FragmentPushData {
+layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
     vec4 u_sun_dir_intensity;
     vec4 u_sun_color_ambient;
     float u_time;

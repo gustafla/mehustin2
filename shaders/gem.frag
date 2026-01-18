@@ -5,8 +5,10 @@ layout(location = 0) in vec2 FragCoord;
 
 layout(location = 0) out vec4 FragColor;
 
-layout(set = 3, binding = 0) uniform PushConstants {
-    float u_Time;
+layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
+    vec4 u_sun_dir_intensity;
+    vec4 u_sun_color_ambient;
+    float u_time;
 };
 
 #define EPSILON 0.0001
@@ -88,9 +90,9 @@ float sdOctahedron(vec3 p, float s) {
 
 float sdf(vec3 pos) {
     float o1 = sdOctahedron(pos, 1.);
-    float o2 = sdOctahedron(pitch(u_Time * 0.33) * pos, 1.);
-    float o3 = sdOctahedron(yaw(u_Time * 0.2342134) * pos, 1.);
-    float o4 = sdOctahedron(roll(u_Time * 0.434) * pos, 1.);
+    float o2 = sdOctahedron(pitch(u_time * 0.33) * pos, 1.);
+    float o3 = sdOctahedron(yaw(u_time * 0.2342134) * pos, 1.);
+    float o4 = sdOctahedron(roll(u_time * 0.434) * pos, 1.);
     return opUnion(o1, opUnion(o2, opUnion(o3, o4)));
 }
 
@@ -192,7 +194,7 @@ void main() {
     vec2 uv = FragCoord;
 
     // Camera parameters
-    vec3 origin = vec3(sin(u_Time) * 3., cos(u_Time), cos(u_Time) * 3.);
+    vec3 origin = vec3(sin(u_time) * 3., cos(u_time), cos(u_time) * 3.);
     vec3 lookAt = vec3(0.);
 
     // Direction to scene

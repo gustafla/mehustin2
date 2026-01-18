@@ -3,7 +3,7 @@
 layout(location = 0) in vec3 in_position;
 layout(location = 2) in vec3 in_color;
 
-layout(std140, set = 1, binding = 0) uniform VertexPushData {
+layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
     vec4 u_cam_pos;
     float u_time;
