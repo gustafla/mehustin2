@@ -6,7 +6,8 @@ layout(location = 1) in vec2 in_ndc;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
-layout(set = 2, binding = 1) uniform sampler2D u_noise_texture;
+layout(set = 2, binding = 1) uniform sampler2D u_blur_texture;
+layout(set = 2, binding = 2) uniform sampler2D u_noise_texture;
 
 #include <lib/color.glsl>
 
@@ -32,6 +33,9 @@ void main() {
         vec2 scaled_ndc = in_ndc / (1.0 + prog);
         color += bright(ndc_to_uv(scaled_ndc)) * (1. / 32.) * (1. - prog);
     }
+
+    // Kawase blur
+    color += texture(u_blur_texture, in_uv).rgb;
 
     // Vignette
     color = color - length(in_ndc) * 0.2;

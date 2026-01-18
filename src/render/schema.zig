@@ -517,6 +517,7 @@ pub fn ComptimeSet(comptime T: type) type {
         pub const keys = keys_array;
 
         pub fn getIndex(comptime key: T) usize {
+            @setEvalBranchQuota(10000);
             for (keys, 0..) |k, i| {
                 if (std.meta.eql(k, key)) return i;
             }
