@@ -541,13 +541,19 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (config.color_textures, &color_textures) |format, *texture| {
-        texture.* = try initColorTexture(format, .{});
+    for (config.color_textures, &color_textures) |tex, *texture| {
+        texture.* = try initColorTexture(tex.format, .{
+            .width = main_config.width * tex.p / tex.q,
+            .height = main_config.height * tex.p / tex.q,
+        });
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (config.depth_textures, &depth_textures) |format, *texture| {
-        texture.* = try initDepthTexture(format, .{});
+    for (config.depth_textures, &depth_textures) |tex, *texture| {
+        texture.* = try initDepthTexture(tex.format, .{
+            .width = main_config.width * tex.p / tex.q,
+            .height = main_config.height * tex.p / tex.q,
+        });
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 

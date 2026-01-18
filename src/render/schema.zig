@@ -102,9 +102,15 @@ pub const Pass = struct {
     depth_target: ?usize = null,
 };
 
+pub const TargetTexture = struct {
+    format: TextureFormat,
+    p: u32 = 1,
+    q: u32 = 1,
+};
+
 pub const Config = struct {
-    color_textures: []const TextureFormat = &.{},
-    depth_textures: []const TextureFormat = &.{},
+    color_textures: []const TargetTexture = &.{},
+    depth_textures: []const TargetTexture = &.{},
     vertices: []const VertexSource,
     passes: []const Pass,
     noise_size: u32 = 256,
@@ -240,7 +246,7 @@ pub fn PipelineKey(comptime config: Config) type {
             var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
             for (pass.color_targets, 0..) |format, i| {
                 color_targets[i] = switch (format) {
-                    .index => |idx| config.color_textures[idx],
+                    .index => |idx| config.color_textures[idx].format,
                     .swapchain => .swapchain,
                 };
             }
@@ -260,7 +266,7 @@ pub fn PipelineKey(comptime config: Config) type {
                 },
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
-                .depth_target = if (pass.depth_target) |i| config.depth_textures[i] else null,
+                .depth_target = if (pass.depth_target) |i| config.depth_textures[i].format else null,
             };
         }
     };

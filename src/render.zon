@@ -1,9 +1,12 @@
 .{
     .color_textures = .{
-        .r11g11b10_ufloat,
+        .{ .format = .r11g11b10_ufloat },
+        .{ .format = .r11g11b10_ufloat, .q = 2 },
+        .{ .format = .r11g11b10_ufloat, .q = 4 },
+        .{ .format = .r11g11b10_ufloat, .q = 8 },
     },
     .depth_textures = .{
-        .d16_unorm,
+        .{ .format = .d16_unorm },
     },
     .passes = .{
         // Main render pass
