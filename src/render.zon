@@ -37,12 +37,12 @@
             .color_targets = .{.{ .index = 0 }},
             .depth_target = 0,
         },
-        // Kawase blur down 1/2
+        // Bloom prefilter to 1/2
         .{
             .drawcalls = .{
                 .{
                     .pipelines = .{
-                        .{ .frag = "dual_kawase_down.frag" },
+                        .{ .frag = "bloom_prefilter.frag" },
                     },
                     .fragment_samplers = .{.{
                         .texture = .{ .color = 0 },

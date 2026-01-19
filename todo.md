@@ -1,23 +1,22 @@
 # High priority
 
-- [X] Dual Kawase blur
-  - [ ] Add pass chain macro to render.zon syntax
-  - https://blog.frost.kiwi/dual-kawase/
-  - [ ] Bloom
-- [ ] Dynamic text buffers
+- [ ] Compute passes
+- [ ] 3D instance buffers
 - [ ] Particle rendering
 - [ ] Procedural mesh generation
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
-- [ ] Sequencing
+- [ ] Clip sequencing
   - [ ] Transitions
-- [ ] Sync system
-  - [ ] Camera tracks
-  - [ ] Parameter tracks
+- [ ] Parameter tracks
+- [ ] Camera tracks
+- [ ] Scene state
 
 # Backlog
 
+- [ ] Dynamic text buffers
+- [ ] Add pass chain macro to render.zon syntax
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] DoF
   - [ ] Bokeh sprites
@@ -44,6 +43,9 @@
 
 # Done
 
+- [X] Dual Kawase blur
+  - https://blog.frost.kiwi/dual-kawase/
+  - [X] Bloom
 - [X] Remove uniform bindings from render config (https://wiki.libsdl.org/SDL3/CategoryGPU#uniform-data)
 - [X] Sampler configuration (sampler set)
 - [X] Write comptime function for generating Zig enums from SDL GPU enums

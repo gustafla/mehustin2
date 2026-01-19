@@ -7,3 +7,7 @@ vec3 acesApprox(vec3 v) {
     float e = 0.14;
     return clamp((v * (a * v + b)) / (v * (c * v + d) + e), 0., 1.);
 }
+
+float brightness(vec3 v) {
+    return dot(v, vec3(0.2126, 0.7152, 0.0722));
+}
