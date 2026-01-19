@@ -733,7 +733,7 @@ pub fn render(time: f32) !void {
             var infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
             for (pass.color_targets, &infos) |target, *info| {
                 info.* = .{
-                    .texture = switch (target) {
+                    .texture = switch (target.target) {
                         .index => |index| color_textures[index],
                         .swapchain => if (resolution_match)
                             swapchain_texture
@@ -741,16 +741,16 @@ pub fn render(time: f32) !void {
                             output_buffer,
                     },
                     .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
-                    .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                    .load_op = @intFromEnum(target.load_op),
                     .store_op = c.SDL_GPU_STOREOP_STORE,
-                    .cycle = true,
+                    .cycle = target.load_op != .load,
                 };
             }
             break :blk infos;
         };
 
         // Push pass uniforms
-        const p: f32, const q: f32 = switch (pass.color_targets[0]) {
+        const p: f32, const q: f32 = switch (pass.color_targets[0].target) {
             .index => |index| .{
                 @floatFromInt(config.color_textures[index].p),
                 @floatFromInt(config.color_textures[index].q),
@@ -787,7 +787,7 @@ pub fn render(time: f32) !void {
 
         // Set viewport if necessary
         const target_swapchain = comptime for (pass.color_targets) |target| {
-            if (target == .swapchain) break true;
+            if (target.target == .swapchain) break true;
         } else false;
         if (target_swapchain and resolution_match) {
             c.SDL_SetGPUViewport(render_pass, &swapchain_viewport);

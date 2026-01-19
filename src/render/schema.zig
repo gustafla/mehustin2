@@ -11,6 +11,7 @@ const BlendState = types.BlendState;
 const Filter = types.Filter;
 const SamplerMipmapMode = types.SamplerMipmapMode;
 const SamplerAddressMode = types.SamplerAddressMode;
+const LoadOp = types.LoadOp;
 
 pub const num_vertex_uniform_buffers = 1;
 pub const num_fragment_uniform_buffers = 2;
@@ -51,9 +52,14 @@ pub const DrawNum = union(enum) {
     num: u32,
 };
 
-pub const ColorTarget = union(enum) {
+pub const ColorTargetHandle = union(enum) {
     index: usize,
     swapchain,
+};
+
+pub const ColorTarget = struct {
+    target: ColorTargetHandle,
+    load_op: LoadOp = .clear,
 };
 
 pub const Texture = union(enum) {
@@ -99,7 +105,7 @@ pub const Drawcall = struct {
 
 pub const Pass = struct {
     drawcalls: []const Drawcall,
-    color_targets: []const ColorTarget = &.{.swapchain},
+    color_targets: []const ColorTarget = &.{.{ .target = .swapchain }},
     depth_target: ?usize = null,
 };
 
@@ -245,8 +251,8 @@ pub fn PipelineKey(comptime config: Config) type {
             comptime pipeline: Pipeline,
         ) @This() {
             var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
-            for (pass.color_targets, 0..) |format, i| {
-                color_targets[i] = switch (format) {
+            for (pass.color_targets, 0..) |target, i| {
+                color_targets[i] = switch (target.target) {
                     .index => |idx| config.color_textures[idx].format,
                     .swapchain => .swapchain,
                 };

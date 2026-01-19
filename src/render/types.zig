@@ -195,3 +195,6 @@ pub const BlendState = struct {
 pub const Filter = EnumFromC("Filter", .{});
 pub const SamplerMipmapMode = EnumFromC("SamplerMipmapMode", .{});
 pub const SamplerAddressMode = EnumFromC("SamplerAddressMode", .{});
+
+pub const LoadOp = EnumFromC("LoadOp", .{});
+pub const StoreOp = EnumFromC("StoreOp", .{});
