@@ -1,7 +1,6 @@
 #version 450
 
 layout(location = 0) in vec2 in_uv;
-layout(location = 1) in vec2 in_ndc;
 
 layout(location = 0) out vec4 out_color;
 
@@ -11,14 +10,6 @@ layout(set = 2, binding = 2) uniform sampler2D u_noise_texture;
 
 #include <lib/color.glsl>
 
-vec3 bright(vec2 uv) {
-    return max(texture(u_input_texture, uv).rgb - 1., 0.);
-}
-
-vec2 ndc_to_uv(vec2 ndc) {
-    return vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-}
-
 void main() {
     // Chromatic aberration
     vec3 color = vec3(
@@ -27,18 +18,11 @@ void main() {
             texture(u_input_texture, in_uv + vec2(1. / WIDTH, 0.)).b
         );
 
-    // Radial blur
-    for (int i = 0; i < 64; i++) {
-        float prog = float(i) / 64.;
-        vec2 scaled_ndc = in_ndc / (1.0 + prog);
-        color += bright(ndc_to_uv(scaled_ndc)) * (1. / 32.) * (1. - prog);
-    }
-
     // Bloom
     color += texture(u_bloom_texture, in_uv).rgb * 2.;
 
     // Vignette
-    color = color - length(in_ndc) * 0.2;
+    color = color - length(in_uv - vec2(0.5)) * 0.4;
 
     // Noise
     float noise_amount = 0.06;
