@@ -12,6 +12,7 @@ const Filter = types.Filter;
 const SamplerMipmapMode = types.SamplerMipmapMode;
 const SamplerAddressMode = types.SamplerAddressMode;
 const LoadOp = types.LoadOp;
+const StoreOp = types.StoreOp;
 
 pub const num_vertex_uniform_buffers = 1;
 pub const num_fragment_uniform_buffers = 2;
@@ -52,15 +53,18 @@ pub const DrawNum = union(enum) {
     num: u32,
 };
 
-pub const ColorTargetHandle = union(enum) {
+pub const ColorTarget = union(enum) {
     index: usize,
     swapchain,
 };
 
-pub const ColorTarget = struct {
-    target: ColorTargetHandle,
-    load_op: LoadOp = .clear,
-};
+pub fn RenderTarget(T: type) type {
+    return struct {
+        target: T,
+        load_op: LoadOp = .clear,
+        store_op: StoreOp = .store,
+    };
+}
 
 pub const Texture = union(enum) {
     color: usize,
@@ -105,8 +109,8 @@ pub const Drawcall = struct {
 
 pub const Pass = struct {
     drawcalls: []const Drawcall,
-    color_targets: []const ColorTarget = &.{.{ .target = .swapchain }},
-    depth_target: ?usize = null,
+    color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
+    depth_target: ?RenderTarget(usize) = null,
 };
 
 pub const TargetTexture = struct {
@@ -273,7 +277,7 @@ pub fn PipelineKey(comptime config: Config) type {
                 },
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
-                .depth_target = if (pass.depth_target) |i| config.depth_textures[i].format else null,
+                .depth_target = if (pass.depth_target) |t| config.depth_textures[t.target].format else null,
             };
         }
     };

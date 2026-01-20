@@ -15,10 +15,10 @@
 
 # Backlog
 
-- [ ] Add option to have `store_op = .dont_care` for depth targets
 - [ ] Dynamic text buffers
 - [ ] Add pass chain macro to render.zon syntax
 - [ ] `tri.frag`: Add corner rays for interpolator
+- [ ] MSAA with resolve texture
 - [ ] DoF
   - [ ] Bokeh sprites
 - [ ] HDR textures from file
@@ -44,6 +44,7 @@
 
 # Done
 
+- [X] Add option to have `store_op = .dont_care` for depth targets
 - [X] Dual Kawase blur
   - https://blog.frost.kiwi/dual-kawase/
   - [X] Bloom

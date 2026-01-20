@@ -36,7 +36,7 @@
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 0 } }},
-            .depth_target = 0,
+            .depth_target = .{ .target = 0, .store_op = .dont_care },
         },
         // Bloom prefilter to 1/2
         .{

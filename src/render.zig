@@ -742,7 +742,7 @@ pub fn render(time: f32) !void {
                     },
                     .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
                     .load_op = @intFromEnum(target.load_op),
-                    .store_op = c.SDL_GPU_STOREOP_STORE,
+                    .store_op = @intFromEnum(target.store_op),
                     .cycle = target.load_op != .load,
                 };
             }
@@ -774,11 +774,11 @@ pub fn render(time: f32) !void {
             cmdbuf,
             &color_target_infos,
             @intCast(pass.color_targets.len),
-            if (pass.depth_target) |index| &.{
-                .texture = depth_textures[index],
+            if (pass.depth_target) |target| &.{
+                .texture = depth_textures[target.target],
                 .clear_depth = 1,
-                .load_op = c.SDL_GPU_LOADOP_CLEAR,
-                .store_op = c.SDL_GPU_STOREOP_STORE,
+                .load_op = @intFromEnum(target.load_op),
+                .store_op = @intFromEnum(target.store_op),
                 .stencil_load_op = c.SDL_GPU_LOADOP_DONT_CARE,
                 .stencil_store_op = c.SDL_GPU_STOREOP_DONT_CARE,
                 .cycle = true,
