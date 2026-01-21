@@ -106,63 +106,11 @@ pub fn vertexFormatLen(format: VertexFormat) u32 {
     };
 }
 
-pub const VertexAttributes = packed struct {
-    coords: bool = false,
-    normals: bool = false,
-    colors: bool = false,
-    uvs: bool = false,
-    tangents: bool = false,
-    bitangents: bool = false,
-};
-
-pub fn attribFormat(comptime attrib_name: []const u8) VertexFormat {
-    const field = std.meta.stringToEnum(
-        std.meta.FieldEnum(VertexAttributes),
-        attrib_name,
-    ) orelse unreachable;
-    return switch (field) {
-        .coords => .float3,
-        .normals => .float3,
-        .colors => .float3,
-        .uvs => .float2,
-        .tangents => .float3,
-        .bitangents => .float3,
-    };
-}
-
-pub const VertexData = struct {
-    coords: []const f32,
-    normals: []const f32 = &.{},
-    colors: []const f32 = &.{},
-    uvs: []const f32 = &.{},
-    tangents: []const f32 = &.{},
-    bitangents: []const f32 = &.{},
-};
-
-pub const VertexBuffers = struct {
-    coords: ?*c.SDL_GPUBuffer,
-    normals: ?*c.SDL_GPUBuffer,
-    colors: ?*c.SDL_GPUBuffer,
-    uvs: ?*c.SDL_GPUBuffer,
-    tangents: ?*c.SDL_GPUBuffer,
-    bitangents: ?*c.SDL_GPUBuffer,
-};
-
-// Assert that structs above have matching fields
-comptime {
-    const attributes_fields = @typeInfo(VertexAttributes).@"struct".fields;
-    const data_fields = @typeInfo(VertexData).@"struct".fields;
-    const buffers_fields = @typeInfo(VertexBuffers).@"struct".fields;
-    for (attributes_fields, data_fields, buffers_fields) |a, d, b| {
-        std.debug.assert(std.mem.eql(u8, a.name, d.name));
-        std.debug.assert(std.mem.eql(u8, a.name, b.name));
-    }
-}
-
 pub const TextureFormat = EnumFromC(
     "TextureFormat",
     .{ .extra_fields = &.{.swapchain} },
 );
+pub const TextureType = EnumFromC("TextureType", .{});
 
 pub const PrimitiveType = EnumFromC("PrimitiveType", .{});
 pub const CompareOp = EnumFromC("CompareOp", .{});

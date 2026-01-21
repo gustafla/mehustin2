@@ -7,39 +7,38 @@ const main_config = @import("config.zon");
 const options = @import("options");
 
 const c = @import("render/c.zig").c;
-const font = @import("render/font.zig");
 const math = @import("render/math.zig");
-const noise = @import("render/noise.zig");
 const schema = @import("render/schema.zig");
 const Config = schema.Config;
 const shader = @import("render/shader.zig");
 const types = @import("render/types.zig");
-const VertexAttributes = types.VertexAttributes;
-const VertexData = types.VertexData;
+const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
-const VertexBuffers = types.VertexBuffers;
-const resource = @import("resource.zig");
+const script = @import("script.zig");
 const sdlerr = @import("err.zig").sdlerr;
+
+const log = std.log.scoped(.render);
+
+// Generate buffer layout information
+pub const BufferLayout = schema.BufferLayoutEnum(config);
+const Buffer = schema.BufferEnum(config);
+const layout_pitch = schema.bufferLayoutPitch(config)[0..].*;
+
+// Generate texture information
+const Texture = schema.TextureEnum(config);
 
 // Generate sets of all unique configurations
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
-const ImageKey = schema.ImageKey(config);
-const image_set = schema.ComptimeSet(ImageKey);
-const FontKey = schema.FontKey(config);
-const font_set = schema.ComptimeSet(FontKey);
-const InstanceKey = schema.InstanceKey(config);
-const instance_set = schema.ComptimeSet(InstanceKey);
 const SamplerKey = schema.SamplerKey(config);
 const sampler_set = schema.ComptimeSet(SamplerKey);
 
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
 const render_aspect = render_width / render_height;
-const max_instance_attributes = schema.fold(config.passes, &.{
-    "drawcalls",
-    "pipelines",
-    "instance_attributes",
+const max_attributes = schema.fold(config, &.{
+    "layouts",
+    "format",
     "len",
 }, schema.max_field);
 
@@ -48,35 +47,38 @@ const max_instance_attributes = schema.fold(config.passes, &.{
 var gpa: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
+
 var samplers: [sampler_set.keys.len]*c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var font_textures: [font_set.keys.len]*c.SDL_GPUTexture = undefined;
-var image_textures: [image_set.keys.len]*c.SDL_GPUTexture = undefined;
 var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
 var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
-var noise_transfer: *c.SDL_GPUTransferBuffer = undefined;
-var noise_texture: *c.SDL_GPUTexture = undefined;
-var vertex_buffers: [config.vertices.len]VertexBuffers = undefined;
-var instance_buffers: [instance_set.keys.len]*c.SDL_GPUBuffer = undefined;
-var vertex_counts: [config.vertices.len]u32 = undefined;
-var instance_counts: [instance_set.keys.len]u32 = undefined;
+
+var textures: [config.textures.len]*c.SDL_GPUTexture = undefined;
+var texture_infos: [config.textures.len]script.TextureInit = undefined;
+var texture_sizes: [config.textures.len]u32 = undefined;
+var texture_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
+
+var buffers: [config.buffers.len]*c.SDL_GPUBuffer = undefined;
+var buffer_infos: [config.buffers.len]script.BufferInit = undefined;
+var buffer_sizes: [config.buffers.len]u32 = undefined;
+var buffer_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
 
 pub fn deinit() void {
-    for (vertex_buffers) |buf| {
-        inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
-            c.SDL_ReleaseGPUBuffer(device, @field(buf, field.name));
-        }
+    if (texture_transfer) |transfer_buffer| {
+        c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
     }
-    c.SDL_ReleaseGPUTexture(device, noise_texture);
-    c.SDL_ReleaseGPUTransferBuffer(device, noise_transfer);
+    if (buffer_transfer) |transfer_buffer| {
+        c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+    }
+
     for (depth_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
     for (color_textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
-    for (image_textures) |texture| {
+    for (textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
     for (pipelines) |pipeline| {
@@ -86,10 +88,7 @@ pub fn deinit() void {
     for (samplers) |sampler| {
         c.SDL_ReleaseGPUSampler(device, sampler);
     }
-    for (font_textures) |texture| {
-        c.SDL_ReleaseGPUTexture(device, texture);
-    }
-    for (instance_buffers) |buffer| {
+    for (buffers) |buffer| {
         c.SDL_ReleaseGPUBuffer(device, buffer);
     }
 
@@ -97,195 +96,6 @@ pub fn deinit() void {
     // if (builtin.mode == .Debug) {
     //     _ = debug_allocator.detectLeaks();
     // }
-}
-
-fn initText(
-    str: []const u8,
-    size: f32,
-    buffer: **c.SDL_GPUBuffer,
-    glyphs: *[128]font.GlyphInfo,
-) !u32 {
-    const Instance = extern struct {
-        uv_rect: [4]f32,
-        pos_rect: [4]f32,
-        color: [4]f32,
-    };
-    const buf = try gpa.alloc(Instance, str.len);
-    defer gpa.free(buf);
-
-    @memset(buf, std.mem.zeroes(Instance));
-
-    var x: f32 = 0;
-    var y: f32 = size;
-    var instances: u32 = 0;
-
-    for (str) |char| {
-        const g = glyphs[char];
-
-        if (char == '\n') {
-            y += size;
-            x = 0;
-            continue;
-        }
-
-        if (char == ' ') {
-            x += size / 2;
-            continue;
-        }
-
-        const p_min_x = x + g.x_off;
-        const p_min_y = y + g.y_off;
-
-        buf[instances] = .{
-            .uv_rect = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
-            .pos_rect = .{
-                p_min_x,
-                p_min_y,
-                p_min_x + g.width,
-                p_min_y + g.height,
-            },
-            .color = @splat(1),
-        };
-
-        x += g.advance;
-        instances += 1;
-    }
-
-    buffer.* = try initBuffer(Instance, buf, c.SDL_GPU_BUFFERUSAGE_VERTEX);
-    return instances;
-}
-
-fn initFont(
-    name: []const u8,
-    font_size: f32,
-    padding: u32,
-    dist_scale: f32,
-    width: u32,
-    height: u32,
-    glyph_data: *[128]font.GlyphInfo,
-) !*c.SDL_GPUTexture {
-    const path = try resource.dataFilePath(gpa, name);
-    defer gpa.free(path);
-    const ttf = try resource.loadFileZ(gpa, path);
-    defer gpa.free(ttf);
-
-    const texture = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-        .type = c.SDL_GPU_TEXTURETYPE_2D,
-        .format = c.SDL_GPU_TEXTUREFORMAT_R8_UNORM,
-        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        .width = @intCast(width),
-        .height = @intCast(height),
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-        .props = 0,
-    }));
-    errdefer c.SDL_ReleaseGPUTexture(device, texture);
-
-    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
-        .size = @intCast(width * height),
-        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-    }));
-    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
-    const atlas: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
-        device,
-        transfer_buffer,
-        false,
-    ))));
-
-    try font.bakeSDFAtlas(
-        ttf.ptr,
-        font_size,
-        padding,
-        dist_scale,
-        width,
-        height,
-        glyph_data,
-        atlas,
-    );
-
-    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
-
-    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
-    c.SDL_UploadToGPUTexture(
-        copy_pass,
-        &.{
-            .offset = 0,
-            .transfer_buffer = transfer_buffer,
-        },
-        &.{
-            .texture = texture,
-            .w = @intCast(width),
-            .h = @intCast(height),
-            .d = 1,
-        },
-        false,
-    );
-    c.SDL_EndGPUCopyPass(copy_pass);
-    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
-
-    return texture;
-}
-
-fn initImageTexture(name: []const u8) !*c.SDL_GPUTexture {
-    var width: c_int = 0;
-    var height: c_int = 0;
-    var n: c_int = 0;
-
-    const path = try resource.dataFilePath(gpa, name);
-    defer gpa.free(path);
-    const data: [*]u8 = c.stbi_load(path, &width, &height, &n, 4) orelse
-        return error.ImageLoadFailed;
-    defer c.stbi_image_free(data);
-    const size: usize = @intCast(width * height * 4);
-
-    const texture = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-        .type = c.SDL_GPU_TEXTURETYPE_2D,
-        .format = c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        .width = @intCast(width),
-        .height = @intCast(height),
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-        .props = 0,
-    }));
-    errdefer c.SDL_ReleaseGPUTexture(device, texture);
-
-    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
-        .size = @intCast(size),
-        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-    }));
-    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
-    const tbp: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
-        device,
-        transfer_buffer,
-        false,
-    ))));
-    @memcpy(tbp, data[0..size]);
-    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
-
-    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
-    c.SDL_UploadToGPUTexture(
-        copy_pass,
-        &.{
-            .offset = 0,
-            .transfer_buffer = transfer_buffer,
-        },
-        &.{
-            .texture = texture,
-            .w = @intCast(width),
-            .h = @intCast(height),
-            .d = 1,
-        },
-        false,
-    );
-    c.SDL_EndGPUCopyPass(copy_pass);
-    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
-
-    return texture;
 }
 
 fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
@@ -298,41 +108,7 @@ fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
     };
 }
 
-fn initColorTexture(
-    format: TextureFormat,
-    wh: struct { width: u32 = render_width, height: u32 = render_height },
-) !*c.SDL_GPUTexture {
-    return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-        .type = c.SDL_GPU_TEXTURETYPE_2D,
-        .format = resolveTextureFormat(format),
-        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-        .width = wh.width,
-        .height = wh.height,
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-        .props = 0,
-    }));
-}
-
-fn initDepthTexture(
-    format: TextureFormat,
-    wh: struct { width: u32 = render_width, height: u32 = render_height },
-) !*c.SDL_GPUTexture {
-    return try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-        .type = c.SDL_GPU_TEXTURETYPE_2D,
-        .format = resolveTextureFormat(format),
-        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        .width = wh.width,
-        .height = wh.height,
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-        .props = 0,
-    }));
-}
-
-fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
+fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
     const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
@@ -354,56 +130,51 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         };
     }
 
-    // First 0..va_locations vertex input locations are for VertexAttributes,
-    // i.e. 0 = coords, 1 = normals, ...
-    // Each vertex attribute is read from separate buffers.
-    const va_locations = @bitSizeOf(VertexAttributes);
-    const max_attribs = va_locations + max_instance_attributes;
-    var buffers: [max_attribs]c.SDL_GPUVertexBufferDescription = undefined;
-    var attribs: [max_attribs]c.SDL_GPUVertexAttribute = undefined;
+    var buffer_descs: [2]c.SDL_GPUVertexBufferDescription = undefined;
+    var attribs: [max_attributes * 2]c.SDL_GPUVertexAttribute = undefined;
     var num_buffers: u32 = 0;
     var num_attribs: u32 = 0;
-    inline for (@typeInfo(VertexAttributes).@"struct".fields, 0..) |field, location| {
-        const vertex_format = types.attribFormat(field.name);
-        const enabled = @field(pipeline.vertex_attributes, field.name);
-        if (enabled) {
-            buffers[num_buffers] = .{
-                .slot = num_buffers,
-                .pitch = types.vertexFormatLen(vertex_format),
-                .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX,
-                .instance_step_rate = 0,
-            };
-            attribs[num_attribs] = .{
-                .location = @intCast(location),
-                .buffer_slot = num_buffers,
-                .format = @intFromEnum(vertex_format),
-                .offset = 0,
-            };
-            num_buffers += 1;
-            num_attribs += 1;
-        }
-    }
 
-    // Subsequent va_locations.. vertex input locations are for instance attributes.
-    // Only one instance buffer with interleaved attributes is supported.
-    if (pipeline.instance_attributes.len > 0) {
-        var instance_attrib_offset: u32 = 0;
-        for (pipeline.instance_attributes, va_locations..) |attrib, location| {
-            attribs[num_attribs] = .{
-                .location = @intCast(location),
-                .buffer_slot = num_buffers,
-                .format = @intFromEnum(attrib),
-                .offset = instance_attrib_offset,
-            };
-            instance_attrib_offset += types.vertexFormatLen(attrib);
-            num_attribs += 1;
-        }
-        buffers[num_buffers] = .{
-            .slot = num_buffers,
-            .pitch = instance_attrib_offset,
-            .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE,
+    log.debug("Initializing vert: {s}, frag: {s}", .{
+        pipeline.vert,
+        pipeline.frag,
+    });
+
+    inline for (.{ "vertex", "instance" }, 0..) |buffer_type, buffer_slot| {
+        comptime var upper: [buffer_type.len]u8 = undefined;
+        comptime for (buffer_type, &upper) |src, *dst| {
+            dst.* = std.ascii.toUpper(src);
+        };
+        const field_name = buffer_type ++ "_layout";
+        const layout_name = comptime @field(pipeline, field_name) orelse continue;
+        const layout_idx = @intFromEnum(@field(BufferLayout, layout_name));
+
+        log.debug("    {s} layout: {s} ({})", .{
+            buffer_type,
+            layout_name,
+            layout_idx,
+        });
+
+        buffer_descs[num_buffers] = .{
+            .slot = @intCast(buffer_slot),
+            .pitch = layout_pitch[layout_idx],
+            .input_rate = @field(c, "SDL_GPU_VERTEXINPUTRATE_" ++ upper),
             .instance_step_rate = 0,
         };
+
+        const layout = config.layouts[layout_idx];
+        var offset: u32 = 0;
+        for (layout.format, layout.location) |format, location| {
+            attribs[num_attribs] = .{
+                .location = location,
+                .buffer_slot = @intCast(buffer_slot),
+                .format = @intFromEnum(format),
+                .offset = offset,
+            };
+            offset += types.vertexFormatLen(format);
+            num_attribs += 1;
+        }
+
         num_buffers += 1;
     }
 
@@ -411,7 +182,7 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         .vertex_shader = vert,
         .fragment_shader = frag,
         .vertex_input_state = .{
-            .vertex_buffer_descriptions = &buffers,
+            .vertex_buffer_descriptions = &buffer_descs,
             .num_vertex_buffers = num_buffers,
             .vertex_attributes = &attribs,
             .num_vertex_attributes = num_attribs,
@@ -439,68 +210,185 @@ fn initPipeline(key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         .target_info = .{
             .num_color_targets = key.num_color_targets,
             .color_target_descriptions = &color_targets,
-            .depth_stencil_format = @intFromEnum(key.depth_target orelse undefined),
+            .depth_stencil_format = @intFromEnum(key.depth_target orelse
+                TextureFormat.invalid),
             .has_depth_stencil_target = key.depth_target != null,
         },
         .props = 0,
     }));
 }
 
-fn initBuffer(
-    T: type,
-    data: []const T,
-    usage: c.SDL_GPUBufferUsageFlags,
-) !*c.SDL_GPUBuffer {
-    const size: u32 = @intCast(data.len * @sizeOf(T));
+fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
+    // Gather texture initialization metadata
+    inline for (config.textures, &texture_infos) |name, *info| {
+        info.* = try @field(script, "initTexture" ++ name)();
+    }
 
-    const buffer = try sdlerr(c.SDL_CreateGPUBuffer(
+    // Initialize textures and transfer buffer
+    var init_transfer_buffer_size: u32 = 0;
+    var update_transfer_buffer_size: u32 = 0;
+    inline for (
+        config.textures,
+        texture_infos,
+        &textures,
+        &texture_sizes,
+    ) |name, info, *texture, *size| {
+        size.* = c.SDL_CalculateGPUTextureFormatSize(
+            @intFromEnum(info.format),
+            info.width,
+            info.height,
+            info.depth,
+        );
+        texture.* =
+            try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+                .type = @intFromEnum(info.tex_type),
+                .format = @intFromEnum(info.format),
+                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+                .width = info.width,
+                .height = info.height,
+                .layer_count_or_depth = info.depth,
+                .num_levels = info.mip_levels,
+                .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+            }));
+        errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
+        if (info.initFn != null) {
+            init_transfer_buffer_size += size.*;
+        }
+        if (@hasDecl(script, "updateTexture" ++ name)) {
+            update_transfer_buffer_size += size.*;
+        }
+    }
+    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+        .size = init_transfer_buffer_size,
+        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    }));
+    // TODO: Does this cause problems, copy pass is submitted later...
+    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+
+    // Populate transfer buffer with data
+    var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        false,
+    )));
+    for (texture_infos, texture_sizes) |info, size| {
+        const initFn = info.initFn orelse continue;
+        initFn(info, tbp[0..size]);
+        tbp += size;
+    }
+    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    // Record transfer buffer uploads to textures
+    var offset: u32 = 0;
+    for (texture_infos, textures, texture_sizes) |info, texture, size| {
+        if (info.initFn == null) continue;
+        c.SDL_UploadToGPUTexture(
+            copy_pass,
+            &.{
+                .transfer_buffer = transfer_buffer,
+                .offset = offset,
+                .pixels_per_row = info.width,
+                .rows_per_layer = info.height,
+            },
+            &.{
+                .texture = texture,
+                .mip_level = 0,
+                .layer = 0,
+                .x = 0,
+                .y = 0,
+                .z = 0,
+                .w = info.width,
+                .h = info.height,
+                .d = info.depth,
+            },
+            false,
+        );
+        offset += size;
+    }
+
+    return update_transfer_buffer_size;
+}
+
+fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
+    // Gather buffer initialization metadata
+    inline for (config.buffers, &buffer_infos) |name, *info| {
+        info.* = try @field(script, "initBuffer" ++ name)();
+    }
+
+    // Initialize buffers and transfer buffer
+    var init_transfer_buffer_size: u32 = 0;
+    var update_transfer_buffer_size: u32 = 0;
+    inline for (
+        config.buffers,
+        buffer_infos,
+        &buffers,
+        &buffer_sizes,
+    ) |name, info, *buffer, *size| {
+        const element_size = layout_pitch[@intFromEnum(info.layout)];
+        size.* = info.elements * element_size;
+        buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
+            .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
+            .size = size.*,
+        }));
+        errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+        if (info.initFn != null) {
+            init_transfer_buffer_size += size.*;
+        }
+        if (@hasDecl(script, "updateBuffer" ++ name)) {
+            update_transfer_buffer_size += size.*;
+        }
+    }
+    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(
         device,
         &.{
-            .size = size,
-            .usage = usage,
-            .props = 0,
-        },
-    ));
-    errdefer c.SDL_ReleaseGPUBuffer(device, buffer);
-
-    const transferbuf = try sdlerr(c.SDL_CreateGPUTransferBuffer(
-        device,
-        &.{
-            .size = size,
+            .size = init_transfer_buffer_size,
             .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
             .props = 0,
         },
     ));
-    defer c.SDL_ReleaseGPUTransferBuffer(device, transferbuf);
-    const tbp: [*]T = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
-        device,
-        transferbuf,
-        false,
-    ))));
-    @memcpy(tbp, data);
-    c.SDL_UnmapGPUTransferBuffer(device, transferbuf);
+    // TODO: Does this cause problems, copy pass is submitted later...
+    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
 
-    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
-    c.SDL_UploadToGPUBuffer(
-        copy_pass,
-        &.{
-            .offset = 0,
-            .transfer_buffer = transferbuf,
-        },
-        &.{
-            .size = size,
-            .offset = 0,
-            .buffer = buffer,
-        },
+    // Populate transfer buffer with data
+    var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
         false,
-    );
-    c.SDL_EndGPUCopyPass(copy_pass);
-    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
-    return buffer;
+    )));
+    for (&buffer_infos, buffer_sizes) |*info, size| {
+        const initFn = info.initFn orelse continue;
+        const element_size = layout_pitch[@intFromEnum(info.layout)];
+        info.elements = initFn(info.*, element_size, tbp[0..size]);
+        tbp += size;
+    }
+    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    // Record transfer buffer uploads to buffers
+    var offset: u32 = 0;
+    for (buffer_infos, buffers, buffer_sizes) |info, buffer, size| {
+        if (info.initFn == null) continue;
+        c.SDL_UploadToGPUBuffer(
+            copy_pass,
+            &.{
+                .transfer_buffer = transfer_buffer,
+                .offset = offset,
+            },
+            &.{
+                .buffer = buffer,
+                .offset = 0,
+                .size = size,
+            },
+            false,
+        );
+        offset += size;
+    }
+
+    return update_transfer_buffer_size;
 }
 
 pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
+    errdefer |e| log.err("{s}", .{@errorName(e)});
+
     // Initialize allocator
     gpa =
         // TODO: https://github.com/ziglang/zig/issues/25026
@@ -512,6 +400,41 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
 
     window = win;
     device = dev;
+
+    // Pass gpa to script
+    script.init(gpa);
+
+    // Start copy pass
+    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+
+    // Initialize textures and runtime transfer buffer
+    const texture_transfer_size = try initTextures(copy_pass);
+    if (texture_transfer_size > 0) {
+        texture_transfer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+            .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .size = texture_transfer_size,
+        }));
+        errdefer c.SDL_ReleaseGPUTransferBuffer(device, texture_transfer);
+    } else {
+        texture_transfer = null;
+    }
+
+    // Initialize buffers and runtime transfer buffer
+    const buffer_transfer_size = try initBuffers(copy_pass);
+    if (buffer_transfer_size > 0) {
+        buffer_transfer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+            .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .size = buffer_transfer_size,
+        }));
+        errdefer c.SDL_ReleaseGPUTransferBuffer(device, buffer_transfer);
+    } else {
+        buffer_transfer = null;
+    }
+
+    // Submit copy pass
+    c.SDL_EndGPUCopyPass(copy_pass);
+    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
 
     for (sampler_set.keys, &samplers) |key, *sampler| {
         const s = key.sampler;
@@ -533,91 +456,146 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUSampler(device, sampler.*);
     }
 
-    output_buffer = try initColorTexture(.swapchain, .{});
+    output_buffer =
+        try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+            .type = c.SDL_GPU_TEXTURETYPE_2D,
+            .format = resolveTextureFormat(.swapchain),
+            .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+            .width = render_width,
+            .height = render_height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+        }));
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
-    for (image_set.keys, &image_textures) |key, *texture| {
-        texture.* = try initImageTexture(key.name);
-        errdefer c.SDL_ReleaseGPUTexture(texture.*);
-    }
-
     for (config.color_textures, &color_textures) |tex, *texture| {
-        texture.* = try initColorTexture(tex.format, .{
-            .width = main_config.width * tex.p / tex.q,
-            .height = main_config.height * tex.p / tex.q,
-        });
+        texture.* =
+            try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+                .type = c.SDL_GPU_TEXTURETYPE_2D,
+                .format = resolveTextureFormat(tex.format),
+                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+                .width = main_config.width * tex.p / tex.q,
+                .height = main_config.height * tex.p / tex.q,
+                .layer_count_or_depth = 1,
+                .num_levels = 1,
+                .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+            }));
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     for (config.depth_textures, &depth_textures) |tex, *texture| {
-        texture.* = try initDepthTexture(tex.format, .{
-            .width = main_config.width * tex.p / tex.q,
-            .height = main_config.height * tex.p / tex.q,
-        });
+        texture.* =
+            try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+                .type = c.SDL_GPU_TEXTURETYPE_2D,
+                .format = resolveTextureFormat(tex.format),
+                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+                .width = main_config.width * tex.p / tex.q,
+                .height = main_config.height * tex.p / tex.q,
+                .layer_count_or_depth = 1,
+                .num_levels = 1,
+                .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+                .props = 0,
+            }));
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    noise_transfer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
-        .size = @intCast(config.noise_size * config.noise_size),
-        .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-    }));
-    errdefer c.SDL_ReleaseGPUTransferBuffer(device, noise_transfer);
-    noise_texture = try initColorTexture(
-        .r8_unorm,
-        .{ .width = config.noise_size, .height = config.noise_size },
-    );
-    errdefer c.SDL_ReleaseGPUTexture(device, noise_texture);
-
-    for (pipeline_set.keys, &pipelines) |key, *pipeline| {
+    inline for (pipeline_set.keys, &pipelines) |key, *pipeline| {
         pipeline.* = try initPipeline(key);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
+}
 
-    for (config.vertices, &vertex_buffers, &vertex_counts) |def, *buffers, *count| {
-        const data = def.static;
-        // Create vertex buffer for each vertex data slice (matching names)
-        inline for (@typeInfo(VertexData).@"struct".fields) |field| {
-            @field(buffers.*, field.name) = if (@field(data, field.name).len > 0)
-                try initBuffer(f32, @field(data, field.name), c.SDL_GPU_BUFFERUSAGE_VERTEX)
-            else
-                null;
-            errdefer c.SDL_ReleaseGPUBuffer(device, @field(buffers.*, field.name));
-        }
-        // Divide by three because XYZ
-        count.* = @intCast(data.coords.len / 3);
+fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
+    // Map transfer buffer
+    const transfer_buffer = texture_transfer orelse return;
+    var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        true,
+    )));
+
+    // Populate transfer buffer with data
+    inline for (config.textures, texture_sizes) |name, size| {
+        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
+        @field(script, "updateTexture" ++ name)(time, tbp[0..size]);
+        tbp += size;
+    }
+    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    // Record upload commands
+    var offset: u32 = 0;
+    inline for (
+        config.textures,
+        textures,
+        texture_infos,
+        texture_sizes,
+    ) |name, texture, info, size| {
+        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
+        c.SDL_UploadToGPUTexture(copy_pass, &.{
+            .transfer_buffer = transfer_buffer,
+            .offset = offset,
+            .pixels_per_row = info.width,
+            .rows_per_layer = info.height,
+        }, &.{
+            .texture = texture,
+            .mip_level = 0,
+            .layer = 0,
+            .x = 0,
+            .y = 0,
+            .z = 0,
+            .w = info.width,
+            .h = info.height,
+            .d = info.depth,
+        }, true);
+        offset += size;
+    }
+}
+
+fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
+    // Map transfer buffer
+    const transfer_buffer = buffer_transfer orelse return;
+    var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        true,
+    )));
+
+    // Populate transfer buffer with data
+    inline for (config.buffers, buffer_sizes) |name, size| {
+        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
+        @field(script, "updateTexture" ++ name)(time, tbp[0..size]);
+        tbp += size;
     }
 
-    var font_glyph_data: [font_set.keys.len][128]font.GlyphInfo = undefined;
-    for (font_set.keys, &font_textures, &font_glyph_data) |key, *texture, *glyph_data| {
-        texture.* = try initFont(
-            key.font.ttf,
-            key.font.size,
-            key.font.padding,
-            key.font.dist_scale,
-            key.font.atlas_width,
-            key.font.atlas_height,
-            glyph_data,
-        );
-        errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
-    }
-
-    inline for (instance_set.keys, &instance_buffers, &instance_counts) |key, *buffer, *count| {
-        switch (key.instances) {
-            .text => |str| {
-                const font_key = comptime key.font_key.?;
-                const font_idx = comptime font_set.getIndex(font_key);
-                const glyphs = &font_glyph_data[font_idx];
-                count.* = try initText(str, font_key.font.size, buffer, glyphs);
-                errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
-            },
-        }
+    // Record upload commands
+    var offset: u32 = 0;
+    inline for (config.buffers, buffers, buffer_sizes) |name, buffer, size| {
+        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
+        c.SDL_UploadToGPUBuffer(copy_pass, &.{
+            .transfer_buffer = transfer_buffer,
+            .offset = offset,
+        }, &.{
+            .buffer = buffer,
+            .offset = 0,
+            .size = .size,
+        }, true);
+        offset += size;
     }
 }
 
 pub fn render(time: f32) !void {
+    errdefer |e| log.err("{s}", .{@errorName(e)});
+
     // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
+
+    // Update dynamic buffers
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+    try updateTextures(copy_pass, time);
+    try updateBuffers(copy_pass, time);
+    c.SDL_EndGPUCopyPass(copy_pass);
 
     // Acquire swapchain texture
     var width: u32 = 0;
@@ -695,36 +673,7 @@ pub fn render(time: f32) !void {
         @sizeOf(@TypeOf(fragment_frame_uniforms)),
     );
 
-    // Compute noise texture
-    const nd: [*]u8 = @ptrCast(@alignCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
-        device,
-        noise_transfer,
-        true,
-    ))));
-    for (0..config.noise_size) |y| {
-        for (0..config.noise_size) |x| {
-            const scale = config.noise_scale;
-            const hash = std.hash.int(@as(u32, @bitCast(time)));
-            const noise_val = noise.simplex2(
-                (@as(f32, @floatFromInt(x)) * scale) + @as(f32, @floatFromInt(hash & 0x7fff)),
-                (@as(f32, @floatFromInt(y)) * scale),
-            );
-            nd[y * config.noise_size + x] =
-                @intFromFloat((noise_val * 0.5 + 0.5) * 256);
-        }
-    }
-    c.SDL_UnmapGPUTransferBuffer(device, noise_transfer);
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
-    c.SDL_UploadToGPUTexture(copy_pass, &.{
-        .offset = 0,
-        .transfer_buffer = noise_transfer,
-    }, &.{
-        .texture = noise_texture,
-        .w = config.noise_size,
-        .h = config.noise_size,
-        .d = 1,
-    }, true);
-    c.SDL_EndGPUCopyPass(copy_pass);
+    // TODO: Update textures here
 
     // Render passes
     inline for (config.passes) |pass| {
@@ -795,40 +744,39 @@ pub fn render(time: f32) !void {
 
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
-            // Bind vertex buffers
-            var buffer_slot: u32 = 0;
-            if (drawcall.vertices) |vertices_index| {
-                inline for (@typeInfo(VertexBuffers).@"struct".fields) |field| {
-                    const buffer = @field(vertex_buffers[vertices_index], field.name);
-                    if (buffer) |buf| {
-                        c.SDL_BindGPUVertexBuffers(
-                            render_pass,
-                            buffer_slot,
-                            &.{ .buffer = buf, .offset = 0 },
-                            1,
-                        );
-                        buffer_slot += 1;
-                    }
+            // Bind vertex buffer, storing number of instances to draw
+            var num_vertices: u32 = switch (drawcall.num_vertices) {
+                .num => |n| n,
+                .infer => 3,
+            };
+            if (drawcall.vertex_buffer) |name| {
+                const idx = @intFromEnum(@field(Buffer, name));
+                c.SDL_BindGPUVertexBuffers(
+                    render_pass,
+                    0,
+                    &.{ .buffer = buffers[idx], .offset = 0 },
+                    1,
+                );
+                if (drawcall.num_vertices == .infer) {
+                    num_vertices = buffer_infos[idx].elements;
                 }
             }
 
-            // Bind instance buffers, storing number of instances to draw
+            // Bind instance buffer, storing number of instances to draw
             var num_instances: u32 = switch (drawcall.num_instances) {
                 .num => |n| n,
                 .infer => 1,
             };
-            if (drawcall.instances) |instances| {
-                const instance_key = comptime InstanceKey.init(drawcall, instances);
-                const idx = comptime instance_set.getIndex(instance_key);
+            if (drawcall.instance_buffer) |name| {
+                const idx = @intFromEnum(@field(Buffer, name));
                 c.SDL_BindGPUVertexBuffers(
                     render_pass,
-                    buffer_slot,
-                    &.{ .buffer = instance_buffers[idx], .offset = 0 },
+                    1,
+                    &.{ .buffer = buffers[idx], .offset = 0 },
                     1,
                 );
-                buffer_slot += 1;
                 if (drawcall.num_instances == .infer) {
-                    num_instances = instance_counts[idx];
+                    num_instances = buffer_infos[idx].elements;
                 }
             }
 
@@ -849,19 +797,12 @@ pub fn render(time: f32) !void {
                         .texture = switch (tex.texture) {
                             .color => |i| color_textures[i],
                             .depth => |i| depth_textures[i],
-                            .font => |f| font_textures[comptime font_set.getIndex(.{ .font = f })],
-                            .image => |s| image_textures[comptime image_set.getIndex(.{ .name = s })],
-                            .simplex2 => noise_texture,
+                            .name => |n| textures[@intFromEnum(@field(Texture, n))],
                         },
                         .sampler = samplers[sampler_idx],
                     }, 1);
                 }
             }
-
-            const num_vertices = switch (drawcall.num_vertices) {
-                .infer => if (drawcall.vertices) |i| vertex_counts[i] else 3,
-                .num => |num| num,
-            };
 
             inline for (drawcall.pipelines) |pipeline| {
                 // Find matching pipeline index from pipeline_keys at compile time
@@ -966,15 +907,14 @@ fn myLogFn(
 
     var buf: [1024]u8 = undefined;
 
-    const prefix = @tagName(level) ++
+    const prefix = "[DYN] " ++ @tagName(level) ++
         if (scope == std.log.default_log_scope)
             ""
         else
             ("(" ++ @tagName(scope) ++ ")") ++
                 ": ";
 
-    const full_fmt = prefix ++ format ++ " (in dynlib)";
-    const msg = std.fmt.bufPrint(&buf, full_fmt, args) catch blk: {
+    const msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch blk: {
         break :blk "Log message too long";
     };
 

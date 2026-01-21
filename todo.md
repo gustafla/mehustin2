@@ -1,9 +1,7 @@
 # High priority
 
-- [ ] Compute passes
-- [ ] 3D instance buffers
+- [ ] 3D instance render & shaders
 - [ ] Particle rendering
-- [ ] Procedural mesh generation
 - [ ] Developer controls
   - [X] Time
   - [ ] Cameras
@@ -15,8 +13,7 @@
 
 # Backlog
 
-- [ ] Dynamic text buffers
-- [ ] Add pass chain macro to render.zon syntax
+- [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture
 - [ ] DoF
@@ -40,10 +37,13 @@
   - [ ] dear_imgui_zig
   - [ ] gbms
   - [ ] zm
- - [ ] Refactor render.zig init for shared texture/buffer upload logic
+- [ ] Add pass chain macro to render.zon syntax
 
 # Done
 
+- [X] Refactor render.zig init for shared texture/buffer upload logic
+- [X] Dynamic text buffers
+- [X] Procedural mesh generation
 - [X] Add option to have `store_op = .dont_care` for depth targets
 - [X] Dual Kawase blur
   - https://blog.frost.kiwi/dual-kawase/

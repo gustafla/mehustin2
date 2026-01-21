@@ -11,6 +11,36 @@
     .depth_textures = .{
         .{ .format = .d16_unorm },
     },
+    .layouts = .{
+        .{
+            .name = "vertex_all",
+            .format = .{ .float3, .float3, .float3, .float2, .float3, .float3 },
+            .location = .{ 0, 1, 2, 3, 4, 5 },
+        },
+        .{
+            .name = "vertex_pos_color",
+            .format = .{ .float3, .float3 },
+            .location = .{ 0, 2 },
+        },
+        .{
+            .name = "instance_text",
+            .format = .{ .float4, .float4, .float4 },
+            .location = .{ 6, 7, 8 },
+        },
+        .{
+            .name = "instance_trs",
+            .format = .{ .float4, .float4 },
+            .location = .{ 6, 7 },
+        },
+    },
+    .buffers = .{
+        "LogoText",
+        "Octahedron",
+    },
+    .textures = .{
+        "LogoFont",
+        "Noise",
+    },
     .passes = .{
         // Main render pass
         .{
@@ -20,11 +50,11 @@
                     .pipelines = .{.{
                         .vert = "3d.vert",
                         .frag = "3d.frag",
-                        .vertex_attributes = .{ .coords = true, .colors = true },
+                        .vertex_layout = "vertex_pos_color",
                         .primitive_type = .trianglelist,
                         .depth_test = .{}, // Enable with defaults
                     }},
-                    .vertices = 0,
+                    .vertex_buffer = "Octahedron",
                     .num_instances = .{ .num = 512 },
                 },
                 // Background shader, render last for optimal depth test
@@ -251,7 +281,7 @@
                             .texture = .{ .color = 1 },
                             .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
                         },
-                        .{ .texture = .simplex2 },
+                        .{ .texture = .{ .name = "Noise" } },
                     },
                 },
                 // Text in front of everything
@@ -260,58 +290,23 @@
                         .{
                             .vert = "text.vert",
                             .frag = "text_shadow.frag",
-                            .instance_attributes = .{ .float4, .float4, .float4 },
+                            .instance_layout = "instance_text",
                             .blend_states = .{.{ .enable = true }},
                         },
                         .{
                             .vert = "text.vert",
                             .frag = "text_opaque.frag",
-                            .instance_attributes = .{ .float4, .float4, .float4 },
+                            .instance_layout = "instance_text",
                             .blend_states = .{.{ .enable = true }},
                         },
                     },
                     .fragment_samplers = .{
-                        .{ .texture = .{
-                            .font = .{
-                                .ttf = "Unitblock.ttf",
-                                .size = 128,
-                                .padding = 20,
-                                .dist_scale = 4,
-                            },
-                        } },
+                        .{ .texture = .{ .name = "LogoFont" } },
                     },
-                    .instances = .{ .text = "Mehu\nMehu\nMehu" },
+                    .instance_buffer = "LogoText",
                     .num_vertices = .{ .num = 4 },
                 },
             },
         },
     },
-    .vertices = .{
-        // zig fmt: off
-        .{ .static = .{
-            .coords = .{
-                // position1          position2            position3
-                 0.0, -1.0,  0.0,     0.66,  0.0,  0.66,    -0.66,  0.0,  0.66, // lower front
-                 0.0, -1.0,  0.0,     0.66,  0.0, -0.66,     0.66,  0.0,  0.66, // lower right
-                 0.0, -1.0,  0.0,    -0.66,  0.0, -0.66,     0.66,  0.0, -0.66, // lower back
-                 0.0, -1.0,  0.0,    -0.66,  0.0,  0.66,    -0.66,  0.0, -0.66, // lower left
-                 0.0,  1.0,  0.0,    -0.66,  0.0,  0.66,     0.66,  0.0,  0.66, // upper front
-                 0.0,  1.0,  0.0,     0.66,  0.0,  0.66,     0.66,  0.0, -0.66, // upper right
-                 0.0,  1.0,  0.0,     0.66,  0.0, -0.66,    -0.66,  0.0, -0.66, // upper back
-                 0.0,  1.0,  0.0,    -0.66,  0.0, -0.66,    -0.66,  0.0,  0.66, // upper left
-            },
-            .colors = .{
-                0.3,0.3,0.3, 0.3,0.3,0.3, 0.3,0.3,0.3,
-                0.1,0.1,0.1, 0.1,0.1,0.1, 0.1,0.1,0.1,
-                0.3,0.3,0.3, 0.3,0.3,0.3, 0.3,0.3,0.3,
-                0.1,0.1,0.1, 0.1,0.1,0.1, 0.1,0.1,0.1,
-                0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,0.5,
-                0.7,0.7,0.7, 0.7,0.7,0.7, 0.7,0.7,0.7,
-                0.5,0.5,0.5, 0.5,0.5,0.5, 0.5,0.5,0.5,
-                0.7,0.7,0.7, 0.7,0.7,0.7, 0.7,0.7,0.7,
-            },
-        } },
-        // zig fmt: on
-    },
-    .noise_size = 64,
 }

@@ -2,7 +2,6 @@ const std = @import("std");
 
 const types = @import("types.zig");
 const TextureFormat = types.TextureFormat;
-const VertexData = types.VertexData;
 const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
 const PrimitiveType = types.PrimitiveType;
@@ -17,28 +16,11 @@ const StoreOp = types.StoreOp;
 pub const num_vertex_uniform_buffers = 1;
 pub const num_fragment_uniform_buffers = 2;
 
-pub const VertexSource = union(enum) {
-    static: VertexData,
-};
-
-pub const InstanceSource = union(enum) {
-    text: []const u8,
-};
-
-pub const Font = struct {
-    ttf: []const u8,
-    size: f32,
-    padding: u32 = 8,
-    dist_scale: f32 = 8,
-    atlas_width: u32 = 1024,
-    atlas_height: u32 = 1024,
-};
-
 pub const Pipeline = struct {
     vert: []const u8 = "tri.vert",
     frag: []const u8,
-    vertex_attributes: VertexAttributes = .{},
-    instance_attributes: []const VertexFormat = &.{},
+    vertex_layout: ?[]const u8 = null,
+    instance_layout: ?[]const u8 = null,
     primitive_type: PrimitiveType = .trianglestrip,
     depth_test: ?struct {
         compare_op: CompareOp = .less_or_equal,
@@ -69,9 +51,7 @@ pub fn RenderTarget(T: type) type {
 pub const Texture = union(enum) {
     color: usize,
     depth: usize,
-    font: Font,
-    image: []const u8,
-    simplex2,
+    name: []const u8,
 };
 
 pub const Sampler = struct {
@@ -97,8 +77,8 @@ pub const TextureSamplerBinding = struct {
 
 pub const Drawcall = struct {
     pipelines: []const Pipeline,
-    vertices: ?usize = null,
-    instances: ?InstanceSource = null,
+    vertex_buffer: ?[]const u8 = null,
+    instance_buffer: ?[]const u8 = null,
     vertex_samplers: []const TextureSamplerBinding = &.{},
     fragment_samplers: []const TextureSamplerBinding = &.{},
     num_vertices: DrawNum = .infer,
@@ -119,13 +99,19 @@ pub const TargetTexture = struct {
     q: u32 = 1,
 };
 
+pub const BufferLayout = struct {
+    name: []const u8,
+    format: []const VertexFormat,
+    location: []const u32,
+};
+
 pub const Config = struct {
     color_textures: []const TargetTexture = &.{},
     depth_textures: []const TargetTexture = &.{},
-    vertices: []const VertexSource,
+    layouts: []const BufferLayout,
+    buffers: []const []const u8,
+    textures: []const []const u8,
     passes: []const Pass,
-    noise_size: u32 = 256,
-    noise_scale: f32 = 0.5,
 };
 
 // Compute upper bounds by traversing structures
@@ -283,176 +269,6 @@ pub fn PipelineKey(comptime config: Config) type {
     };
 }
 
-pub fn ImageKey(comptime config: Config) type {
-    return struct {
-        name: []const u8,
-
-        pub const Iterator = struct {
-            pass_idx: usize = 0,
-            draw_idx: usize = 0,
-            stage_idx: usize = 0, // 0 = vertex_samplers, 1 = fragment_samplers
-            sampler_idx: usize = 0,
-
-            pub fn next(self: *@This()) ?ImageKey(config) {
-                // Loop until we find a valid .image or exhaust the config
-                while (self.pass_idx < config.passes.len) {
-                    const pass = config.passes[self.pass_idx];
-
-                    if (self.draw_idx >= pass.drawcalls.len) {
-                        self.pass_idx += 1;
-                        self.draw_idx = 0;
-                        continue;
-                    }
-
-                    const draw = pass.drawcalls[self.draw_idx];
-
-                    // Select the list based on current stage
-                    const current_list = if (self.stage_idx == 0)
-                        draw.vertex_samplers
-                    else
-                        draw.fragment_samplers;
-
-                    // Iterate through the current sampler list
-                    if (self.sampler_idx < current_list.len) {
-                        const sampler = current_list[self.sampler_idx];
-                        self.sampler_idx += 1; // Advance index immediately
-                        switch (sampler.texture) {
-                            .image => |path| {
-                                return .{ .name = path };
-                            },
-                            else => continue, // Skip non-images, keep looping
-                        }
-                    }
-
-                    // End of current list reached: reset sampler, move to next stage
-                    self.sampler_idx = 0;
-                    self.stage_idx += 1;
-
-                    // If we finished both stages (0 and 1), move to next drawcall
-                    if (self.stage_idx > 1) {
-                        self.stage_idx = 0;
-                        self.draw_idx += 1;
-                    }
-                }
-
-                return null;
-            }
-        };
-    };
-}
-
-pub fn FontKey(comptime config: Config) type {
-    return struct {
-        font: Font,
-
-        pub const Iterator = struct {
-            pass_idx: usize = 0,
-            draw_idx: usize = 0,
-            stage_idx: usize = 0, // 0 = vertex_samplers, 1 = fragment_samplers
-            sampler_idx: usize = 0,
-
-            pub fn next(self: *@This()) ?FontKey(config) {
-                // Loop until we find a valid .font or exhaust the config
-                while (self.pass_idx < config.passes.len) {
-                    const pass = config.passes[self.pass_idx];
-
-                    if (self.draw_idx >= pass.drawcalls.len) {
-                        self.pass_idx += 1;
-                        self.draw_idx = 0;
-                        continue;
-                    }
-
-                    const draw = pass.drawcalls[self.draw_idx];
-
-                    // Select the list based on current stage
-                    const current_list = if (self.stage_idx == 0)
-                        draw.vertex_samplers
-                    else
-                        draw.fragment_samplers;
-
-                    // Iterate through the current sampler list
-                    if (self.sampler_idx < current_list.len) {
-                        const sampler = current_list[self.sampler_idx];
-                        self.sampler_idx += 1; // Advance index immediately
-                        switch (sampler.texture) {
-                            .font => |font| {
-                                return .{ .font = font };
-                            },
-                            else => continue, // Skip non-fonts, keep looping
-                        }
-                    }
-
-                    // End of current list reached: reset sampler, move to next stage
-                    self.sampler_idx = 0;
-                    self.stage_idx += 1;
-
-                    // If we finished both stages (0 and 1), move to next drawcall
-                    if (self.stage_idx > 1) {
-                        self.stage_idx = 0;
-                        self.draw_idx += 1;
-                    }
-                }
-
-                return null;
-            }
-        };
-    };
-}
-
-pub fn InstanceKey(comptime config: Config) type {
-    return struct {
-        instances: InstanceSource,
-        font_key: ?FontKey(config) = null, // Only valid for .text
-
-        pub const Iterator = struct {
-            pass_idx: usize = 0,
-            draw_idx: usize = 0,
-
-            pub fn next(self: *@This()) ?InstanceKey(config) {
-                while (self.pass_idx < config.passes.len) {
-                    const pass = config.passes[self.pass_idx];
-
-                    if (self.draw_idx >= pass.drawcalls.len) {
-                        self.pass_idx += 1;
-                        self.draw_idx = 0;
-                        continue;
-                    }
-
-                    const draw = pass.drawcalls[self.draw_idx];
-
-                    // Only yield a key if this drawcall has instances
-                    if (draw.instances) |inst| {
-                        const key = init(draw, inst);
-                        // 1 instance buffer per drawcall
-                        self.draw_idx += 1;
-                        return key;
-                    }
-
-                    self.draw_idx += 1;
-                }
-                return null;
-            }
-        };
-
-        fn findFontKey(drawcall: Drawcall) FontKey(config) {
-            for (drawcall.fragment_samplers) |s| {
-                if (s.texture == .font) return .{ .font = s.texture.font };
-            }
-            @compileError("Drawcall has text instances but no .font sampler!");
-        }
-
-        pub fn init(
-            comptime drawcall: Drawcall,
-            comptime instances: InstanceSource,
-        ) @This() {
-            return .{
-                .instances = instances,
-                .font_key = if (instances == .text) findFontKey(drawcall) else null,
-            };
-        }
-    };
-}
-
 pub fn SamplerKey(comptime config: Config) type {
     return struct {
         sampler: Sampler,
@@ -536,4 +352,55 @@ pub fn ComptimeSet(comptime T: type) type {
                 std.fmt.comptimePrint("{any}", .{key}));
         }
     };
+}
+
+pub fn BufferLayoutEnum(comptime config: Config) type {
+    var fields: [config.layouts.len]std.builtin.Type.EnumField = undefined;
+    for (config.layouts, 0..) |layout, i| {
+        fields[i] = .{ .name = layout.name[0.. :0], .value = i };
+    }
+    return @Type(.{ .@"enum" = .{
+        .tag_type = usize,
+        .fields = &fields,
+        .decls = &.{},
+        .is_exhaustive = true,
+    } });
+}
+
+pub fn bufferLayoutPitch(comptime config: Config) []u32 {
+    var pitchs: [config.layouts.len]u32 = undefined;
+    for (config.layouts, &pitchs) |layout, *pitch| {
+        var len: u32 = 0;
+        for (layout.format) |format| {
+            len += types.vertexFormatLen(format);
+        }
+        pitch.* = len;
+    }
+    return pitchs[0..];
+}
+
+pub fn BufferEnum(comptime config: Config) type {
+    var fields: [config.buffers.len]std.builtin.Type.EnumField = undefined;
+    for (config.buffers, 0..) |buffer, i| {
+        fields[i] = .{ .name = buffer[0.. :0], .value = i };
+    }
+    return @Type(.{ .@"enum" = .{
+        .tag_type = usize,
+        .fields = &fields,
+        .decls = &.{},
+        .is_exhaustive = true,
+    } });
+}
+
+pub fn TextureEnum(comptime config: Config) type {
+    var fields: [config.textures.len]std.builtin.Type.EnumField = undefined;
+    for (config.textures, 0..) |texture, i| {
+        fields[i] = .{ .name = texture[0.. :0], .value = i };
+    }
+    return @Type(.{ .@"enum" = .{
+        .tag_type = usize,
+        .fields = &fields,
+        .decls = &.{},
+        .is_exhaustive = true,
+    } });
 }
