@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] Build-time font generation
 - [ ] 3D instance render & shaders
 - [ ] Particle rendering
 - [ ] Developer controls
