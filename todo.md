@@ -2,6 +2,8 @@
 
 - [ ] Build-time font generation
 - [ ] 3D instance render & shaders
+  - [ ] Lighting (directional)
+  - [ ] Lighting (point light sources)
 - [ ] Particle rendering
 - [ ] Developer controls
   - [X] Time

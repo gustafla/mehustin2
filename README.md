@@ -52,8 +52,14 @@ The following macros are defined at shader compilation in the build process:
 ## Model Vertices, Translation, Rotation and Scale
 
 All models are rendered instanced, the engine doesn't use a model matrix.
-Model parameters are instance attributes:
+Model parameters are instance attributes.
 
+Buffer layouts (both vertex and instance) can be defined in `render.zon`.
+The system is designed for tightly packed interleaved data, only one vertex
+buffer and one instance buffer, but as many interleaved attributes as the API
+can support (at least 16).
+
+Here is a recommended layout:
 ```glsl
 // Vertex Attributes:
 layout(location = 0) in vec3 in_position;
