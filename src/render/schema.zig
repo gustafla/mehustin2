@@ -48,13 +48,8 @@ pub fn RenderTarget(T: type) type {
     };
 }
 
-pub const Texture = union(enum) {
-    color: usize,
-    depth: usize,
-    name: []const u8,
-};
-
 pub const Sampler = struct {
+    name: []const u8,
     min_filter: Filter = .nearest,
     mag_filter: Filter = .nearest,
     mipmap_mode: SamplerMipmapMode = .nearest,
@@ -71,8 +66,8 @@ pub const Sampler = struct {
 };
 
 pub const TextureSamplerBinding = struct {
-    texture: Texture,
-    sampler: Sampler = .{},
+    texture: []const u8,
+    sampler: []const u8,
 };
 
 pub const Drawcall = struct {
@@ -106,13 +101,25 @@ pub const BufferLayout = struct {
 };
 
 pub const Config = struct {
-    color_textures: []const TargetTexture = &.{},
-    depth_textures: []const TargetTexture = &.{},
+    color_targets: []const TargetTexture = &.{},
+    depth_targets: []const TargetTexture = &.{},
     layouts: []const BufferLayout,
     buffers: []const []const u8,
     textures: []const []const u8,
+    samplers: []const Sampler,
     passes: []const Pass,
 };
+
+pub fn parseIndex(
+    comptime name: []const u8,
+) !?struct { ref: []const u8, idx: usize } {
+    if (name[name.len - 1] != ']') return null;
+    const bracket = std.mem.indexOfScalar(u8, name, '[') orelse
+        return error.MissingOpeningBracket;
+    const index_str = name[bracket + 1 .. name.len - 1];
+    const index = try std.fmt.parseInt(usize, index_str, 0);
+    return .{ .ref = name[0..bracket], .idx = index };
+}
 
 // Compute upper bounds by traversing structures
 pub fn fold(
@@ -243,7 +250,7 @@ pub fn PipelineKey(comptime config: Config) type {
             var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
             for (pass.color_targets, 0..) |target, i| {
                 color_targets[i] = switch (target.target) {
-                    .index => |idx| config.color_textures[idx].format,
+                    .index => |idx| config.color_targets[idx].format,
                     .swapchain => .swapchain,
                 };
             }
@@ -263,61 +270,9 @@ pub fn PipelineKey(comptime config: Config) type {
                 },
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
-                .depth_target = if (pass.depth_target) |t| config.depth_textures[t.target].format else null,
+                .depth_target = if (pass.depth_target) |t| config.depth_targets[t.target].format else null,
             };
         }
-    };
-}
-
-pub fn SamplerKey(comptime config: Config) type {
-    return struct {
-        sampler: Sampler,
-
-        pub const Iterator = struct {
-            pass_idx: usize = 0,
-            draw_idx: usize = 0,
-            stage_idx: usize = 0, // 0 = vertex_samplers, 1 = fragment_samplers
-            sampler_idx: usize = 0,
-
-            pub fn next(self: *@This()) ?SamplerKey(config) {
-                while (self.pass_idx < config.passes.len) {
-                    const pass = config.passes[self.pass_idx];
-
-                    if (self.draw_idx >= pass.drawcalls.len) {
-                        self.pass_idx += 1;
-                        self.draw_idx = 0;
-                        continue;
-                    }
-
-                    const draw = pass.drawcalls[self.draw_idx];
-
-                    // Select the list based on current stage
-                    const current_list = if (self.stage_idx == 0)
-                        draw.vertex_samplers
-                    else
-                        draw.fragment_samplers;
-
-                    // Iterate through the current sampler list
-                    if (self.sampler_idx < current_list.len) {
-                        const sampler = current_list[self.sampler_idx];
-                        self.sampler_idx += 1; // Advance index immediately
-                        return .{ .sampler = sampler.sampler };
-                    }
-
-                    // End of current list reached: reset sampler, move to next stage
-                    self.sampler_idx = 0;
-                    self.stage_idx += 1;
-
-                    // If we finished both stages (0 and 1), move to next drawcall
-                    if (self.stage_idx > 1) {
-                        self.stage_idx = 0;
-                        self.draw_idx += 1;
-                    }
-                }
-
-                return null;
-            }
-        };
     };
 }
 
@@ -354,6 +309,18 @@ pub fn ComptimeSet(comptime T: type) type {
     };
 }
 
+pub fn bufferLayoutPitch(comptime config: Config) []u32 {
+    var pitchs: [config.layouts.len]u32 = undefined;
+    for (config.layouts, &pitchs) |layout, *pitch| {
+        var len: u32 = 0;
+        for (layout.format) |format| {
+            len += types.vertexFormatLen(format);
+        }
+        pitch.* = len;
+    }
+    return pitchs[0..];
+}
+
 pub fn BufferLayoutEnum(comptime config: Config) type {
     var fields: [config.layouts.len]std.builtin.Type.EnumField = undefined;
     for (config.layouts, 0..) |layout, i| {
@@ -365,18 +332,6 @@ pub fn BufferLayoutEnum(comptime config: Config) type {
         .decls = &.{},
         .is_exhaustive = true,
     } });
-}
-
-pub fn bufferLayoutPitch(comptime config: Config) []u32 {
-    var pitchs: [config.layouts.len]u32 = undefined;
-    for (config.layouts, &pitchs) |layout, *pitch| {
-        var len: u32 = 0;
-        for (layout.format) |format| {
-            len += types.vertexFormatLen(format);
-        }
-        pitch.* = len;
-    }
-    return pitchs[0..];
 }
 
 pub fn BufferEnum(comptime config: Config) type {
@@ -396,6 +351,19 @@ pub fn TextureEnum(comptime config: Config) type {
     var fields: [config.textures.len]std.builtin.Type.EnumField = undefined;
     for (config.textures, 0..) |texture, i| {
         fields[i] = .{ .name = texture[0.. :0], .value = i };
+    }
+    return @Type(.{ .@"enum" = .{
+        .tag_type = usize,
+        .fields = &fields,
+        .decls = &.{},
+        .is_exhaustive = true,
+    } });
+}
+
+pub fn SamplerEnum(comptime config: Config) type {
+    var fields: [config.samplers.len]std.builtin.Type.EnumField = undefined;
+    for (config.samplers, 0..) |sampler, i| {
+        fields[i] = .{ .name = sampler.name[0.. :0], .value = i };
     }
     return @Type(.{ .@"enum" = .{
         .tag_type = usize,

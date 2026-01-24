@@ -1,5 +1,5 @@
 .{
-    .color_textures = .{
+    .color_targets = .{
         .{ .format = .r11g11b10_ufloat },
         .{ .format = .r11g11b10_ufloat, .q = 2 },
         .{ .format = .r11g11b10_ufloat, .q = 4 },
@@ -8,7 +8,7 @@
         .{ .format = .r11g11b10_ufloat, .q = 32 },
         .{ .format = .r11g11b10_ufloat, .q = 64 },
     },
-    .depth_textures = .{
+    .depth_targets = .{
         .{ .format = .d16_unorm },
     },
     .layouts = .{
@@ -40,6 +40,10 @@
     .textures = .{
         "LogoFont",
         "Noise",
+    },
+    .samplers = .{
+        .{ .name = "nearest" },
+        .{ .name = "linear", .min_filter = .linear, .mag_filter = .linear },
     },
     .passes = .{
         // Main render pass
@@ -75,10 +79,7 @@
                     .pipelines = .{
                         .{ .frag = "bloom_prefilter.frag" },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 0 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[0]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 1 } }},
@@ -90,10 +91,7 @@
                     .pipelines = .{
                         .{ .frag = "dual_kawase_down.frag" },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 1 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[1]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 2 } }},
@@ -105,10 +103,7 @@
                     .pipelines = .{
                         .{ .frag = "dual_kawase_down.frag" },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 2 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[2]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 3 } }},
@@ -120,10 +115,7 @@
                     .pipelines = .{
                         .{ .frag = "dual_kawase_down.frag" },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 3 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[3]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 4 } }},
@@ -135,10 +127,7 @@
                     .pipelines = .{
                         .{ .frag = "dual_kawase_down.frag" },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 4 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[4]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 5 } }},
@@ -150,10 +139,7 @@
                     .pipelines = .{
                         .{ .frag = "dual_kawase_down.frag" },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 5 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[5]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 6 } }},
@@ -172,10 +158,7 @@
                             }},
                         },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 6 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[6]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 5 }, .load_op = .load }},
@@ -194,10 +177,7 @@
                             }},
                         },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 5 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[5]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 4 }, .load_op = .load }},
@@ -216,10 +196,7 @@
                             }},
                         },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 4 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[4]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 3 }, .load_op = .load }},
@@ -238,10 +215,7 @@
                             }},
                         },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 3 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[3]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 2 }, .load_op = .load }},
@@ -260,10 +234,7 @@
                             }},
                         },
                     },
-                    .fragment_samplers = .{.{
-                        .texture = .{ .color = 2 },
-                        .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                    }},
+                    .fragment_samplers = .{.{ .texture = "color_targets[2]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 1 }, .load_op = .load }},
@@ -276,12 +247,9 @@
                         .frag = "post.frag",
                     }},
                     .fragment_samplers = .{
-                        .{ .texture = .{ .color = 0 } },
-                        .{
-                            .texture = .{ .color = 1 },
-                            .sampler = .{ .min_filter = .linear, .mag_filter = .linear },
-                        },
-                        .{ .texture = .{ .name = "Noise" } },
+                        .{ .texture = "color_targets[0]", .sampler = "nearest" },
+                        .{ .texture = "color_targets[1]", .sampler = "linear" },
+                        .{ .texture = "Noise", .sampler = "nearest" },
                     },
                 },
                 // Text in front of everything
@@ -300,9 +268,7 @@
                             .blend_states = .{.{ .enable = true }},
                         },
                     },
-                    .fragment_samplers = .{
-                        .{ .texture = .{ .name = "LogoFont" } },
-                    },
+                    .fragment_samplers = .{.{ .texture = "LogoFont", .sampler = "linear" }},
                     .instance_buffer = "LogoText",
                     .num_vertices = .{ .num = 4 },
                 },

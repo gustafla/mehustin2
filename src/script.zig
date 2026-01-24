@@ -91,7 +91,7 @@ pub fn updateTextureNoise(time: f32, dst: []u8) void {
 
 pub const BufferInit = struct {
     elements: u32,
-    layout: render.BufferLayout,
+    layout: render.BufferLayoutEnum,
     data: ?*anyopaque = null,
     initFn: ?*const fn (@This(), usize, []u8) u32 = null,
 };

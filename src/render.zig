@@ -19,19 +19,14 @@ const sdlerr = @import("err.zig").sdlerr;
 
 const log = std.log.scoped(.render);
 
-// Generate buffer layout information
-pub const BufferLayout = schema.BufferLayoutEnum(config);
-const Buffer = schema.BufferEnum(config);
+// Generate helpers and metadata from config
 const layout_pitch = schema.bufferLayoutPitch(config)[0..].*;
-
-// Generate texture information
-const Texture = schema.TextureEnum(config);
-
-// Generate sets of all unique configurations
+pub const BufferLayoutEnum = schema.BufferLayoutEnum(config);
+const BufferEnum = schema.BufferEnum(config);
+const TextureEnum = schema.TextureEnum(config);
+const SamplerEnum = schema.SamplerEnum(config);
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
-const SamplerKey = schema.SamplerKey(config);
-const sampler_set = schema.ComptimeSet(SamplerKey);
 
 const render_width: f32 = @floatFromInt(main_config.width);
 const render_height: f32 = @floatFromInt(main_config.height);
@@ -48,11 +43,11 @@ var gpa: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 
-var samplers: [sampler_set.keys.len]*c.SDL_GPUSampler = undefined;
+var samplers: [config.samplers.len]*c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var color_textures: [config.color_textures.len]*c.SDL_GPUTexture = undefined;
-var depth_textures: [config.depth_textures.len]*c.SDL_GPUTexture = undefined;
+var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
+var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
 
 var textures: [config.textures.len]*c.SDL_GPUTexture = undefined;
 var texture_infos: [config.textures.len]script.TextureInit = undefined;
@@ -72,10 +67,10 @@ pub fn deinit() void {
         c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
     }
 
-    for (depth_textures) |texture| {
+    for (depth_targets) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
-    for (color_textures) |texture| {
+    for (color_targets) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
     for (textures) |texture| {
@@ -115,10 +110,10 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const frag = try shader.loadShader(gpa, device, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    var color_targets: [PipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
+    var color_target_descs: [PipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
     for (
         key.color_targets_buf[0..key.num_color_targets],
-        color_targets[0..key.num_color_targets],
+        color_target_descs[0..key.num_color_targets],
         0..,
     ) |target_def, *target, blend_idx| {
         target.* = .{
@@ -147,7 +142,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         };
         const field_name = buffer_type ++ "_layout";
         const layout_name = comptime @field(pipeline, field_name) orelse continue;
-        const layout_idx = @intFromEnum(@field(BufferLayout, layout_name));
+        const layout_idx = @intFromEnum(@field(BufferLayoutEnum, layout_name));
 
         log.debug("    {s} layout: {s} ({})", .{
             buffer_type,
@@ -209,7 +204,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         },
         .target_info = .{
             .num_color_targets = key.num_color_targets,
-            .color_target_descriptions = &color_targets,
+            .color_target_descriptions = &color_target_descs,
             .depth_stencil_format = @intFromEnum(key.depth_target orelse
                 TextureFormat.invalid),
             .has_depth_stencil_target = key.depth_target != null,
@@ -262,7 +257,6 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         .size = init_transfer_buffer_size,
         .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
     }));
-    // TODO: Does this cause problems, copy pass is submitted later...
     defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
 
     // Populate transfer buffer with data
@@ -346,7 +340,6 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             .props = 0,
         },
     ));
-    // TODO: Does this cause problems, copy pass is submitted later...
     defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
 
     // Populate transfer buffer with data
@@ -436,22 +429,21 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     c.SDL_EndGPUCopyPass(copy_pass);
     try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
 
-    for (sampler_set.keys, &samplers) |key, *sampler| {
-        const s = key.sampler;
+    for (config.samplers, &samplers) |smp, *sampler| {
         sampler.* = try sdlerr(c.SDL_CreateGPUSampler(device, &.{
-            .min_filter = @intFromEnum(s.min_filter),
-            .mag_filter = @intFromEnum(s.mag_filter),
-            .mipmap_mode = @intFromEnum(s.mipmap_mode),
-            .address_mode_u = @intFromEnum(s.address_mode_u),
-            .address_mode_v = @intFromEnum(s.address_mode_v),
-            .address_mode_w = @intFromEnum(s.address_mode_w),
-            .mip_lod_bias = s.mip_lod_bias,
-            .max_anisotropy = s.max_anisotropy,
-            .compare_op = @intFromEnum(s.compare_op),
-            .min_lod = s.min_lod,
-            .max_lod = s.max_lod,
-            .enable_anisotropy = s.enable_anisotropy,
-            .enable_compare = s.enable_compare,
+            .min_filter = @intFromEnum(smp.min_filter),
+            .mag_filter = @intFromEnum(smp.mag_filter),
+            .mipmap_mode = @intFromEnum(smp.mipmap_mode),
+            .address_mode_u = @intFromEnum(smp.address_mode_u),
+            .address_mode_v = @intFromEnum(smp.address_mode_v),
+            .address_mode_w = @intFromEnum(smp.address_mode_w),
+            .mip_lod_bias = smp.mip_lod_bias,
+            .max_anisotropy = smp.max_anisotropy,
+            .compare_op = @intFromEnum(smp.compare_op),
+            .min_lod = smp.min_lod,
+            .max_lod = smp.max_lod,
+            .enable_anisotropy = smp.enable_anisotropy,
+            .enable_compare = smp.enable_compare,
         }));
         errdefer c.SDL_ReleaseGPUSampler(device, sampler.*);
     }
@@ -469,7 +461,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         }));
     errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
-    for (config.color_textures, &color_textures) |tex, *texture| {
+    for (config.color_targets, &color_targets) |tex, *texture| {
         texture.* =
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
@@ -484,7 +476,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    for (config.depth_textures, &depth_textures) |tex, *texture| {
+    for (config.depth_targets, &depth_targets) |tex, *texture| {
         texture.* =
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
@@ -673,8 +665,6 @@ pub fn render(time: f32) !void {
         @sizeOf(@TypeOf(fragment_frame_uniforms)),
     );
 
-    // TODO: Update textures here
-
     // Render passes
     inline for (config.passes) |pass| {
         // Initialize color target infos
@@ -683,7 +673,7 @@ pub fn render(time: f32) !void {
             for (pass.color_targets, &infos) |target, *info| {
                 info.* = .{
                     .texture = switch (target.target) {
-                        .index => |index| color_textures[index],
+                        .index => |index| color_targets[index],
                         .swapchain => if (resolution_match)
                             swapchain_texture
                         else
@@ -701,8 +691,8 @@ pub fn render(time: f32) !void {
         // Push pass uniforms
         const p: f32, const q: f32 = switch (pass.color_targets[0].target) {
             .index => |index| .{
-                @floatFromInt(config.color_textures[index].p),
-                @floatFromInt(config.color_textures[index].q),
+                @floatFromInt(config.color_targets[index].p),
+                @floatFromInt(config.color_targets[index].q),
             },
             .swapchain => .{ 1, 1 },
         };
@@ -724,7 +714,7 @@ pub fn render(time: f32) !void {
             &color_target_infos,
             @intCast(pass.color_targets.len),
             if (pass.depth_target) |target| &.{
-                .texture = depth_textures[target.target],
+                .texture = depth_targets[target.target],
                 .clear_depth = 1,
                 .load_op = @intFromEnum(target.load_op),
                 .store_op = @intFromEnum(target.store_op),
@@ -750,7 +740,7 @@ pub fn render(time: f32) !void {
                 .infer => 3,
             };
             if (drawcall.vertex_buffer) |name| {
-                const idx = @intFromEnum(@field(Buffer, name));
+                const idx = @intFromEnum(@field(BufferEnum, name));
                 c.SDL_BindGPUVertexBuffers(
                     render_pass,
                     0,
@@ -768,7 +758,7 @@ pub fn render(time: f32) !void {
                 .infer => 1,
             };
             if (drawcall.instance_buffer) |name| {
-                const idx = @intFromEnum(@field(Buffer, name));
+                const idx = @intFromEnum(@field(BufferEnum, name));
                 c.SDL_BindGPUVertexBuffers(
                     render_pass,
                     1,
@@ -792,14 +782,14 @@ pub fn render(time: f32) !void {
                 },
             }) |stage| {
                 inline for (stage.tex, 0..) |tex, slot| {
-                    const sampler_idx = comptime sampler_set.getIndex(.{ .sampler = tex.sampler });
+                    const reference = comptime schema.parseIndex(tex.texture) catch |e|
+                        @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
                     stage.bind(render_pass, @intCast(slot), &.{
-                        .texture = switch (tex.texture) {
-                            .color => |i| color_textures[i],
-                            .depth => |i| depth_textures[i],
-                            .name => |n| textures[@intFromEnum(@field(Texture, n))],
-                        },
-                        .sampler = samplers[sampler_idx],
+                        .texture = if (reference) |result|
+                            @field(@This(), result.ref)[result.idx]
+                        else
+                            textures[@intFromEnum(@field(TextureEnum, tex.texture))],
+                        .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
                     }, 1);
                 }
             }
