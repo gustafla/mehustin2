@@ -16,6 +16,7 @@
 
 # Backlog
 
+- [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
 - [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture

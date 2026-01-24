@@ -6,4 +6,13 @@
     .audio = "music.ogg",
     .bpm = 140,
     .max_lights = 64,
+    .fonts = .{
+        .{
+            .name = "Unitblock.ttf",
+            .size = 128.0,
+            .atlas_size = 1024,
+            .padding = 16,
+            .dist_scale = 8,
+        },
+    },
 }
