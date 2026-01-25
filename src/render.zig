@@ -574,63 +574,29 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     }
 }
 
-pub fn render(time: f32) !void {
-    errdefer |e| log.err("{s}", .{@errorName(e)});
-
-    // Acquire command buffer
-    const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
-    errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
-
-    // Update dynamic buffers
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
-    try updateTextures(copy_pass, time);
-    try updateBuffers(copy_pass, time);
-    c.SDL_EndGPUCopyPass(copy_pass);
-
-    // Update frame uniforms
-    const frame_data = script.updateFrame(time);
-    c.SDL_PushGPUVertexUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&frame_data.vertex),
-        @sizeOf(@TypeOf(frame_data.vertex)),
-    );
-    c.SDL_PushGPUFragmentUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&frame_data.fragment),
-        @sizeOf(@TypeOf(frame_data.fragment)),
-    );
-    // Reminder, per shader uniform counts are hardcoded at shader creation:
-    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
-    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
-
-    // Acquire swapchain texture
-    var swapchain_width: u32 = 0;
-    var swapchain_height: u32 = 0;
-    const swapchain_texture = blk: {
-        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
-        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
-            cmdbuf,
-            window,
-            &swapchain_texture,
-            &swapchain_width,
-            &swapchain_height,
-        ));
-        break :blk swapchain_texture orelse {
-            try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
-            return;
+fn renderGraph(
+    comptime active_clip: script.Clip,
+    cmdbuf: *c.SDL_GPUCommandBuffer,
+    swapchain_texture: *c.SDL_GPUTexture,
+    swapchain_viewport: *const c.SDL_GPUViewport,
+    resolution_match: bool,
+) !void {
+    pass_loop: inline for (config.passes) |pass| {
+        // Filter pass by clip id list
+        const pass_visible = comptime blk: {
+            if (pass.condition) |clip_ids| {
+                break :blk std.mem.containsAtLeastScalar(
+                    script.Clip,
+                    clip_ids,
+                    1,
+                    active_clip,
+                );
+            }
+            break :blk true;
         };
-    };
-    const resolution_match =
-        (swapchain_width == main_config.width and swapchain_height >= main_config.height) or
-        (swapchain_height == main_config.height and swapchain_width >= main_config.width);
 
-    // Compute viewport preserving aspect ratio rendering to swapchain
-    const swapchain_viewport = viewport(swapchain_width, swapchain_height);
+        if (!pass_visible) continue :pass_loop;
 
-    // Render passes
-    inline for (config.passes) |pass| {
         // Initialize color target infos
         const color_target_infos = blk: {
             var infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
@@ -693,11 +659,26 @@ pub fn render(time: f32) !void {
             if (target.target == .swapchain) break true;
         } else false;
         if (target_swapchain and resolution_match) {
-            c.SDL_SetGPUViewport(render_pass, &swapchain_viewport);
+            c.SDL_SetGPUViewport(render_pass, swapchain_viewport);
         }
 
         // Record drawcalls
-        inline for (pass.drawcalls) |drawcall| {
+        draw_loop: inline for (pass.drawcalls) |drawcall| {
+            // Filter drawcall by clip id list
+            const drawcall_visible = comptime blk: {
+                if (drawcall.condition) |clip_ids| {
+                    break :blk std.mem.containsAtLeastScalar(
+                        script.Clip,
+                        clip_ids,
+                        1,
+                        active_clip,
+                    );
+                }
+                break :blk true;
+            };
+
+            if (!drawcall_visible) continue :draw_loop;
+
             // Bind vertex buffer, storing number of instances to draw
             var num_buffers: u32 = 0;
             var num_vertices: u32 = switch (drawcall.num_vertices) {
@@ -777,6 +758,73 @@ pub fn render(time: f32) !void {
         }
 
         c.SDL_EndGPURenderPass(render_pass);
+    }
+}
+
+pub fn render(time: f32) !void {
+    errdefer |e| log.err("{s}", .{@errorName(e)});
+
+    // Acquire command buffer
+    const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
+    errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
+
+    // Update dynamic buffers
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+    try updateTextures(copy_pass, time);
+    try updateBuffers(copy_pass, time);
+    c.SDL_EndGPUCopyPass(copy_pass);
+
+    // Update frame uniforms
+    const frame_data = script.updateFrame(time);
+    c.SDL_PushGPUVertexUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&frame_data.vertex),
+        @sizeOf(@TypeOf(frame_data.vertex)),
+    );
+    c.SDL_PushGPUFragmentUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&frame_data.fragment),
+        @sizeOf(@TypeOf(frame_data.fragment)),
+    );
+    // Reminder, per shader uniform counts are hardcoded at shader creation:
+    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
+    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
+
+    // Acquire swapchain texture
+    var swapchain_width: u32 = 0;
+    var swapchain_height: u32 = 0;
+    const swapchain_texture = blk: {
+        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+        try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
+            cmdbuf,
+            window,
+            &swapchain_texture,
+            &swapchain_width,
+            &swapchain_height,
+        ));
+        break :blk swapchain_texture orelse {
+            try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
+            return;
+        };
+    };
+    const resolution_match =
+        (swapchain_width == main_config.width and swapchain_height >= main_config.height) or
+        (swapchain_height == main_config.height and swapchain_width >= main_config.width);
+
+    // Compute viewport preserving aspect ratio rendering to swapchain
+    const swapchain_viewport = viewport(swapchain_width, swapchain_height);
+
+    // Render passes
+    switch (frame_data.clip) {
+        inline else => |active_clip| try renderGraph(
+            active_clip,
+            cmdbuf,
+            swapchain_texture,
+            &swapchain_viewport,
+            resolution_match,
+        ),
     }
 
     // Blit output_buffer to swapchain when necessary

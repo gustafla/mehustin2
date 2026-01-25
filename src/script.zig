@@ -1,13 +1,21 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const timeline: Timeline = @import("timeline.zon");
+
 const math = @import("math.zig");
 const render = @import("render.zig");
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
+const camera = @import("script/camera.zig");
+const CameraState = camera.CameraState;
 const font = @import("script/font.zig");
 const noise = @import("script/noise.zig");
+const schema = @import("script/schema.zig");
+const Timeline = schema.Timeline;
 const util = @import("script/util.zig");
+
+pub const Clip = schema.ClipEnum(timeline);
 
 var gpa: Allocator = undefined;
 
@@ -32,26 +40,37 @@ pub const FragmentFrameData = extern struct {
 pub const FrameData = struct {
     vertex: VertexFrameData,
     fragment: FragmentFrameData,
+    clip: Clip,
 };
 
 pub fn updateFrame(time: f32) FrameData {
+    // TODO: scan clip track, adjust uniform time
+    const clip = @field(Clip, timeline.clip_track[0].id);
+    // TODO: scan camera track, evaluate camera
+    const cam_init: CameraState = .{
+        .pos = .{ 0, 0, 4 },
+        .target = .{ 0, 0, 0 },
+    };
+    const cam_state = @field(camera, "cam" ++ timeline.camera_track[0].id)(time, cam_init);
+
     return .{
         .vertex = .{
             .view_projection = math.Mat4.perspective(
-                math.radians(90),
+                math.radians(cam_state.fov),
                 render.aspect,
                 1,
                 4096,
             ).mmul(math.Mat4.lookAt(
-                if (time > 14) .{
-                    @sin((time - 14) / 4 * std.math.pi) * 3,
-                    @sin((time - 14) / 8 * std.math.pi) * 2,
-                    @cos(time / 3 * std.math.pi) * 4,
-                } else .{ 0, 0, 4 },
-                math.vec3.ZERO,
+                cam_state.pos,
+                cam_state.target,
                 math.vec3.YUP,
             )),
-            .camera_position = .{ 0, 0, 0, 1 },
+            .camera_position = .{
+                cam_state.pos[0],
+                cam_state.pos[1],
+                cam_state.pos[2],
+                1,
+            },
             .time = time,
         },
         .fragment = .{
@@ -59,6 +78,7 @@ pub fn updateFrame(time: f32) FrameData {
             .sun_color_ambient = .{ 1, 1, 1, 0.25 },
             .time = time,
         },
+        .clip = clip,
     };
 }
 

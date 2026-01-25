@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Clip = @import("../script.zig").Clip;
 const types = @import("types.zig");
 const TextureFormat = types.TextureFormat;
 const VertexAttributes = types.VertexAttributes;
@@ -71,6 +72,7 @@ pub const TextureSamplerBinding = struct {
 };
 
 pub const Drawcall = struct {
+    condition: ?[]const Clip = null,
     pipelines: []const Pipeline,
     vertex_buffer: ?[]const u8 = null,
     instance_buffer: ?[]const u8 = null,
@@ -83,6 +85,7 @@ pub const Drawcall = struct {
 };
 
 pub const Pass = struct {
+    condition: ?[]const Clip = null,
     drawcalls: []const Drawcall,
     color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
     depth_target: ?RenderTarget(usize) = null,

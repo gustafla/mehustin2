@@ -63,6 +63,7 @@
                 },
                 // Background shader, render last for optimal depth test
                 .{
+                    .condition = .{.showtime},
                     .pipelines = .{.{
                         .frag = "shader.frag",
                         .depth_test = .{ .write = false },

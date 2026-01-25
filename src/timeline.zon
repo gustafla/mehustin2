@@ -1,0 +1,11 @@
+.{
+    .clip_track = .{
+        .{ .t = 0.0, .id = "intro" },
+        .{ .t = 28.0, .id = "spread" },
+        .{ .t = 55.0, .id = "showtime" },
+    },
+    .camera_track = .{
+        .{ .t = 0.0, .id = "StayPut" },
+        .{ .t = 14.0, .id = "SinusoidalRotation" },
+    },
+}
