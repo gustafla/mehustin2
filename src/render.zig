@@ -7,7 +7,6 @@ const main_config = @import("config.zon");
 const options = @import("options");
 
 const c = @import("render/c.zig").c;
-const math = @import("render/math.zig");
 const schema = @import("render/schema.zig");
 const Config = schema.Config;
 const shader = @import("render/shader.zig");
@@ -28,9 +27,9 @@ const SamplerEnum = schema.SamplerEnum(config);
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
 
-const render_width: f32 = @floatFromInt(main_config.width);
-const render_height: f32 = @floatFromInt(main_config.height);
-const render_aspect = render_width / render_height;
+pub const width: f32 = @floatFromInt(main_config.width);
+pub const height: f32 = @floatFromInt(main_config.height);
+pub const aspect = width / height;
 const max_attributes = schema.fold(config, &.{
     "layouts",
     "format",
@@ -453,8 +452,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             .type = c.SDL_GPU_TEXTURETYPE_2D,
             .format = resolveTextureFormat(.swapchain),
             .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-            .width = render_width,
-            .height = render_height,
+            .width = width,
+            .height = height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
@@ -589,17 +588,35 @@ pub fn render(time: f32) !void {
     try updateBuffers(copy_pass, time);
     c.SDL_EndGPUCopyPass(copy_pass);
 
+    // Update frame uniforms
+    const frame_data = script.updateFrame(time);
+    c.SDL_PushGPUVertexUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&frame_data.vertex),
+        @sizeOf(@TypeOf(frame_data.vertex)),
+    );
+    c.SDL_PushGPUFragmentUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&frame_data.fragment),
+        @sizeOf(@TypeOf(frame_data.fragment)),
+    );
+    // Reminder, per shader uniform counts are hardcoded at shader creation:
+    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
+    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
+
     // Acquire swapchain texture
-    var width: u32 = 0;
-    var height: u32 = 0;
+    var swapchain_width: u32 = 0;
+    var swapchain_height: u32 = 0;
     const swapchain_texture = blk: {
         var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
         try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
             cmdbuf,
             window,
             &swapchain_texture,
-            &width,
-            &height,
+            &swapchain_width,
+            &swapchain_height,
         ));
         break :blk swapchain_texture orelse {
             try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
@@ -607,63 +624,11 @@ pub fn render(time: f32) !void {
         };
     };
     const resolution_match =
-        (width == main_config.width and height >= main_config.height) or
-        (height == main_config.height and width >= main_config.width);
+        (swapchain_width == main_config.width and swapchain_height >= main_config.height) or
+        (swapchain_height == main_config.height and swapchain_width >= main_config.width);
 
     // Compute viewport preserving aspect ratio rendering to swapchain
-    const swapchain_viewport = viewport(width, height);
-
-    // Initialize vertex shader uniform buffer
-    const vertex_frame_uniforms: extern struct {
-        view_projection: math.Mat4,
-        cam_pos: [4]f32,
-        time: f32,
-    } = .{
-        .view_projection = math.Mat4.perspective(
-            math.radians(90),
-            render_aspect,
-            1,
-            4096,
-        ).mmul(math.Mat4.lookAt(
-            if (time > 14) .{
-                @sin((time - 14) / 4 * std.math.pi) * 3,
-                @sin((time - 14) / 8 * std.math.pi) * 2,
-                @cos(time / 3 * std.math.pi) * 4,
-            } else .{ 0, 0, 4 },
-            math.vec3.ZERO,
-            math.vec3.YUP,
-        )),
-        .cam_pos = .{ 0, 0, 0, 1 },
-        .time = time,
-    };
-
-    // Initialize fragment shader uniform buffer
-    const fragment_frame_uniforms: extern struct {
-        sun_dir_intensity: [4]f32,
-        sun_color_ambient: [4]f32,
-        time: f32,
-    } = .{
-        .sun_dir_intensity = .{ 0, -1, 0, 1 },
-        .sun_color_ambient = .{ 1, 1, 1, 0.25 },
-        .time = time,
-    };
-
-    // Push frame uniforms
-    // Reminder, per shader uniform counts are hardcoded at shader creation:
-    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
-    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
-    c.SDL_PushGPUVertexUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&vertex_frame_uniforms),
-        @sizeOf(@TypeOf(vertex_frame_uniforms)),
-    );
-    c.SDL_PushGPUFragmentUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&fragment_frame_uniforms),
-        @sizeOf(@TypeOf(fragment_frame_uniforms)),
-    );
+    const swapchain_viewport = viewport(swapchain_width, swapchain_height);
 
     // Render passes
     inline for (config.passes) |pass| {
@@ -838,22 +803,22 @@ pub fn render(time: f32) !void {
     try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
 }
 
-fn viewport(width: u32, height: u32) c.SDL_GPUViewport {
-    const width_f32: f32 = @floatFromInt(width);
-    const height_f32: f32 = @floatFromInt(height);
+fn viewport(target_width: u32, target_height: u32) c.SDL_GPUViewport {
+    const width_f32: f32 = @floatFromInt(target_width);
+    const height_f32: f32 = @floatFromInt(target_height);
     const aspect_ratio = width_f32 / height_f32;
 
     var w = width_f32;
     var h = height_f32;
-    if (aspect_ratio > render_aspect) {
-        w = height_f32 * render_aspect;
+    if (aspect_ratio > aspect) {
+        w = height_f32 * aspect;
     } else {
-        h = width_f32 / render_aspect;
+        h = width_f32 / aspect;
     }
 
     return .{
-        .x = if (aspect_ratio > render_aspect) (width_f32 - w) / 2 else 0,
-        .y = if (aspect_ratio > render_aspect) 0 else (height_f32 - h) / 2,
+        .x = if (aspect_ratio > aspect) (width_f32 - w) / 2 else 0,
+        .y = if (aspect_ratio > aspect) 0 else (height_f32 - h) / 2,
         .w = w,
         .h = h,
         .min_depth = 0,

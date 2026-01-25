@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Build-time font generation
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [ ] Lighting (point light sources)
@@ -16,6 +15,7 @@
 
 # Backlog
 
+- [ ] Build-time font generation
 - [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
 - [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator

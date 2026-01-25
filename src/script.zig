@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const math = @import("math.zig");
 const render = @import("render.zig");
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
@@ -14,7 +15,54 @@ pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
 }
 
-// ---- TEXTURES (Init order: 1st) ----
+// ---- UNIFORMS (1st) ----
+
+pub const VertexFrameData = extern struct {
+    view_projection: math.Mat4,
+    camera_position: [4]f32,
+    time: f32,
+};
+
+pub const FragmentFrameData = extern struct {
+    sun_direction_intensity: [4]f32,
+    sun_color_ambient: [4]f32,
+    time: f32,
+};
+
+pub const FrameData = struct {
+    vertex: VertexFrameData,
+    fragment: FragmentFrameData,
+};
+
+pub fn updateFrame(time: f32) FrameData {
+    return .{
+        .vertex = .{
+            .view_projection = math.Mat4.perspective(
+                math.radians(90),
+                render.aspect,
+                1,
+                4096,
+            ).mmul(math.Mat4.lookAt(
+                if (time > 14) .{
+                    @sin((time - 14) / 4 * std.math.pi) * 3,
+                    @sin((time - 14) / 8 * std.math.pi) * 2,
+                    @cos(time / 3 * std.math.pi) * 4,
+                } else .{ 0, 0, 4 },
+                math.vec3.ZERO,
+                math.vec3.YUP,
+            )),
+            .camera_position = .{ 0, 0, 0, 1 },
+            .time = time,
+        },
+        .fragment = .{
+            .sun_direction_intensity = .{ 0, -1, 0, 1 },
+            .sun_color_ambient = .{ 1, 1, 1, 0.25 },
+            .time = time,
+        },
+    };
+}
+
+// ---- TEXTURES (2nd) ----
 
 pub const TextureInit = struct {
     tex_type: types.TextureType = .@"2d",
@@ -87,7 +135,7 @@ pub fn updateTextureNoise(time: f32, dst: []u8) void {
     }
 }
 
-// ---- BUFFERS (Init order: 2nd) ----
+// ---- BUFFERS (3rd) ----
 
 pub const BufferInit = struct {
     elements: u32,

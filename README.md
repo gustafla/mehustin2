@@ -23,7 +23,7 @@ https://wiki.libsdl.org/SDL3/SDL_CreateGPUShader
 ```glsl
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
-    vec4 u_cam_pos;
+    vec4 u_camera_position;
     float u_time;
 };
 ```
@@ -31,7 +31,7 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 *Fragment Shader Uniforms:*
 ```glsl
 layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
-    vec4 u_sun_dir_intensity;
+    vec4 u_sun_direction_intensity;
     vec4 u_sun_color_ambient;
     float u_time;
 };
