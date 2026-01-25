@@ -65,7 +65,6 @@ pub fn deinit() void {
     if (buffer_transfer) |transfer_buffer| {
         c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
     }
-
     for (depth_targets) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
@@ -134,7 +133,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         pipeline.frag,
     });
 
-    inline for (.{ "vertex", "instance" }, 0..) |buffer_type, buffer_slot| {
+    inline for (.{ "vertex", "instance" }) |buffer_type| {
         comptime var upper: [buffer_type.len]u8 = undefined;
         comptime for (buffer_type, &upper) |src, *dst| {
             dst.* = std.ascii.toUpper(src);
@@ -150,7 +149,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         });
 
         buffer_descs[num_buffers] = .{
-            .slot = @intCast(buffer_slot),
+            .slot = num_buffers,
             .pitch = layout_pitch[layout_idx],
             .input_rate = @field(c, "SDL_GPU_VERTEXINPUTRATE_" ++ upper),
             .instance_step_rate = 0,
@@ -161,7 +160,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         for (layout.format, layout.location) |format, location| {
             attribs[num_attribs] = .{
                 .location = location,
-                .buffer_slot = @intCast(buffer_slot),
+                .buffer_slot = num_buffers,
                 .format = @intFromEnum(format),
                 .offset = offset,
             };
@@ -700,6 +699,7 @@ pub fn render(time: f32) !void {
         // Record drawcalls
         inline for (pass.drawcalls) |drawcall| {
             // Bind vertex buffer, storing number of instances to draw
+            var num_buffers: u32 = 0;
             var num_vertices: u32 = switch (drawcall.num_vertices) {
                 .num => |n| n,
                 .infer => 3,
@@ -708,10 +708,11 @@ pub fn render(time: f32) !void {
                 const idx = @intFromEnum(@field(BufferEnum, name));
                 c.SDL_BindGPUVertexBuffers(
                     render_pass,
-                    0,
+                    num_buffers,
                     &.{ .buffer = buffers[idx], .offset = 0 },
                     1,
                 );
+                num_buffers += 1;
                 if (drawcall.num_vertices == .infer) {
                     num_vertices = buffer_infos[idx].elements;
                 }
@@ -726,10 +727,11 @@ pub fn render(time: f32) !void {
                 const idx = @intFromEnum(@field(BufferEnum, name));
                 c.SDL_BindGPUVertexBuffers(
                     render_pass,
-                    1,
+                    num_buffers,
                     &.{ .buffer = buffers[idx], .offset = 0 },
                     1,
                 );
+                num_buffers += 1;
                 if (drawcall.num_instances == .infer) {
                     num_instances = buffer_infos[idx].elements;
                 }
