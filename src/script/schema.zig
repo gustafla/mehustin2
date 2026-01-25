@@ -1,6 +1,10 @@
 const std = @import("std");
 
-pub const Clip = struct {
+const camera = @import("camera.zig");
+const CameraFn = camera.CameraFn;
+const CameraState = camera.CameraState;
+
+pub const ClipSegment = struct {
     t: f32,
     id: []const u8,
 };
@@ -12,7 +16,7 @@ pub const CameraSegment = struct {
 };
 
 pub const Timeline = struct {
-    clip_track: []const Clip,
+    clip_track: []const ClipSegment,
     camera_track: []const CameraSegment,
 };
 
@@ -26,12 +30,44 @@ pub fn ClipEnum(comptime timeline: Timeline) type {
         fields[num_fields] = .{ .name = clip.id[0.. :0], .value = num_fields };
         num_fields += 1;
     }
-    const min_bits = std.math.log2_int_ceil(usize, fields.len);
-    const bits = std.math.ceilPowerOfTwo(usize, min_bits) catch unreachable;
+    const bits = std.math.log2_int_ceil(usize, fields.len);
     return @Type(.{ .@"enum" = .{
         .tag_type = @Type(.{ .int = .{ .signedness = .unsigned, .bits = bits } }),
         .fields = fields[0..num_fields],
         .decls = &.{},
         .is_exhaustive = true,
     } });
+}
+
+pub fn clipEnums(comptime timeline: Timeline) []const ClipEnum(timeline) {
+    var clips: [timeline.clip_track.len]ClipEnum(timeline) = undefined;
+    for (timeline.clip_track, &clips) |clip, *clip_enum| {
+        clip_enum.* = @field(ClipEnum(timeline), clip.id);
+    }
+    return &clips;
+}
+
+pub fn camFns(comptime timeline: Timeline) []const *const CameraFn {
+    var fns: [timeline.camera_track.len]*const CameraFn = undefined;
+    for (timeline.camera_track, &fns) |cam, *fun| {
+        fun.* = @field(camera, "cam" ++ cam.id);
+    }
+    return &fns;
+}
+
+pub fn camEntries(comptime timeline: Timeline) []const CameraState {
+    var entries: [timeline.camera_track.len]CameraState = undefined;
+    entries[0] = .{
+        .pos = .{ 0, 0, 0 },
+        .target = .{ 0, 0, -1 },
+    };
+
+    for (1..timeline.camera_track.len) |i| {
+        const t = timeline.camera_track[i].t;
+        const cam = timeline.camera_track[i - 1];
+        const camFn = @field(camera, "cam" ++ cam.id);
+        entries[i] = camFn(t - cam.t, entries[i - 1]);
+    }
+
+    return &entries;
 }

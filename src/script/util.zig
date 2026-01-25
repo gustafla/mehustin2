@@ -3,6 +3,20 @@ const std = @import("std");
 const resource = @import("../resource.zig");
 const font = @import("font.zig");
 
+pub fn scanTimeline(
+    comptime T: type,
+    timeline: []const T,
+    time: f32,
+) usize {
+    for (timeline, 0..) |unit, i| {
+        if (time < unit.t) {
+            return i -| 1;
+        }
+    }
+
+    return timeline.len - 1;
+}
+
 pub fn interleave(
     T: type,
     lengths: []const usize,

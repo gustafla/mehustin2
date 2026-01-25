@@ -13,9 +13,14 @@ const font = @import("script/font.zig");
 const noise = @import("script/noise.zig");
 const schema = @import("script/schema.zig");
 const Timeline = schema.Timeline;
+const ClipSegment = schema.ClipSegment;
+const CameraSegment = schema.CameraSegment;
 const util = @import("script/util.zig");
 
 pub const Clip = schema.ClipEnum(timeline);
+const clip_enums = schema.clipEnums(timeline)[0..].*;
+const cam_fns = schema.camFns(timeline)[0..].*;
+const cam_entries = schema.camEntries(timeline)[0..].*;
 
 var gpa: Allocator = undefined;
 
@@ -44,14 +49,16 @@ pub const FrameData = struct {
 };
 
 pub fn updateFrame(time: f32) FrameData {
-    // TODO: scan clip track, adjust uniform time
-    const clip = @field(Clip, timeline.clip_track[0].id);
-    // TODO: scan camera track, evaluate camera
-    const cam_init: CameraState = .{
-        .pos = .{ 0, 0, 4 },
-        .target = .{ 0, 0, 0 },
-    };
-    const cam_state = @field(camera, "cam" ++ timeline.camera_track[0].id)(time, cam_init);
+    const clip_idx = util.scanTimeline(ClipSegment, timeline.clip_track, time);
+    const clip_seg = timeline.clip_track[clip_idx];
+    const clip = clip_enums[clip_idx];
+    const clip_time = time - clip_seg.t;
+    // TODO: next_time = time - timeline.clip_track[idx + 1].t ...
+
+    const cam_idx = util.scanTimeline(CameraSegment, timeline.camera_track, time);
+    const cam_seg = timeline.camera_track[cam_idx];
+    const camFn = cam_fns[cam_idx];
+    const cam_state = camFn(time - cam_seg.t, cam_entries[cam_idx]);
 
     return .{
         .vertex = .{
@@ -71,12 +78,12 @@ pub fn updateFrame(time: f32) FrameData {
                 cam_state.pos[2],
                 1,
             },
-            .time = time,
+            .time = clip_time,
         },
         .fragment = .{
             .sun_direction_intensity = .{ 0, -1, 0, 1 },
             .sun_color_ambient = .{ 1, 1, 1, 0.25 },
-            .time = time,
+            .time = clip_time,
         },
         .clip = clip,
     };

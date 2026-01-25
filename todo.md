@@ -4,17 +4,12 @@
   - [ ] Lighting (directional)
   - [ ] Lighting (point light sources)
 - [ ] Particle rendering
-- [ ] Developer controls
-  - [X] Time
-  - [ ] Cameras
-- [ ] Clip sequencing
-  - [ ] Transitions
 - [ ] Parameter tracks
-- [ ] Camera tracks
-- [ ] Scene state
 
 # Backlog
 
+- [ ] Camera control with clipboard export containing camera state in Zig code
+- [ ] Clip-to-clip transition effects
 - [ ] Build-time font generation
 - [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
 - [ ] Compute passes
@@ -45,6 +40,10 @@
 
 # Done
 
+- [X] Developer controls
+- [X] Scene state handling
+- [X] Clip sequencing
+- [X] Camera tracks
 - [X] Refactor render.zig init for shared texture/buffer upload logic
 - [X] Dynamic text buffers
 - [X] Procedural mesh generation

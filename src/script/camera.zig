@@ -1,5 +1,7 @@
 pub const std = @import("std");
 
+pub const CameraFn = fn (f32, CameraState) CameraState;
+
 pub const CameraState = struct {
     pos: [3]f32,
     target: [3]f32,
