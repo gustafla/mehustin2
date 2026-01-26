@@ -23,12 +23,14 @@ const cam_fns = schema.camFns(timeline)[0..].*;
 const cam_entries = schema.camEntries(timeline)[0..].*;
 
 var gpa: Allocator = undefined;
+var clip: Clip = undefined;
+var cam_state: CameraState = undefined;
 
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
 }
 
-// ---- UNIFORMS (1st) ----
+// ---- FRAME DATA (1st) ----
 
 pub const VertexFrameData = extern struct {
     view_projection: math.Mat4,
@@ -43,23 +45,23 @@ pub const FragmentFrameData = extern struct {
 };
 
 pub const FrameData = struct {
+    clip: Clip,
     vertex: VertexFrameData,
     fragment: FragmentFrameData,
-    clip: Clip,
     clear_color: [4]f32 = .{ 0, 0, 0, 1 },
 };
 
 pub fn updateFrame(time: f32) FrameData {
     const clip_idx = util.scanTimeline(ClipSegment, timeline.clip_track, time);
     const clip_seg = timeline.clip_track[clip_idx];
-    const clip = clip_enums[clip_idx];
+    clip = clip_enums[clip_idx];
     const clip_time = time - clip_seg.t;
     // TODO: next_time = time - timeline.clip_track[idx + 1].t ...
 
     const cam_idx = util.scanTimeline(CameraSegment, timeline.camera_track, time);
     const cam_seg = timeline.camera_track[cam_idx];
     const camFn = cam_fns[cam_idx];
-    const cam_state = camFn(time - cam_seg.t, cam_entries[cam_idx]);
+    cam_state = camFn(time - cam_seg.t, cam_entries[cam_idx]);
 
     return .{
         .vertex = .{
