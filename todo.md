@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] script: Give update functions control over num_elements and first_element
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [ ] Lighting (point light sources)
@@ -8,6 +9,8 @@
 
 # Backlog
 
+- [ ] script/render: Auto-generate buffer layouts from script struct types
+  - [ ] Cast ptr to correct type in render code (requires comptime-izing the init struct)
 - [ ] Camera control with clipboard export containing camera state in Zig code
 - [ ] Clip-to-clip transition effects
 - [ ] Build-time font generation

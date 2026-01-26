@@ -502,7 +502,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     }
 }
 
-fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
+fn updateTextures(copy_pass: *c.SDL_GPUCopyPass) !void {
     // Map transfer buffer
     const transfer_buffer = texture_transfer orelse return;
     var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
@@ -514,7 +514,7 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     // Populate transfer buffer with data
     inline for (texture_ids, texture_sizes) |id, size| {
         if (!@hasDecl(script, texture_update_signature ++ id.name)) continue;
-        @field(script, texture_update_signature ++ id.name)(time, tbp[0..size]);
+        @field(script, texture_update_signature ++ id.name)(tbp[0..size]);
         tbp += size;
     }
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -548,7 +548,7 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     }
 }
 
-fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
+fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass) !void {
     // Map transfer buffer
     const transfer_buffer = buffer_transfer orelse return;
     var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
@@ -560,7 +560,7 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     // Populate transfer buffer with data
     inline for (buffer_ids, buffer_sizes) |id, size| {
         if (!@hasDecl(script, buffer_update_signature ++ id.name)) continue;
-        @field(script, buffer_update_signature ++ id.name)(time, tbp[0..size]);
+        @field(script, buffer_update_signature ++ id.name)(tbp[0..size]);
         tbp += size;
     }
 
@@ -574,7 +574,7 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
         }, &.{
             .buffer = buffer,
             .offset = 0,
-            .size = .size,
+            .size = size,
         }, true);
         offset += size;
     }
@@ -762,18 +762,20 @@ fn renderGraph(
 pub fn render(time: f32) !void {
     errdefer |e| log.err("{s}", .{@errorName(e)});
 
+    // Update script frame
+    const frame_data = script.updateFrame(time);
+
     // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
 
     // Update dynamic buffers
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
-    try updateTextures(copy_pass, time);
-    try updateBuffers(copy_pass, time);
+    try updateTextures(copy_pass);
+    try updateBuffers(copy_pass);
     c.SDL_EndGPUCopyPass(copy_pass);
 
     // Update frame uniforms
-    const frame_data = script.updateFrame(time);
     c.SDL_PushGPUVertexUniformData(
         cmdbuf,
         0,

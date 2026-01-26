@@ -23,8 +23,6 @@ const cam_fns = schema.camFns(timeline)[0..].*;
 const cam_entries = schema.camEntries(timeline)[0..].*;
 
 var gpa: Allocator = undefined;
-var clip: Clip = undefined;
-var cam_state: CameraState = undefined;
 
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
@@ -51,7 +49,13 @@ pub const FrameData = struct {
     clear_color: [4]f32 = .{ 0, 0, 0, 1 },
 };
 
-pub fn updateFrame(time: f32) FrameData {
+var time: f32 = undefined;
+var clip: Clip = undefined;
+var cam_state: CameraState = undefined;
+
+pub fn updateFrame(frame_time: f32) FrameData {
+    time = frame_time;
+
     const clip_idx = util.scanTimeline(ClipSegment, timeline.clip_track, time);
     const clip_seg = timeline.clip_track[clip_idx];
     clip = clip_enums[clip_idx];
@@ -107,6 +111,8 @@ pub const TextureInit = struct {
 };
 
 const logo_font_size = 128.0;
+const noise_size: usize = 64;
+
 var logo_font_glyphs: [128]font.GlyphInfo = undefined;
 
 pub fn initTextureLogoFont() !TextureInit {
@@ -141,8 +147,6 @@ pub fn initTextureLogoFont() !TextureInit {
     };
 }
 
-const noise_size: usize = 64;
-
 pub fn initTextureNoise() !TextureInit {
     return .{
         .format = .r8_unorm,
@@ -151,7 +155,7 @@ pub fn initTextureNoise() !TextureInit {
     };
 }
 
-pub fn updateTextureNoise(time: f32, dst: []u8) void {
+pub fn updateTextureNoise(dst: []u8) void {
     for (0..noise_size) |y| {
         for (0..noise_size) |x| {
             const scale = 0.5;
@@ -229,4 +233,26 @@ pub fn initBufferLogoText() !BufferInit {
             }
         }.init,
     };
+}
+
+pub fn initBufferOctInstances() !BufferInit {
+    return .{
+        .elements = 512,
+        .layout = .instance_trs,
+    };
+}
+
+pub fn updateBufferOctInstances(dst: []u8) void {
+    const TRS = extern struct {
+        pos_scale: [4]f32,
+        rot_quat: [4]f32,
+    };
+    const dst_cast: []TRS = @ptrCast(@alignCast(dst));
+    for (dst_cast, 0..) |*instance, i| {
+        _ = i;
+        instance.* = .{
+            .pos_scale = .{ 0, 0, 0, 1 },
+            .rot_quat = math.quat.IDENTITY,
+        };
+    }
 }

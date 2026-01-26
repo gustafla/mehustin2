@@ -1,4 +1,4 @@
-//! Vector and matrix operations.
+//! Vector, matrix and quaternion operations.
 
 const std = @import("std");
 
@@ -143,6 +143,60 @@ pub const Mat4 = extern struct {
                 1.0,
             },
         } };
+    }
+};
+
+/// A 4-component vector representing a rotation (x, y, z, w).
+pub const Quat = @Vector(4, f32);
+
+/// Operations on `Quat`.
+pub const quat = struct {
+    /// The identity quaternion (no rotation).
+    pub const IDENTITY = Quat{ 0.0, 0.0, 0.0, 1.0 };
+
+    /// Creates a rotation from an axis and an angle (in radians).
+    ///
+    /// The axis must be normalized.
+    pub fn fromAxisAngle(axis: Vec3, angle: f32) Quat {
+        const half_angle = angle * 0.5;
+        const s = @sin(half_angle);
+        const c = @cos(half_angle);
+
+        return Quat{
+            axis[0] * s,
+            axis[1] * s,
+            axis[2] * s,
+            c,
+        };
+    }
+
+    /// Normalizes the quaternion.
+    ///
+    /// Rotations must always be unit length.
+    pub fn normalize(q: Quat) Quat {
+        const dot = @reduce(.Add, q * q);
+        return q / @as(Quat, @splat(@sqrt(dot)));
+    }
+
+    /// Combines two rotations (equivalent to `lhs * rhs`).
+    ///
+    /// The result represents the rotation of `rhs` followed by `lhs`.
+    pub fn mul(lhs: Quat, rhs: Quat) Quat {
+        const q1x = lhs[0];
+        const q1y = lhs[1];
+        const q1z = lhs[2];
+        const q1w = lhs[3];
+        const q2x = rhs[0];
+        const q2y = rhs[1];
+        const q2z = rhs[2];
+        const q2w = rhs[3];
+
+        return Quat{
+            q1w * q2x + q1x * q2w + q1y * q2z - q1z * q2y,
+            q1w * q2y - q1x * q2z + q1y * q2w + q1z * q2x,
+            q1w * q2z + q1x * q2y - q1y * q2x + q1z * q2w,
+            q1w * q2w - q1x * q2x - q1y * q2y - q1z * q2z,
+        };
     }
 };
 
