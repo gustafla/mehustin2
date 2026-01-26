@@ -15,6 +15,8 @@
 - [ ] Clip-to-clip transition effects
 - [ ] Build-time font generation
 - [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
+  - [ ] Build-time buffer & texture size information: simplify the script init API
+    - [ ] Buffer layouts become comptime-known, can remove explicit layouts from pipelines
 - [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture
