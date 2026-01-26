@@ -97,16 +97,9 @@ pub const TargetTexture = struct {
     q: u32 = 1,
 };
 
-pub const BufferLayout = struct {
-    name: []const u8,
-    format: []const VertexFormat,
-    location: []const u32,
-};
-
 pub const Config = struct {
     color_targets: []const TargetTexture = &.{},
     depth_targets: []const TargetTexture = &.{},
-    layouts: []const BufferLayout,
     samplers: []const Sampler,
     passes: []const Pass,
 };
@@ -310,31 +303,6 @@ pub fn ComptimeSet(comptime T: type) type {
     };
 }
 
-pub fn bufferLayoutPitch(comptime config: Config) []u32 {
-    var pitchs: [config.layouts.len]u32 = undefined;
-    for (config.layouts, &pitchs) |layout, *pitch| {
-        var len: u32 = 0;
-        for (layout.format) |format| {
-            len += types.vertexFormatLen(format);
-        }
-        pitch.* = len;
-    }
-    return pitchs[0..];
-}
-
-pub fn BufferLayoutEnum(comptime config: Config) type {
-    var fields: [config.layouts.len]std.builtin.Type.EnumField = undefined;
-    for (config.layouts, 0..) |layout, i| {
-        fields[i] = .{ .name = layout.name[0.. :0], .value = i };
-    }
-    return @Type(.{ .@"enum" = .{
-        .tag_type = usize,
-        .fields = &fields,
-        .decls = &.{},
-        .is_exhaustive = true,
-    } });
-}
-
 pub fn SamplerEnum(comptime config: Config) type {
     var fields: [config.samplers.len]std.builtin.Type.EnumField = undefined;
     for (config.samplers, 0..) |sampler, i| {
@@ -343,26 +311,6 @@ pub fn SamplerEnum(comptime config: Config) type {
     return @Type(.{ .@"enum" = .{
         .tag_type = usize,
         .fields = &fields,
-        .decls = &.{},
-        .is_exhaustive = true,
-    } });
-}
-
-pub fn ResourceEnum(
-    comptime container: anytype,
-    comptime signature: []const u8,
-) type {
-    const decls = @typeInfo(container).@"struct".decls;
-    var fields: [decls.len]std.builtin.Type.EnumField = undefined;
-    var num_fields = 0;
-    for (decls) |decl| {
-        if (!std.mem.startsWith(u8, decl.name, signature)) continue;
-        fields[num_fields] = .{ .name = decl.name[signature.len..], .value = num_fields };
-        num_fields += 1;
-    }
-    return @Type(.{ .@"enum" = .{
-        .tag_type = usize,
-        .fields = fields[0..num_fields],
         .decls = &.{},
         .is_exhaustive = true,
     } });

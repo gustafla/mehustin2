@@ -1,8 +1,6 @@
 const std = @import("std");
 
 const camera = @import("camera.zig");
-const CameraFn = camera.CameraFn;
-const CameraState = camera.CameraState;
 
 pub const ClipSegment = struct {
     t: f32,
@@ -39,7 +37,7 @@ pub fn ClipEnum(comptime timeline: Timeline) type {
     } });
 }
 
-pub fn clipEnums(comptime timeline: Timeline) []const ClipEnum(timeline) {
+pub fn clipTable(comptime timeline: Timeline) []const ClipEnum(timeline) {
     var clips: [timeline.clip_track.len]ClipEnum(timeline) = undefined;
     for (timeline.clip_track, &clips) |clip, *clip_enum| {
         clip_enum.* = @field(ClipEnum(timeline), clip.id);
@@ -47,16 +45,16 @@ pub fn clipEnums(comptime timeline: Timeline) []const ClipEnum(timeline) {
     return &clips;
 }
 
-pub fn camFns(comptime timeline: Timeline) []const *const CameraFn {
-    var fns: [timeline.camera_track.len]*const CameraFn = undefined;
+pub fn camFnTable(comptime timeline: Timeline) []const *const camera.Fn {
+    var fns: [timeline.camera_track.len]*const camera.Fn = undefined;
     for (timeline.camera_track, &fns) |cam, *fun| {
-        fun.* = @field(camera, "cam" ++ cam.id);
+        fun.* = @field(camera.fns, cam.id);
     }
     return &fns;
 }
 
-pub fn camEntries(comptime timeline: Timeline) []const CameraState {
-    var entries: [timeline.camera_track.len]CameraState = undefined;
+pub fn camEntryTable(comptime timeline: Timeline) []const camera.State {
+    var entries: [timeline.camera_track.len]camera.State = undefined;
     entries[0] = .{
         .pos = .{ 0, 0, 0 },
         .target = .{ 0, 0, -1 },
@@ -65,7 +63,7 @@ pub fn camEntries(comptime timeline: Timeline) []const CameraState {
     for (1..timeline.camera_track.len) |i| {
         const t = timeline.camera_track[i].t;
         const cam = timeline.camera_track[i - 1];
-        const camFn = @field(camera, "cam" ++ cam.id);
+        const camFn = @field(camera.fns, cam.id);
         entries[i] = camFn(t - cam.t, entries[i - 1]);
     }
 

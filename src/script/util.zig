@@ -3,6 +3,14 @@ const std = @import("std");
 const resource = @import("../resource.zig");
 const font = @import("font.zig");
 
+pub const InstanceText = extern struct {
+    uv: [4]f32,
+    position: [4]f32,
+    color: [4]f32,
+
+    pub const locations = .{ 6, 7, 8 };
+};
+
 pub fn scanTimeline(
     comptime T: type,
     timeline: []const T,
@@ -51,15 +59,10 @@ pub fn genText(
     byte_pitch: usize,
     dst: []u8,
 ) u32 {
-    const TextInstance = extern struct {
-        uv_rect: [4]f32,
-        pos_rect: [4]f32,
-        color: [4]f32,
-    };
-    std.debug.assert(@sizeOf(TextInstance) == byte_pitch);
-    const dst_cast: []TextInstance = @ptrCast(@alignCast(dst));
+    std.debug.assert(@sizeOf(InstanceText) == byte_pitch);
+    const dst_cast: []InstanceText = @ptrCast(@alignCast(dst));
 
-    @memset(dst_cast, std.mem.zeroes(TextInstance));
+    @memset(dst_cast, std.mem.zeroes(InstanceText));
 
     var x: f32 = 0;
     var y: f32 = size;
@@ -83,8 +86,8 @@ pub fn genText(
         const p_min_y = y + g.y_off;
 
         dst_cast[instances] = .{
-            .uv_rect = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
-            .pos_rect = .{
+            .uv = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
+            .position = .{
                 p_min_x,
                 p_min_y,
                 p_min_x + g.width,

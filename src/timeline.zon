@@ -5,7 +5,7 @@
         .{ .t = 55.0, .id = "showtime" },
     },
     .camera_track = .{
-        .{ .t = 0.0, .id = "StayPut" },
-        .{ .t = 14.0, .id = "SinusoidalRotation" },
+        .{ .t = 0.0, .id = "stayPut" },
+        .{ .t = 14.0, .id = "sinusoidalRotation" },
     },
 }
