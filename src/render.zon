@@ -33,14 +33,6 @@
             .location = .{ 6, 7 },
         },
     },
-    .buffers = .{
-        "LogoText",
-        "Octahedron",
-    },
-    .textures = .{
-        "LogoFont",
-        "Noise",
-    },
     .samplers = .{
         .{ .name = "nearest" },
         .{ .name = "linear", .min_filter = .linear, .mag_filter = .linear },

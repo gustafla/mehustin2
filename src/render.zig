@@ -18,11 +18,17 @@ const sdlerr = @import("err.zig").sdlerr;
 
 const log = std.log.scoped(.render);
 
-// Generate helpers and metadata from config
+// Generate helpers and metadata from script and config
 const layout_pitch = schema.bufferLayoutPitch(config)[0..].*;
 pub const BufferLayoutEnum = schema.BufferLayoutEnum(config);
-const BufferEnum = schema.BufferEnum(config);
-const TextureEnum = schema.TextureEnum(config);
+const buffer_init_signature = "initBuffer";
+const buffer_update_signature = "updateBuffer";
+const BufferEnum = schema.ResourceEnum(script, buffer_init_signature);
+const buffer_ids = @typeInfo(BufferEnum).@"enum".fields;
+const texture_init_signature = "initTexture";
+const texture_update_signature = "updateTexture";
+const TextureEnum = schema.ResourceEnum(script, texture_init_signature);
+const texture_ids = @typeInfo(TextureEnum).@"enum".fields;
 const SamplerEnum = schema.SamplerEnum(config);
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
@@ -48,14 +54,14 @@ var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
 var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
 
-var textures: [config.textures.len]*c.SDL_GPUTexture = undefined;
-var texture_infos: [config.textures.len]script.TextureInit = undefined;
-var texture_sizes: [config.textures.len]u32 = undefined;
+var textures: [texture_ids.len]*c.SDL_GPUTexture = undefined;
+var texture_infos: [texture_ids.len]script.TextureInit = undefined;
+var texture_sizes: [texture_ids.len]u32 = undefined;
 var texture_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
 
-var buffers: [config.buffers.len]*c.SDL_GPUBuffer = undefined;
-var buffer_infos: [config.buffers.len]script.BufferInit = undefined;
-var buffer_sizes: [config.buffers.len]u32 = undefined;
+var buffers: [buffer_ids.len]*c.SDL_GPUBuffer = undefined;
+var buffer_infos: [buffer_ids.len]script.BufferInit = undefined;
+var buffer_sizes: [buffer_ids.len]u32 = undefined;
 var buffer_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
 
 pub fn deinit() void {
@@ -213,19 +219,19 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
 
 fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     // Gather texture initialization metadata
-    inline for (config.textures, &texture_infos) |name, *info| {
-        info.* = try @field(script, "initTexture" ++ name)();
+    inline for (texture_ids, &texture_infos) |id, *info| {
+        info.* = try @field(script, texture_init_signature ++ id.name)();
     }
 
     // Initialize textures and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
     inline for (
-        config.textures,
+        texture_ids,
         texture_infos,
         &textures,
         &texture_sizes,
-    ) |name, info, *texture, *size| {
+    ) |id, info, *texture, *size| {
         size.* = c.SDL_CalculateGPUTextureFormatSize(
             @intFromEnum(info.format),
             info.width,
@@ -247,7 +253,7 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         if (info.initFn != null) {
             init_transfer_buffer_size += size.*;
         }
-        if (@hasDecl(script, "updateTexture" ++ name)) {
+        if (@hasDecl(script, texture_update_signature ++ id.name)) {
             update_transfer_buffer_size += size.*;
         }
     }
@@ -303,19 +309,19 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
 fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     // Gather buffer initialization metadata
-    inline for (config.buffers, &buffer_infos) |name, *info| {
-        info.* = try @field(script, "initBuffer" ++ name)();
+    inline for (buffer_ids, &buffer_infos) |id, *info| {
+        info.* = try @field(script, buffer_init_signature ++ id.name)();
     }
 
     // Initialize buffers and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
     inline for (
-        config.buffers,
+        buffer_ids,
         buffer_infos,
         &buffers,
         &buffer_sizes,
-    ) |name, info, *buffer, *size| {
+    ) |id, info, *buffer, *size| {
         const element_size = layout_pitch[@intFromEnum(info.layout)];
         size.* = info.elements * element_size;
         buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
@@ -326,7 +332,7 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         if (info.initFn != null) {
             init_transfer_buffer_size += size.*;
         }
-        if (@hasDecl(script, "updateBuffer" ++ name)) {
+        if (@hasDecl(script, buffer_update_signature ++ id.name)) {
             update_transfer_buffer_size += size.*;
         }
     }
@@ -506,9 +512,9 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     )));
 
     // Populate transfer buffer with data
-    inline for (config.textures, texture_sizes) |name, size| {
-        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
-        @field(script, "updateTexture" ++ name)(time, tbp[0..size]);
+    inline for (texture_ids, texture_sizes) |id, size| {
+        if (!@hasDecl(script, texture_update_signature ++ id.name)) continue;
+        @field(script, texture_update_signature ++ id.name)(time, tbp[0..size]);
         tbp += size;
     }
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -516,12 +522,12 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     // Record upload commands
     var offset: u32 = 0;
     inline for (
-        config.textures,
+        texture_ids,
         textures,
         texture_infos,
         texture_sizes,
-    ) |name, texture, info, size| {
-        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
+    ) |id, texture, info, size| {
+        if (!@hasDecl(script, texture_update_signature ++ id.name)) continue;
         c.SDL_UploadToGPUTexture(copy_pass, &.{
             .transfer_buffer = transfer_buffer,
             .offset = offset,
@@ -552,16 +558,16 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     )));
 
     // Populate transfer buffer with data
-    inline for (config.buffers, buffer_sizes) |name, size| {
-        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
-        @field(script, "updateTexture" ++ name)(time, tbp[0..size]);
+    inline for (buffer_ids, buffer_sizes) |id, size| {
+        if (!@hasDecl(script, buffer_update_signature ++ id.name)) continue;
+        @field(script, buffer_update_signature ++ id.name)(time, tbp[0..size]);
         tbp += size;
     }
 
     // Record upload commands
     var offset: u32 = 0;
-    inline for (config.buffers, buffers, buffer_sizes) |name, buffer, size| {
-        if (!@hasDecl(script, "updateTexture" ++ name)) continue;
+    inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
+        if (!@hasDecl(script, buffer_update_signature ++ id.name)) continue;
         c.SDL_UploadToGPUBuffer(copy_pass, &.{
             .transfer_buffer = transfer_buffer,
             .offset = offset,
