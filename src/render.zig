@@ -574,28 +574,24 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, time: f32) !void {
     }
 }
 
-fn renderGraph(
-    comptime active_clip: script.Clip,
+const RenderParameters = struct {
     cmdbuf: *c.SDL_GPUCommandBuffer,
+    frame_data: script.FrameData,
     swapchain_texture: *c.SDL_GPUTexture,
     swapchain_viewport: *const c.SDL_GPUViewport,
     resolution_match: bool,
-) !void {
-    pass_loop: inline for (config.passes) |pass| {
-        // Filter pass by clip id list
-        const pass_visible = comptime blk: {
-            if (pass.condition) |clip_ids| {
-                break :blk std.mem.containsAtLeastScalar(
-                    script.Clip,
-                    clip_ids,
-                    1,
-                    active_clip,
-                );
-            }
-            break :blk true;
-        };
+};
 
-        if (!pass_visible) continue :pass_loop;
+fn renderGraph(
+    comptime clip: script.Clip,
+    parm: RenderParameters,
+) !void {
+    inline for (config.passes) |pass| {
+        // Filter pass by clip id list
+        comptime if (pass.condition) |clip_ids| {
+            const idx = std.mem.indexOfScalar(script.Clip, clip_ids, clip);
+            if (idx == null) continue;
+        };
 
         // Initialize color target infos
         const color_target_infos = blk: {
@@ -604,12 +600,17 @@ fn renderGraph(
                 info.* = .{
                     .texture = switch (target.target) {
                         .index => |index| color_targets[index],
-                        .swapchain => if (resolution_match)
-                            swapchain_texture
+                        .swapchain => if (parm.resolution_match)
+                            parm.swapchain_texture
                         else
                             output_buffer,
                     },
-                    .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+                    .clear_color = .{
+                        .r = parm.frame_data.clear_color[0],
+                        .g = parm.frame_data.clear_color[1],
+                        .b = parm.frame_data.clear_color[2],
+                        .a = parm.frame_data.clear_color[3],
+                    },
                     .load_op = @intFromEnum(target.load_op),
                     .store_op = @intFromEnum(target.store_op),
                     .cycle = target.load_op != .load,
@@ -632,7 +633,7 @@ fn renderGraph(
             .target_scale = p / q,
         };
         c.SDL_PushGPUFragmentUniformData(
-            cmdbuf,
+            parm.cmdbuf,
             1,
             @ptrCast(&fragment_pass_uniforms),
             @sizeOf(@TypeOf(fragment_pass_uniforms)),
@@ -640,7 +641,7 @@ fn renderGraph(
 
         // Begin render pass
         const render_pass = c.SDL_BeginGPURenderPass(
-            cmdbuf,
+            parm.cmdbuf,
             &color_target_infos,
             @intCast(pass.color_targets.len),
             if (pass.depth_target) |target| &.{
@@ -658,26 +659,17 @@ fn renderGraph(
         const target_swapchain = comptime for (pass.color_targets) |target| {
             if (target.target == .swapchain) break true;
         } else false;
-        if (target_swapchain and resolution_match) {
-            c.SDL_SetGPUViewport(render_pass, swapchain_viewport);
+        if (target_swapchain and parm.resolution_match) {
+            c.SDL_SetGPUViewport(render_pass, parm.swapchain_viewport);
         }
 
         // Record drawcalls
-        draw_loop: inline for (pass.drawcalls) |drawcall| {
+        inline for (pass.drawcalls) |drawcall| {
             // Filter drawcall by clip id list
-            const drawcall_visible = comptime blk: {
-                if (drawcall.condition) |clip_ids| {
-                    break :blk std.mem.containsAtLeastScalar(
-                        script.Clip,
-                        clip_ids,
-                        1,
-                        active_clip,
-                    );
-                }
-                break :blk true;
+            comptime if (drawcall.condition) |clip_ids| {
+                const idx = std.mem.indexOfScalar(script.Clip, clip_ids, clip);
+                if (idx == null) continue;
             };
-
-            if (!drawcall_visible) continue :draw_loop;
 
             // Bind vertex buffer, storing number of instances to draw
             var num_buffers: u32 = 0;
@@ -816,15 +808,15 @@ pub fn render(time: f32) !void {
     // Compute viewport preserving aspect ratio rendering to swapchain
     const swapchain_viewport = viewport(swapchain_width, swapchain_height);
 
-    // Render passes
+    // Render passes (specializes the renderer for each clip configuration)
     switch (frame_data.clip) {
-        inline else => |active_clip| try renderGraph(
-            active_clip,
-            cmdbuf,
-            swapchain_texture,
-            &swapchain_viewport,
-            resolution_match,
-        ),
+        inline else => |clip| try renderGraph(clip, .{
+            .cmdbuf = cmdbuf,
+            .frame_data = frame_data,
+            .swapchain_texture = swapchain_texture,
+            .swapchain_viewport = &swapchain_viewport,
+            .resolution_match = resolution_match,
+        }),
     }
 
     // Blit output_buffer to swapchain when necessary

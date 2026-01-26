@@ -46,6 +46,7 @@ pub const FrameData = struct {
     vertex: VertexFrameData,
     fragment: FragmentFrameData,
     clip: Clip,
+    clear_color: [4]f32 = .{ 0, 0, 0, 1 },
 };
 
 pub fn updateFrame(time: f32) FrameData {
@@ -86,6 +87,7 @@ pub fn updateFrame(time: f32) FrameData {
             .time = clip_time,
         },
         .clip = clip,
+        .clear_color = .{ 0.5, 0.5, 0.5, 1 },
     };
 }
 
