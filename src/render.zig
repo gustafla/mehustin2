@@ -25,14 +25,6 @@ const texture_ids = @typeInfo(script.Texture).@"enum".fields;
 const SamplerEnum = schema.SamplerEnum(config);
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
-const layout_sizes = blk: {
-    const layout_decls = @typeInfo(script.layout).@"struct".decls;
-    var sizes: [layout_decls.len]u32 = undefined;
-    for (layout_decls, &sizes) |decl, *size| {
-        size.* = @sizeOf(@field(script.layout, decl.name));
-    }
-    break :blk sizes[0..].*;
-};
 
 pub const width: f32 = @floatFromInt(main_config.width);
 pub const height: f32 = @floatFromInt(main_config.height);
@@ -61,12 +53,12 @@ var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
 var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
 
 var textures: [texture_ids.len]*c.SDL_GPUTexture = undefined;
-var texture_infos: [texture_ids.len]script.texture.Init = undefined;
+var texture_infos: [texture_ids.len]script.TextureInfo = undefined;
 var texture_sizes: [texture_ids.len]u32 = undefined;
 var texture_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
 
 var buffers: [buffer_ids.len]*c.SDL_GPUBuffer = undefined;
-var buffer_infos: [buffer_ids.len]script.buffer.Init = undefined;
+var buffer_infos: [buffer_ids.len]script.BufferInfo = undefined;
 var buffer_sizes: [buffer_ids.len]u32 = undefined;
 var buffer_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
 
@@ -176,18 +168,15 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
     });
 
     inline for (.{ "vertex", "instance" }) |buffer_type| {
+        const field_name = buffer_type ++ "_layout";
+        const Layout = @field(key, field_name) orelse continue;
+
+        log.debug("    {s} layout: {s}", .{ buffer_type, @typeName(Layout) });
+
         comptime var upper: [buffer_type.len]u8 = undefined;
         comptime for (buffer_type, &upper) |src, *dst| {
             dst.* = std.ascii.toUpper(src);
         };
-        const field_name = buffer_type ++ "_layout";
-        const layout_name = comptime @field(pipeline, field_name) orelse continue;
-        const Layout = @field(script.layout, layout_name);
-
-        log.debug("    {s} layout: {s}", .{
-            buffer_type,
-            layout_name,
-        });
 
         buffer_descs[num_buffers] = .{
             .slot = num_buffers,
@@ -261,31 +250,33 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         &texture_infos,
         &texture_sizes,
     ) |id, *texture, *info, *size| {
-        const texture_info = try @field(script.texture.init, id.name)();
-        info.* = texture_info;
+        const texture_src = @field(script.texture, id.name);
+        info.* = try texture_src.create();
         size.* = c.SDL_CalculateGPUTextureFormatSize(
-            @intFromEnum(texture_info.format),
-            texture_info.width,
-            texture_info.height,
-            texture_info.depth,
+            @intFromEnum(info.format),
+            info.width,
+            info.height,
+            info.depth,
         );
+
         log.debug("Initializing Texture {s} ({})", .{ id.name, id.value });
         texture.* =
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-                .type = @intFromEnum(texture_info.tex_type),
-                .format = @intFromEnum(texture_info.format),
+                .type = @intFromEnum(info.tex_type),
+                .format = @intFromEnum(info.format),
                 .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
-                .width = texture_info.width,
-                .height = texture_info.height,
-                .layer_count_or_depth = texture_info.depth,
-                .num_levels = texture_info.mip_levels,
+                .width = info.width,
+                .height = info.height,
+                .layer_count_or_depth = info.depth,
+                .num_levels = info.mip_levels,
                 .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
             }));
         errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
-        if (texture_info.initFn != null) {
+
+        if (@hasDecl(texture_src, "init")) {
             init_transfer_buffer_size += size.*;
         }
-        if (@hasDecl(script.texture.update, id.name)) {
+        if (@hasDecl(texture_src, "updateData")) {
             update_transfer_buffer_size += size.*;
         }
     }
@@ -301,17 +292,23 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         transfer_buffer,
         false,
     )));
-    for (texture_infos, texture_sizes) |info, size| {
-        const initFn = info.initFn orelse continue;
-        initFn(info, tbp[0..size]);
+    inline for (texture_ids, texture_sizes) |id, size| {
+        const texture_src = @field(script.texture, id.name);
+        if (!@hasDecl(texture_src, "init")) continue;
+        try texture_src.init(tbp[0..size]);
         tbp += size;
     }
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     // Record transfer buffer uploads to textures
     var offset: u32 = 0;
-    for (texture_infos, textures, texture_sizes) |info, texture, size| {
-        if (info.initFn == null) continue;
+    inline for (
+        texture_ids,
+        textures,
+        texture_infos,
+        texture_sizes,
+    ) |id, texture, info, size| {
+        if (!@hasDecl(@field(script.texture, id.name), "init")) continue;
         c.SDL_UploadToGPUTexture(
             copy_pass,
             &.{
@@ -343,31 +340,28 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     // Initialize buffers and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
-    inline for (
-        buffer_ids,
-        &buffers,
-        &buffer_infos,
-        &buffer_sizes,
-    ) |id, *buffer, *info, *size| {
-        const buffer_info = try @field(script.buffer.init, id.name)();
-        info.* = buffer_info;
-        const layout_idx = @intFromEnum(buffer_info.layout);
-        size.* = buffer_info.num_elements * layout_sizes[layout_idx];
-        log.debug("Buffer {s} ({}) uses layout {s} ({})", .{
-            id.name, id.value, @tagName(buffer_info.layout), layout_idx,
+    inline for (buffer_ids, &buffers, &buffer_sizes) |id, *buffer, *size| {
+        const buffer_src = @field(script.buffer, id.name);
+        const num_elements = try buffer_src.create();
+        const layout_size = @sizeOf(buffer_src.Layout);
+        size.* = num_elements * layout_size;
+
+        log.debug("Initializing Buffer {s} ({}) with {s}", .{
+            id.name, id.value, @typeName(buffer_src.Layout),
         });
         log.debug("    num_elements = {}, layout_size = {}, size = {}", .{
-            buffer_info.num_elements, layout_sizes[layout_idx], size.*,
+            num_elements, layout_size, size.*,
         });
         buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
             .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
             .size = size.*,
         }));
         errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
-        if (info.initFn != null) {
+
+        if (@hasDecl(buffer_src, "init")) {
             init_transfer_buffer_size += size.*;
         }
-        if (@hasDecl(script.buffer.update, id.name)) {
+        if (@hasDecl(buffer_src, "updateData")) {
             update_transfer_buffer_size += size.*;
         }
     }
@@ -387,18 +381,18 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         transfer_buffer,
         false,
     )));
-    for (&buffer_infos, buffer_sizes) |*info, size| {
-        const initFn = info.initFn orelse continue;
-        const layout_idx = @intFromEnum(info.layout);
-        info.num_elements = initFn(info.*, layout_sizes[layout_idx], tbp[0..size]);
+    inline for (buffer_ids, &buffer_infos, buffer_sizes) |id, *info, size| {
+        const buffer_src = @field(script.buffer, id.name);
+        if (!@hasDecl(buffer_src, "init")) continue;
+        info.* = try buffer_src.init(@ptrCast(@alignCast(tbp[0..size])));
         tbp += size;
     }
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     // Record transfer buffer uploads to buffers
     var offset: u32 = 0;
-    for (buffers, buffer_infos, buffer_sizes) |buffer, info, size| {
-        if (info.initFn == null) continue;
+    inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
+        if (!@hasDecl(@field(script.buffer, id.name), "init")) continue;
         c.SDL_UploadToGPUBuffer(
             copy_pass,
             &.{
@@ -548,8 +542,9 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass) !void {
 
     // Populate transfer buffer with data
     inline for (texture_ids, texture_sizes) |id, size| {
-        if (!@hasDecl(script.texture.update, id.name)) continue;
-        @field(script.texture.update, id.name)(tbp[0..size]);
+        const texture_src = @field(script.texture, id.name);
+        if (!@hasDecl(texture_src, "updateData")) continue;
+        try texture_src.updateData(tbp[0..size]);
         tbp += size;
     }
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -562,7 +557,7 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass) !void {
         texture_infos,
         texture_sizes,
     ) |id, texture, info, size| {
-        if (!@hasDecl(script.texture.update, id.name)) continue;
+        if (!@hasDecl(@field(script.texture, id.name), "updateData")) continue;
         c.SDL_UploadToGPUTexture(copy_pass, &.{
             .transfer_buffer = transfer_buffer,
             .offset = offset,
@@ -594,15 +589,16 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass) !void {
 
     // Populate transfer buffer with data
     inline for (buffer_ids, buffer_sizes) |id, size| {
-        if (!@hasDecl(script.buffer.update, id.name)) continue;
-        @field(script.buffer.update, id.name)(tbp[0..size]);
+        const buffer_src = @field(script.buffer, id.name);
+        if (!@hasDecl(buffer_src, "updateData")) continue;
+        try buffer_src.updateData(@ptrCast(@alignCast(tbp[0..size])));
         tbp += size;
     }
 
     // Record upload commands
     var offset: u32 = 0;
     inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
-        if (!@hasDecl(script.buffer.update, id.name)) continue;
+        if (!@hasDecl(@field(script.buffer, id.name), "updateData")) continue;
         c.SDL_UploadToGPUBuffer(copy_pass, &.{
             .transfer_buffer = transfer_buffer,
             .offset = offset,
@@ -612,6 +608,13 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass) !void {
             .size = size,
         }, true);
         offset += size;
+    }
+
+    // Update buffer infos
+    inline for (buffer_ids, &buffer_infos) |id, *info| {
+        const buffer_src = @field(script.buffer, id.name);
+        if (!@hasDecl(buffer_src, "updateInfo")) continue;
+        info.* = buffer_src.updateInfo();
     }
 }
 
@@ -718,6 +721,7 @@ fn renderGraph(
                 .num => |n| n,
                 .infer => 3,
             };
+            var first_vertex: u32 = 0;
             if (drawcall.vertex_buffer) |name| {
                 const idx = @intFromEnum(@field(script.Buffer, name));
                 c.SDL_BindGPUVertexBuffers(
@@ -730,6 +734,7 @@ fn renderGraph(
                 if (drawcall.num_vertices == .infer) {
                     num_vertices = buffer_infos[idx].num_elements;
                 }
+                first_vertex = buffer_infos[idx].first_element;
             }
 
             // Bind instance buffer, storing number of instances to draw
@@ -737,6 +742,7 @@ fn renderGraph(
                 .num => |n| n,
                 .infer => 1,
             };
+            var first_instance: u32 = 0;
             if (drawcall.instance_buffer) |name| {
                 const idx = @intFromEnum(@field(script.Buffer, name));
                 c.SDL_BindGPUVertexBuffers(
@@ -749,6 +755,7 @@ fn renderGraph(
                 if (drawcall.num_instances == .infer) {
                     num_instances = buffer_infos[idx].num_elements;
                 }
+                first_instance = buffer_infos[idx].first_element;
             }
 
             // Bind textures
@@ -784,8 +791,8 @@ fn renderGraph(
                     render_pass,
                     num_vertices,
                     num_instances,
-                    drawcall.first_vertex,
-                    drawcall.first_instance,
+                    first_vertex,
+                    first_instance,
                 );
             }
         }

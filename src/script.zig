@@ -47,9 +47,16 @@ pub const layout = struct {
 
         pub const locations = .{ 6, 7 };
     };
-};
 
-pub const Layout = std.meta.DeclEnum(layout);
+    // Assert that all layouts are extern structs
+    comptime {
+        for (@typeInfo(@This()).@"struct".decls) |decl| {
+            if (@typeInfo(@field(@This(), decl.name)).@"struct".layout != .@"extern") {
+                @compileError(std.fmt.comptimePrint("Layout {s} is not extern", .{decl.name}));
+            }
+        }
+    }
+};
 
 // ---- FRAME DATA (1st) ----
 
@@ -124,30 +131,37 @@ pub const frame = struct {
 
 // ---- TEXTURES (2nd) ----
 
+const logo_font_size = 128.0;
+const noise_size: usize = 64;
+
+var logo_font_glyphs: [128]font.GlyphInfo = undefined;
+
+pub const TextureInfo = struct {
+    tex_type: types.TextureType = .@"2d",
+    format: types.TextureFormat,
+    width: u32,
+    height: u32,
+    depth: u32 = 1,
+    mip_levels: u32 = 1,
+};
+
 pub const texture = struct {
-    pub const Init = struct {
-        tex_type: types.TextureType = .@"2d",
-        format: types.TextureFormat,
-        width: u32,
-        height: u32,
-        depth: u32 = 1,
-        mip_levels: u32 = 1,
-        data: ?*anyopaque = null,
-        initFn: ?*const fn (@This(), []u8) void = null,
-    };
+    pub const logo_font = struct {
+        const name = "Unitblock.ttf";
+        const dim = 1024;
 
-    pub const logo_font_size = 128.0;
-    const noise_size: usize = 64;
+        pub fn create() !TextureInfo {
+            return .{
+                .format = .r8_unorm,
+                .width = dim,
+                .height = dim,
+            };
+        }
 
-    pub var logo_font_glyphs: [128]font.GlyphInfo = undefined;
-
-    pub const init = struct {
-        pub fn logoFont() !Init {
-            const name = "Unitblock.ttf";
-            const dim = 1024;
+        pub fn init(dst: []u8) !void {
             const ttf = try util.loadFile(gpa, name);
             defer gpa.free(ttf);
-            const buf = try gpa.alloc(u8, dim * dim);
+
             try font.bakeSDFAtlas(
                 ttf.ptr,
                 logo_font_size,
@@ -156,35 +170,21 @@ pub const texture = struct {
                 dim,
                 dim,
                 &logo_font_glyphs,
-                buf.ptr,
+                dst.ptr,
             );
-
-            return .{
-                .format = .r8_unorm,
-                .width = dim,
-                .height = dim,
-                .data = @ptrCast(buf.ptr),
-                .initFn = &struct {
-                    fn init(self: Init, dst: []u8) void {
-                        const data: [*]u8 = @ptrCast(self.data.?);
-                        @memcpy(dst, data);
-                        gpa.free(data[0..dst.len]);
-                    }
-                }.init,
-            };
         }
+    };
 
-        pub fn noise() !Init {
+    pub const noise = struct {
+        pub fn create() !TextureInfo {
             return .{
                 .format = .r8_unorm,
                 .width = noise_size,
                 .height = noise_size,
             };
         }
-    };
 
-    pub const update = struct {
-        pub fn noise(dst: []u8) void {
+        pub fn updateData(dst: []u8) !void {
             for (0..noise_size) |y| {
                 for (0..noise_size) |x| {
                     const scale = 0.5;
@@ -201,89 +201,81 @@ pub const texture = struct {
     };
 };
 
-pub const Texture = std.meta.DeclEnum(texture.init);
+pub const Texture = std.meta.DeclEnum(texture);
 
 // ---- BUFFERS (3rd) ----
 
+pub const BufferInfo = struct {
+    num_elements: u32,
+    first_element: u32 = 0,
+};
+
 pub const buffer = struct {
-    pub const Init = struct {
-        num_elements: u32,
-        first_element: u32 = 0,
-        layout: Layout,
-        data: ?*anyopaque = null,
-        initFn: ?*const fn (@This(), usize, []u8) u32 = null,
-    };
+    pub const octahedron = struct {
+        const coords = .{
+            // position1          position2            position3
+            0.0, -1.0, 0.0, 0.66, 0.0, 0.66, -0.66, 0.0, 0.66, // lower front
+            0.0, -1.0, 0.0, 0.66, 0.0, -0.66, 0.66, 0.0, 0.66, // lower right
+            0.0, -1.0, 0.0, -0.66, 0.0, -0.66, 0.66, 0.0, -0.66, // lower back
+            0.0, -1.0, 0.0, -0.66, 0.0, 0.66, -0.66, 0.0, -0.66, // lower left
+            0.0, 1.0, 0.0, -0.66, 0.0, 0.66, 0.66, 0.0, 0.66, // upper front
+            0.0, 1.0, 0.0, 0.66, 0.0, 0.66, 0.66, 0.0, -0.66, // upper right
+            0.0, 1.0, 0.0, 0.66, 0.0, -0.66, -0.66, 0.0, -0.66, // upper back
+            0.0, 1.0, 0.0, -0.66, 0.0, -0.66, -0.66, 0.0, 0.66, // upper left
+        };
+        const colors = .{
+            0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
+            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+            0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
+            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
+            0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
+            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
+            0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
+        };
+        const num_vertices = coords.len / 3;
 
-    pub const init = struct {
-        pub fn octahedron() !Init {
-            const coords = .{
-                // position1          position2            position3
-                0.0, -1.0, 0.0, 0.66, 0.0, 0.66, -0.66, 0.0, 0.66, // lower front
-                0.0, -1.0, 0.0, 0.66, 0.0, -0.66, 0.66, 0.0, 0.66, // lower right
-                0.0, -1.0, 0.0, -0.66, 0.0, -0.66, 0.66, 0.0, -0.66, // lower back
-                0.0, -1.0, 0.0, -0.66, 0.0, 0.66, -0.66, 0.0, -0.66, // lower left
-                0.0, 1.0, 0.0, -0.66, 0.0, 0.66, 0.66, 0.0, 0.66, // upper front
-                0.0, 1.0, 0.0, 0.66, 0.0, 0.66, 0.66, 0.0, -0.66, // upper right
-                0.0, 1.0, 0.0, 0.66, 0.0, -0.66, -0.66, 0.0, -0.66, // upper back
-                0.0, 1.0, 0.0, -0.66, 0.0, -0.66, -0.66, 0.0, 0.66, // upper left
-            };
-            const colors = .{
-                0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
-                0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
-                0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
-                0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
-                0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-                0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
-                0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-                0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
-            };
+        pub const Layout = layout.VertexPosColor;
 
-            return .{
-                .num_elements = coords.len / 3,
-                .layout = .VertexPosColor,
-                .initFn = &struct {
-                    fn init(self: Init, pitch: usize, dst: []u8) u32 {
-                        util.interleave(f32, &.{ 3, 3 }, &.{ &coords, &colors }, pitch, dst);
-                        return self.num_elements;
-                    }
-                }.init,
-            };
+        pub fn create() !u32 {
+            return num_vertices;
         }
 
-        pub fn logoText() !Init {
-            const str = "Mehu\nMehu\nMehu";
-
-            return .{
-                .num_elements = str.len,
-                .layout = .InstanceText,
-                .initFn = &struct {
-                    fn init(self: Init, pitch: usize, dst: []u8) u32 {
-                        _ = self;
-                        return util.genText(
-                            str,
-                            texture.logo_font_size,
-                            &texture.logo_font_glyphs,
-                            pitch,
-                            dst,
-                        );
-                    }
-                }.init,
-            };
-        }
-
-        pub fn octInstances() !Init {
-            return .{
-                .num_elements = 512,
-                .layout = .InstanceTRS,
-            };
+        pub fn init(dst: []Layout) !BufferInfo {
+            util.interleave(f32, Layout, &.{ 3, 3 }, &.{ &coords, &colors }, dst);
+            return .{ .num_elements = @intCast(dst.len) };
         }
     };
 
-    pub const update = struct {
-        pub fn octInstances(dst: []u8) void {
-            const dst_cast: []layout.InstanceTRS = @ptrCast(@alignCast(dst));
-            for (dst_cast, 0..) |*instance, i| {
-                _ = i;
+    pub const logo_text = struct {
+        const str = "Mehu\nMehu\nMehu";
+
+        pub const Layout = layout.InstanceText;
+
+        pub fn create() !u32 {
+            return str.len;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            const num = util.genText(
+                str,
+                logo_font_size,
+                &logo_font_glyphs,
+                dst,
+            );
+            return .{ .num_elements = num };
+        }
+    };
+
+    pub const oct_instances = struct {
+        pub const Layout = layout.InstanceTRS;
+
+        pub fn create() !u32 {
+            return 512;
+        }
+
+        pub fn updateData(dst: []Layout) !void {
+            for (dst) |*instance| {
                 instance.* = .{
                     .pos_scale = .{ 0, 0, 0, 1 },
                     .rot_quat = math.quat.IDENTITY,
@@ -293,4 +285,4 @@ pub const buffer = struct {
     };
 };
 
-pub const Buffer = std.meta.DeclEnum(buffer.init);
+pub const Buffer = std.meta.DeclEnum(buffer);

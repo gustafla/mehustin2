@@ -27,23 +27,23 @@ pub fn scanTimeline(
 
 pub fn interleave(
     T: type,
-    lengths: []const usize,
+    E: type,
+    comptime lengths: []const usize,
     srcs: []const []const T,
-    byte_pitch: usize,
-    dst: []u8,
+    dst: []E,
 ) void {
     std.debug.assert(lengths.len == srcs.len);
-    const pitch = blk: {
+    const pitch = comptime blk: {
         var s: usize = 0;
         for (lengths) |len| {
             s += len;
         }
         break :blk s;
     };
-    std.debug.assert(pitch * @sizeOf(T) == byte_pitch);
+    comptime std.debug.assert(pitch * @sizeOf(T) == @sizeOf(E));
     const dst_cast: []T = @ptrCast(@alignCast(dst));
 
-    for (0..dst.len / byte_pitch) |i| {
+    for (0..dst.len) |i| {
         var offset = i * pitch;
         for (lengths, srcs) |len, src| {
             @memcpy(dst_cast[offset..][0..len], src[i * len ..][0..len]);
@@ -56,13 +56,9 @@ pub fn genText(
     str: []const u8,
     size: f32,
     glyphs: *[128]font.GlyphInfo,
-    byte_pitch: usize,
-    dst: []u8,
+    dst: []InstanceText,
 ) u32 {
-    std.debug.assert(@sizeOf(InstanceText) == byte_pitch);
-    const dst_cast: []InstanceText = @ptrCast(@alignCast(dst));
-
-    @memset(dst_cast, std.mem.zeroes(InstanceText));
+    @memset(dst, std.mem.zeroes(InstanceText));
 
     var x: f32 = 0;
     var y: f32 = size;
@@ -85,7 +81,7 @@ pub fn genText(
         const p_min_x = x + g.x_off;
         const p_min_y = y + g.y_off;
 
-        dst_cast[instances] = .{
+        dst[instances] = .{
             .uv = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
             .position = .{
                 p_min_x,

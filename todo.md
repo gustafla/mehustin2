@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] script: Give update functions control over num_elements and first_element
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [ ] Lighting (point light sources)
@@ -9,14 +8,9 @@
 
 # Backlog
 
-- [ ] script/render: Auto-generate buffer layouts from script struct types
-  - [ ] Cast ptr to correct type in render code (requires comptime-izing the init struct)
 - [ ] Camera control with clipboard export containing camera state in Zig code
 - [ ] Clip-to-clip transition effects
 - [ ] Build-time font generation
-- [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
-  - [ ] Build-time buffer & texture size information: simplify the script init API
-    - [ ] Buffer layouts become comptime-known, can remove explicit layouts from pipelines
 - [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture
@@ -41,10 +35,16 @@
   - [ ] dear_imgui_zig
   - [ ] gbms
   - [ ] zm
+- [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
+  - [ ] Build-time buffer & texture information, automatically injected into script/engine
 - [ ] Add pass chain macro to render.zon syntax
 
 # Done
 
+- [X] script: Give update functions control over num_elements and first_element
+- [X] script/render: Auto-generate buffer layouts from script struct types
+- [X] Make Buffer layouts comptime-known, can remove explicit layouts from pipelines
+  - [X] And cast the init function tbp slice to correct type in render.zig
 - [X] Developer controls
 - [X] Scene state handling
 - [X] Clip sequencing

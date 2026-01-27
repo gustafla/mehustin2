@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const Clip = @import("../script.zig").Clip;
+const script = @import("../script.zig");
+const Clip = script.Clip;
 const types = @import("types.zig");
 const TextureFormat = types.TextureFormat;
 const VertexAttributes = types.VertexAttributes;
@@ -20,8 +21,6 @@ pub const num_fragment_uniform_buffers = 2;
 pub const Pipeline = struct {
     vert: []const u8 = "tri.vert",
     frag: []const u8,
-    vertex_layout: ?[]const u8 = null,
-    instance_layout: ?[]const u8 = null,
     primitive_type: PrimitiveType = .trianglestrip,
     depth_test: ?struct {
         compare_op: CompareOp = .less_or_equal,
@@ -80,8 +79,6 @@ pub const Drawcall = struct {
     fragment_samplers: []const TextureSamplerBinding = &.{},
     num_vertices: DrawNum = .infer,
     num_instances: DrawNum = .infer,
-    first_vertex: u32 = 0,
-    first_instance: u32 = 0,
 };
 
 pub const Pass = struct {
@@ -189,6 +186,8 @@ pub fn PipelineKey(comptime config: Config) type {
         pipeline: Pipeline,
         vert_info: ShaderInfo,
         frag_info: ShaderInfo,
+        vertex_layout: ?type,
+        instance_layout: ?type,
         color_targets_buf: [max_color_targets]TextureFormat,
         num_color_targets: u32,
         depth_target: ?TextureFormat,
@@ -262,6 +261,14 @@ pub fn PipelineKey(comptime config: Config) type {
                     .num_storage_buffers = 0,
                     .num_uniform_buffers = num_fragment_uniform_buffers,
                 },
+                .vertex_layout = if (drawcall.vertex_buffer) |name|
+                    @field(script.buffer, name).Layout
+                else
+                    null,
+                .instance_layout = if (drawcall.instance_buffer) |name|
+                    @field(script.buffer, name).Layout
+                else
+                    null,
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
                 .depth_target = if (pass.depth_target) |t| config.depth_targets[t.target].format else null,

@@ -24,7 +24,6 @@
                     .pipelines = .{.{
                         .vert = "3d.vert",
                         .frag = "3d.frag",
-                        .vertex_layout = "VertexPosColor",
                         .primitive_type = .trianglelist,
                         .depth_test = .{}, // Enable with defaults
                     }},
@@ -229,18 +228,16 @@
                         .{
                             .vert = "text.vert",
                             .frag = "text_shadow.frag",
-                            .instance_layout = "InstanceText",
                             .blend_states = .{.{ .enable = true }},
                         },
                         .{
                             .vert = "text.vert",
                             .frag = "text_opaque.frag",
-                            .instance_layout = "InstanceText",
                             .blend_states = .{.{ .enable = true }},
                         },
                     },
-                    .fragment_samplers = .{.{ .texture = "logoFont", .sampler = "linear" }},
-                    .instance_buffer = "logoText",
+                    .fragment_samplers = .{.{ .texture = "logo_font", .sampler = "linear" }},
+                    .instance_buffer = "logo_text",
                     .num_vertices = .{ .num = 4 },
                 },
             },
