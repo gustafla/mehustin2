@@ -19,7 +19,6 @@ const config = @import("config.zon");
 
 pub const Clip = schema.ClipEnum(timeline);
 const clips = schema.clipTable(timeline)[0..].*;
-const cam_fns = schema.camFnTable(timeline)[0..].*;
 const cam_entries = schema.camEntryTable(timeline)[0..].*;
 
 // ---- GLOBAL ----
@@ -67,8 +66,11 @@ pub const frame = struct {
 
         const cam_idx = util.scanTimeline(CameraSegment, timeline.camera_track, time);
         const cam_seg = timeline.camera_track[cam_idx];
-        const camFn = cam_fns[cam_idx];
-        cam = camFn(time - cam_seg.t, cam_entries[cam_idx]);
+        const cam_next = if (cam_idx + 1 < timeline.camera_track.len)
+            &timeline.camera_track[cam_idx + 1]
+        else
+            null;
+        cam = cam_seg.evaluate(cam_next, cam_entries[cam_idx], time);
 
         return .{
             .vertex = .{

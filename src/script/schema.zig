@@ -9,8 +9,45 @@ pub const ClipSegment = struct {
 
 pub const CameraSegment = struct {
     t: f32,
-    id: []const u8,
-    blend_time: f32 = 0,
+    cam: camera.Motion,
+    entry: ?camera.State = null,
+    blend: f32 = 0,
+
+    pub fn evaluate(
+        self: CameraSegment,
+        next: ?*const CameraSegment,
+        default_entry: camera.State,
+        time: f32,
+    ) camera.State {
+        const relative_time = time - self.t;
+        const entry = if (self.entry) |entry| entry else default_entry;
+
+        const state_current = switch (self.cam) {
+            inline else => |param, tag| blk: {
+                const func = @field(camera.fns, @tagName(tag));
+                if (@TypeOf(param) == void) {
+                    break :blk func(relative_time, entry);
+                } else {
+                    break :blk func(relative_time, entry, param);
+                }
+            },
+        };
+
+        if (next) |next_seg| {
+            const blend_start = next_seg.t - self.blend;
+
+            if (self.blend > 0 and time >= blend_start) {
+                const elapsed_in_blend = time - blend_start;
+                const linear_t = std.math.clamp(elapsed_in_blend / self.blend, 0.0, 1.0);
+                // Hermite interpolation
+                const alpha = linear_t * linear_t * (3.0 - 2.0 * linear_t);
+                const state_next = next_seg.evaluate(null, state_current, next_seg.t);
+                return state_current.lerp(state_next, alpha);
+            }
+        }
+
+        return state_current;
+    }
 };
 
 pub const Timeline = struct {
@@ -45,26 +82,17 @@ pub fn clipTable(comptime timeline: Timeline) []const ClipEnum(timeline) {
     return &clips;
 }
 
-pub fn camFnTable(comptime timeline: Timeline) []const *const camera.Fn {
-    var fns: [timeline.camera_track.len]*const camera.Fn = undefined;
-    for (timeline.camera_track, &fns) |cam, *fun| {
-        fun.* = @field(camera.fns, cam.id);
-    }
-    return &fns;
-}
-
 pub fn camEntryTable(comptime timeline: Timeline) []const camera.State {
     var entries: [timeline.camera_track.len]camera.State = undefined;
     entries[0] = .{
-        .pos = .{ 0, 0, 0 },
-        .target = .{ 0, 0, -1 },
+        .pos = .{ 0, 0, 1 },
+        .target = .{ 0, 0, 0 },
     };
 
     for (1..timeline.camera_track.len) |i| {
-        const t = timeline.camera_track[i].t;
-        const cam = timeline.camera_track[i - 1];
-        const camFn = @field(camera.fns, cam.id);
-        entries[i] = camFn(t - cam.t, entries[i - 1]);
+        const next = timeline.camera_track[i];
+        const prev = timeline.camera_track[i - 1];
+        entries[i] = prev.evaluate(&next, entries[i - 1], next.t);
     }
 
     return &entries;

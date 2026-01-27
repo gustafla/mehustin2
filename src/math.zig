@@ -7,8 +7,7 @@ pub const Vec3 = @Vector(3, f32);
 
 /// Operations on `Vec3`.
 pub const vec3 = struct {
-    pub const ZERO: Vec3 = @splat(0.0);
-    pub const YUP = Vec3{ 0.0, 1.0, 0.0 };
+    pub const YUP: Vec3 = .{ 0.0, 1.0, 0.0 };
 
     pub fn dot(a: Vec3, b: Vec3) f32 {
         return @reduce(.Add, a * b);
@@ -33,6 +32,21 @@ pub const vec3 = struct {
             a[2] * b[0] - a[0] * b[2],
             a[0] * b[1] - a[1] * b[0],
         };
+    }
+
+    pub fn lerp(a: Vec3, b: Vec3, t: f32) Vec3 {
+        const t_vec: Vec3 = @splat(t);
+        return a + (b - a) * t_vec;
+    }
+
+    /// Rotates vector v around normalized axis k by angle (radians).
+    /// Assumes v is perpendicular to k (v . k = 0).
+    pub fn rotatePerpendicular(v: Vec3, k: Vec3, angle: f32) Vec3 {
+        const cos_v: Vec3 = @splat(std.math.cos(angle));
+        const sin_v: Vec3 = @splat(std.math.sin(angle));
+
+        const tangent = vec3.cross(k, v);
+        return (v * cos_v) + (tangent * sin_v);
     }
 };
 
