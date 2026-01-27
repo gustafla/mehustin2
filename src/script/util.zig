@@ -26,37 +26,35 @@ pub fn scanTimeline(
 }
 
 pub fn interleave(
-    T: type,
-    E: type,
-    comptime lengths: []const usize,
-    srcs: []const []const T,
+    comptime E: type,
     dst: []E,
+    srcs: anytype,
 ) void {
-    std.debug.assert(lengths.len == srcs.len);
-    const pitch = comptime blk: {
-        var s: usize = 0;
-        for (lengths) |len| {
-            s += len;
-        }
-        break :blk s;
-    };
-    comptime std.debug.assert(pitch * @sizeOf(T) == @sizeOf(E));
-    const dst_cast: []T = @ptrCast(@alignCast(dst));
+    const fields = @typeInfo(E).@"struct".fields;
 
-    for (0..dst.len) |i| {
-        var offset = i * pitch;
-        for (lengths, srcs) |len, src| {
-            @memcpy(dst_cast[offset..][0..len], src[i * len ..][0..len]);
-            offset += len;
+    for (dst, 0..) |*d, i| {
+        inline for (fields, srcs) |field, src| {
+            const dst_field_ptr = &@field(d, field.name);
+
+            switch (@typeInfo(field.type)) {
+                .array => |info| {
+                    const slice = @as([]const info.child, src);
+                    const chunk = slice[i * info.len ..][0..info.len];
+                    @memcpy(dst_field_ptr, chunk);
+                },
+                else => {
+                    dst_field_ptr.* = src[i];
+                },
+            }
         }
     }
 }
 
 pub fn genText(
+    dst: []InstanceText,
     str: []const u8,
     size: f32,
     glyphs: *[128]font.GlyphInfo,
-    dst: []InstanceText,
 ) u32 {
     @memset(dst, std.mem.zeroes(InstanceText));
 
@@ -97,6 +95,21 @@ pub fn genText(
     }
 
     return instances;
+}
+
+pub fn writeSSBO(
+    comptime Header: type,
+    comptime Element: type,
+    dst: []u8,
+    header: Header,
+    elements: []const Element,
+) void {
+    std.debug.assert(dst.len >= @sizeOf(Header) + (@sizeOf(Element) * elements.len));
+    @memcpy(dst[0..@sizeOf(Header)], std.mem.asBytes(&header));
+
+    const element_dst_bytes = dst[@sizeOf(Header)..][0 .. @sizeOf(Element) * elements.len];
+    const element_dst = std.mem.bytesAsSlice(Element, element_dst_bytes);
+    @memcpy(element_dst, elements);
 }
 
 pub fn loadFile(gpa: std.mem.Allocator, name: []const u8) ![]u8 {

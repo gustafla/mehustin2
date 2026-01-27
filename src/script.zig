@@ -15,6 +15,7 @@ const Timeline = schema.Timeline;
 const ClipSegment = schema.ClipSegment;
 const CameraSegment = schema.CameraSegment;
 const util = @import("script/util.zig");
+const config = @import("config.zon");
 
 pub const Clip = schema.ClipEnum(timeline);
 const clips = schema.clipTable(timeline)[0..].*;
@@ -28,35 +29,6 @@ var gpa: Allocator = undefined;
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
 }
-
-// ---- BUFFER LAYOUTS ----
-
-pub const layout = struct {
-    pub const VertexPosColor = extern struct {
-        position: [3]f32,
-        color: [3]f32,
-
-        pub const locations = .{ 0, 2 };
-    };
-
-    pub const InstanceText = util.InstanceText;
-
-    pub const InstanceTRS = extern struct {
-        pos_scale: [4]f32,
-        rot_quat: [4]f32,
-
-        pub const locations = .{ 6, 7 };
-    };
-
-    // Assert that all layouts are extern structs
-    comptime {
-        for (@typeInfo(@This()).@"struct".decls) |decl| {
-            if (@typeInfo(@field(@This(), decl.name)).@"struct".layout != .@"extern") {
-                @compileError(std.fmt.comptimePrint("Layout {s} is not extern", .{decl.name}));
-            }
-        }
-    }
-};
 
 // ---- FRAME DATA (1st) ----
 
@@ -205,6 +177,33 @@ pub const Texture = std.meta.DeclEnum(texture);
 
 // ---- BUFFERS (3rd) ----
 
+pub const layout = struct {
+    pub const VertexPosColor = extern struct {
+        position: [3]f32,
+        color: [3]f32,
+
+        pub const locations = .{ 0, 2 };
+    };
+
+    pub const InstanceText = util.InstanceText;
+
+    pub const InstanceTRS = extern struct {
+        pos_scale: [4]f32,
+        rot_quat: [4]f32,
+
+        pub const locations = .{ 6, 7 };
+    };
+
+    // Assert that all layouts are extern structs
+    comptime {
+        for (@typeInfo(@This()).@"struct".decls) |decl| {
+            if (@typeInfo(@field(@This(), decl.name)).@"struct".layout != .@"extern") {
+                @compileError(std.fmt.comptimePrint("Layout {s} is not extern", .{decl.name}));
+            }
+        }
+    }
+};
+
 pub const BufferInfo = struct {
     num_elements: u32,
     first_element: u32 = 0,
@@ -242,8 +241,8 @@ pub const buffer = struct {
         }
 
         pub fn init(dst: []Layout) !BufferInfo {
-            util.interleave(f32, Layout, &.{ 3, 3 }, &.{ &coords, &colors }, dst);
-            return .{ .num_elements = @intCast(dst.len) };
+            util.interleave(Layout, dst, .{ &coords, &colors });
+            return .{ .num_elements = num_vertices };
         }
     };
 
@@ -258,10 +257,10 @@ pub const buffer = struct {
 
         pub fn init(dst: []Layout) !BufferInfo {
             const num = util.genText(
+                dst,
                 str,
                 logo_font_size,
                 &logo_font_glyphs,
-                dst,
             );
             return .{ .num_elements = num };
         }
@@ -286,3 +285,41 @@ pub const buffer = struct {
 };
 
 pub const Buffer = std.meta.DeclEnum(buffer);
+
+// TODO: STORAGE TEXTURES (4th)
+
+// ---- STORAGE BUFFERS (4th) ----
+
+pub const storage_buffer = struct {
+    pub const point_lights = struct {
+        pub const Header = extern struct {
+            count: u32,
+            _pad: [3]u32 = @splat(0),
+        };
+
+        pub const Element = extern struct {
+            position_radius: [4]f32,
+            color_brightness: [4]f32,
+        };
+
+        const max_lights = config.max_lights;
+
+        pub fn create() !u32 {
+            return max_lights;
+        }
+
+        pub fn init(dst: []u8) !void {
+            const header = .{
+                .count = 1,
+            };
+
+            const lights = .{
+                .{ .position = .{ 0, 2, 0, 0.5 }, .color = .{ 1, 0, 0, 5 } },
+            };
+
+            util.writeSSBO(Header, Element, dst, header, lights);
+        }
+    };
+};
+
+pub const StorageBuffer = std.meta.DeclEnum(storage_buffer);
