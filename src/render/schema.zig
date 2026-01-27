@@ -77,6 +77,8 @@ pub const Drawcall = struct {
     instance_buffer: ?[]const u8 = null,
     vertex_samplers: []const TextureSamplerBinding = &.{},
     fragment_samplers: []const TextureSamplerBinding = &.{},
+    vertex_storage_buffers: []const []const u8 = &.{},
+    fragment_storage_buffers: []const []const u8 = &.{},
     num_vertices: DrawNum = .infer,
     num_instances: DrawNum = .infer,
 };
@@ -252,13 +254,13 @@ pub fn PipelineKey(comptime config: Config) type {
                 .vert_info = .{
                     .num_samplers = drawcall.vertex_samplers.len,
                     .num_storage_textures = 0,
-                    .num_storage_buffers = 0,
+                    .num_storage_buffers = drawcall.vertex_storage_buffers.len,
                     .num_uniform_buffers = num_vertex_uniform_buffers,
                 },
                 .frag_info = .{
                     .num_samplers = drawcall.fragment_samplers.len,
                     .num_storage_textures = 0,
-                    .num_storage_buffers = 0,
+                    .num_storage_buffers = drawcall.fragment_storage_buffers.len,
                     .num_uniform_buffers = num_fragment_uniform_buffers,
                 },
                 .vertex_layout = if (drawcall.vertex_buffer) |name|

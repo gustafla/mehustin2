@@ -22,6 +22,7 @@ const log = std.log.scoped(.render);
 // Generate helpers and metadata from script and config
 const buffer_ids = @typeInfo(script.Buffer).@"enum".fields;
 const texture_ids = @typeInfo(script.Texture).@"enum".fields;
+const storage_buffer_ids = @typeInfo(script.StorageBuffer).@"enum".fields;
 const SamplerEnum = schema.SamplerEnum(config);
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
@@ -61,6 +62,10 @@ var buffers: [buffer_ids.len]*c.SDL_GPUBuffer = undefined;
 var buffer_infos: [buffer_ids.len]script.BufferInfo = undefined;
 var buffer_sizes: [buffer_ids.len]u32 = undefined;
 var buffer_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
+
+var storage_buffers: [storage_buffer_ids.len]*c.SDL_GPUBuffer = undefined;
+var storage_buffer_sizes: [storage_buffer_ids.len]u32 = undefined;
+var storage_buffer_transfer: ?*c.SDL_GPUTransferBuffer = undefined;
 
 fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
     return switch (format) {
@@ -109,6 +114,9 @@ pub fn deinit() void {
     if (buffer_transfer) |transfer_buffer| {
         c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
     }
+    if (storage_buffer_transfer) |transfer_buffer| {
+        c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+    }
     for (depth_targets) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
@@ -126,6 +134,9 @@ pub fn deinit() void {
         c.SDL_ReleaseGPUSampler(device, sampler);
     }
     for (buffers) |buffer| {
+        c.SDL_ReleaseGPUBuffer(device, buffer);
+    }
+    for (storage_buffers) |buffer| {
         c.SDL_ReleaseGPUBuffer(device, buffer);
     }
 
@@ -280,6 +291,10 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             update_transfer_buffer_size += size.*;
         }
     }
+
+    // Early return to avoid creating 0-sized transfer buffer
+    if (init_transfer_buffer_size == 0) return update_transfer_buffer_size;
+
     const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
         .size = init_transfer_buffer_size,
         .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
@@ -337,6 +352,9 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 }
 
 fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
+    // Zero out infos in case init is not called but buffer is used
+    @memset(&buffer_infos, .{ .num_elements = 0 });
+
     // Initialize buffers and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
@@ -365,6 +383,10 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             update_transfer_buffer_size += size.*;
         }
     }
+
+    // Early return to avoid creating 0-sized transfer buffer
+    if (init_transfer_buffer_size == 0) return update_transfer_buffer_size;
+
     const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(
         device,
         &.{
@@ -393,6 +415,97 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     var offset: u32 = 0;
     inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
         if (!@hasDecl(@field(script.buffer, id.name), "init")) continue;
+        c.SDL_UploadToGPUBuffer(
+            copy_pass,
+            &.{
+                .transfer_buffer = transfer_buffer,
+                .offset = offset,
+            },
+            &.{
+                .buffer = buffer,
+                .offset = 0,
+                .size = size,
+            },
+            false,
+        );
+        offset += size;
+    }
+
+    return update_transfer_buffer_size;
+}
+
+fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
+    // Initialize buffers and transfer buffer
+    var init_transfer_buffer_size: u32 = 0;
+    var update_transfer_buffer_size: u32 = 0;
+    inline for (
+        storage_buffer_ids,
+        &storage_buffers,
+        &storage_buffer_sizes,
+    ) |id, *buffer, *size| {
+        const storage_buffer_src = @field(script.storage_buffer, id.name);
+        const num_elements = try storage_buffer_src.create();
+        const header_size = @sizeOf(storage_buffer_src.Header);
+        const layout_size = @sizeOf(storage_buffer_src.Element);
+        size.* = header_size + (layout_size * num_elements);
+
+        log.debug("Initializing Storage Buffer {s} ({})", .{
+            id.name, id.value,
+        });
+        log.debug("    num_elements = {}, header_size = {}, layout_size = {}, size = {}", .{
+            num_elements, header_size, layout_size, size.*,
+        });
+        buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
+            .usage = c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
+                c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
+                c.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+            .size = size.*,
+        }));
+        errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+
+        if (@hasDecl(storage_buffer_src, "init")) {
+            init_transfer_buffer_size += size.*;
+        }
+        if (@hasDecl(storage_buffer_src, "updateData")) {
+            update_transfer_buffer_size += size.*;
+        }
+    }
+
+    // Early return to avoid creating 0-sized transfer buffer
+    if (init_transfer_buffer_size == 0) return update_transfer_buffer_size;
+
+    const transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(
+        device,
+        &.{
+            .size = init_transfer_buffer_size,
+            .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .props = 0,
+        },
+    ));
+    defer c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+
+    // Populate transfer buffer with data
+    var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        false,
+    )));
+    inline for (storage_buffer_ids, storage_buffer_sizes) |id, size| {
+        const storage_buffer_src = @field(script.storage_buffer, id.name);
+        if (!@hasDecl(storage_buffer_src, "init")) continue;
+        try storage_buffer_src.init(tbp[0..size]);
+        tbp += size;
+    }
+    c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    // Record transfer buffer uploads to buffers
+    var offset: u32 = 0;
+    inline for (
+        storage_buffer_ids,
+        storage_buffers,
+        storage_buffer_sizes,
+    ) |id, buffer, size| {
+        if (!@hasDecl(@field(script.storage_buffer, id.name), "init")) continue;
         c.SDL_UploadToGPUBuffer(
             copy_pass,
             &.{
@@ -456,6 +569,18 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTransferBuffer(device, buffer_transfer);
     } else {
         buffer_transfer = null;
+    }
+
+    // Initialize storage buffers and runtime transfer buffer
+    const storage_buffer_transfer_size = try initStorageBuffers(copy_pass);
+    if (storage_buffer_transfer_size > 0) {
+        storage_buffer_transfer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+            .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+            .size = storage_buffer_transfer_size,
+        }));
+        errdefer c.SDL_ReleaseGPUTransferBuffer(device, storage_buffer_transfer);
+    } else {
+        storage_buffer_transfer = null;
     }
 
     // Submit copy pass
@@ -618,6 +743,43 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass) !void {
     }
 }
 
+fn updateStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !void {
+    // Map transfer buffer
+    const transfer_buffer = storage_buffer_transfer orelse return;
+    var tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+        device,
+        transfer_buffer,
+        true,
+    )));
+
+    // Populate transfer buffer with data
+    inline for (storage_buffer_ids, storage_buffer_sizes) |id, size| {
+        const storage_buffer_src = @field(script.storage_buffer, id.name);
+        if (!@hasDecl(storage_buffer_src, "updateData")) continue;
+        try storage_buffer_src.updateData(tbp[0..size]);
+        tbp += size;
+    }
+
+    // Record upload commands
+    var offset: u32 = 0;
+    inline for (
+        storage_buffer_ids,
+        storage_buffers,
+        storage_buffer_sizes,
+    ) |id, buffer, size| {
+        if (!@hasDecl(@field(script.storage_buffer, id.name), "updateData")) continue;
+        c.SDL_UploadToGPUBuffer(copy_pass, &.{
+            .transfer_buffer = transfer_buffer,
+            .offset = offset,
+        }, &.{
+            .buffer = buffer,
+            .offset = 0,
+            .size = size,
+        }, true);
+        offset += size;
+    }
+}
+
 const RenderParameters = struct {
     cmdbuf: *c.SDL_GPUCommandBuffer,
     frame_state: script.frame.State,
@@ -759,26 +921,51 @@ fn renderGraph(
             }
 
             // Bind textures
+            var vertex_set0_slot: u32 = 0;
+            var fragment_set2_slot: u32 = 0;
             inline for (.{
                 .{
                     .bind = c.SDL_BindGPUVertexSamplers,
+                    .slot = &vertex_set0_slot,
                     .tex = drawcall.vertex_samplers,
                 },
                 .{
                     .bind = c.SDL_BindGPUFragmentSamplers,
+                    .slot = &fragment_set2_slot,
                     .tex = drawcall.fragment_samplers,
                 },
             }) |stage| {
-                inline for (stage.tex, 0..) |tex, slot| {
+                inline for (stage.tex) |tex| {
                     const reference = comptime schema.parseIndex(tex.texture) catch |e|
                         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-                    stage.bind(render_pass, @intCast(slot), &.{
+                    stage.bind(render_pass, stage.slot.*, &.{
                         .texture = if (reference) |result|
                             @field(@This(), result.ref)[result.idx]
                         else
                             textures[@intFromEnum(@field(script.Texture, tex.texture))],
                         .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
                     }, 1);
+                    stage.slot.* += 1;
+                }
+            }
+
+            // Bind storage buffers
+            inline for (.{
+                .{
+                    .bind = c.SDL_BindGPUVertexStorageBuffers,
+                    .slot = &vertex_set0_slot,
+                    .storage_buffers = drawcall.vertex_storage_buffers,
+                },
+                .{
+                    .bind = c.SDL_BindGPUFragmentStorageBuffers,
+                    .slot = &fragment_set2_slot,
+                    .storage_buffers = drawcall.fragment_storage_buffers,
+                },
+            }) |stage| {
+                inline for (stage.storage_buffers) |name| {
+                    const idx = @intFromEnum(@field(script.StorageBuffer, name));
+                    stage.bind(render_pass, stage.slot.*, &.{storage_buffers[idx]}, 1);
+                    stage.slot.* += 1;
                 }
             }
 
@@ -815,6 +1002,7 @@ pub fn render(time: f32) !void {
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
     try updateTextures(copy_pass);
     try updateBuffers(copy_pass);
+    try updateStorageBuffers(copy_pass);
     c.SDL_EndGPUCopyPass(copy_pass);
 
     // Update frame uniforms

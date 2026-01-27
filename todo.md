@@ -14,6 +14,7 @@
 - [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture
+- [ ] Parallelize resource inits and updates (thread pool + work splitting utilities if data within a single job is large)
 - [ ] DoF
   - [ ] Bokeh sprites
 - [ ] HDR textures from file

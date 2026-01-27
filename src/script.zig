@@ -298,8 +298,10 @@ pub const storage_buffer = struct {
         };
 
         pub const Element = extern struct {
-            position_radius: [4]f32,
-            color_brightness: [4]f32,
+            position: [3]f32,
+            radius: f32,
+            color: [3]f32,
+            brightness: f32,
         };
 
         const max_lights = config.max_lights;
@@ -308,13 +310,13 @@ pub const storage_buffer = struct {
             return max_lights;
         }
 
-        pub fn init(dst: []u8) !void {
-            const header = .{
+        pub fn updateData(dst: []u8) !void {
+            const header: Header = .{
                 .count = 1,
             };
 
-            const lights = .{
-                .{ .position = .{ 0, 2, 0, 0.5 }, .color = .{ 1, 0, 0, 5 } },
+            const lights: []const Element = &.{
+                .{ .position = .{ 0, 2, 0 }, .radius = 0.5, .color = .{ 1, 0, 0 }, .brightness = 5 },
             };
 
             util.writeSSBO(Header, Element, dst, header, lights);
