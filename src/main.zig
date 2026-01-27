@@ -6,7 +6,6 @@ const options = @import("options");
 
 const audio = @import("audio.zig");
 const sdlerr = @import("err.zig").sdlerr;
-const time = @import("time.zig");
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
@@ -23,7 +22,6 @@ const render = if (options.render_dynlib)
 else
     @import("render.zig");
 
-const bps = if (@hasField(@TypeOf(config), "bpm")) config.bpm / 60 else 1;
 const sdl_log = std.log.scoped(.sdl);
 const fps_log = std.log.scoped(.fps);
 // Track deinitialization with a stack
@@ -57,13 +55,13 @@ extern fn SDL_AddFullscreenDisplayMode(display: *anyopaque, mode: *const c.SDL_D
 
 inline fn pause() void {
     if (builtin.mode != .Debug) return;
-    if (time.paused) {
+    if (render.isPaused()) {
         audio.play() catch unreachable;
-        time.pause(false);
+        render.pause(false);
         std.log.info("Playing", .{});
     } else {
         audio.pause() catch unreachable;
-        time.pause(true);
+        render.pause(true);
         std.log.info("Paused", .{});
     }
 }
@@ -72,7 +70,7 @@ inline fn pause() void {
 inline fn seek(to_sec: f32) void {
     if (builtin.mode != .Debug) return;
     const normalized = @max(to_sec, 0);
-    time.seek(normalized);
+    render.seek(normalized);
     audio.seek(normalized) catch unreachable;
     step_frame = true;
 }
@@ -166,13 +164,13 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     // Start audio and timer
     try audio.play();
-    time.seek(0);
+    render.seek(0);
 
     return c.SDL_APP_CONTINUE;
 }
 
 fn sdlAppIterate() !c.SDL_AppResult {
-    const is_paused = (builtin.mode == .Debug) and time.paused;
+    const is_paused = (builtin.mode == .Debug) and render.isPaused();
 
     // Save power when paused
     if (is_paused and !step_frame) {
@@ -181,7 +179,7 @@ fn sdlAppIterate() !c.SDL_AppResult {
     }
     step_frame = false;
 
-    try render.render(time.getTime() * bps);
+    try render.render();
 
     // Quit if done
     if (builtin.mode != .Debug and audio.at_end) {
@@ -191,9 +189,10 @@ fn sdlAppIterate() !c.SDL_AppResult {
     // Measure FPS
     if (builtin.mode == .Debug and fps_enabled) {
         frames += 1;
-        if (fps_ticks + c.SDL_NS_PER_SECOND < time.raw_ns) {
+        const ticks = c.SDL_GetTicksNS();
+        if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
             fps_log.info("{} FPS", .{frames});
-            fps_ticks = time.raw_ns;
+            fps_ticks = ticks;
             frames = 0;
         }
     }
@@ -219,10 +218,10 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                     }
                 },
                 c.SDL_SCANCODE_SPACE => pause(),
-                c.SDL_SCANCODE_LEFT => seek(time.getTime() - 1),
-                c.SDL_SCANCODE_RIGHT => seek(time.getTime() + 1),
-                c.SDL_SCANCODE_PAGEUP => seek(time.getTime() - 8),
-                c.SDL_SCANCODE_PAGEDOWN => seek(time.getTime() + 8),
+                c.SDL_SCANCODE_LEFT => seek(render.getTime() - 1),
+                c.SDL_SCANCODE_RIGHT => seek(render.getTime() + 1),
+                c.SDL_SCANCODE_PAGEUP => seek(render.getTime() - 8),
+                c.SDL_SCANCODE_PAGEDOWN => seek(render.getTime() + 8),
                 c.SDL_SCANCODE_HOME => seek(0),
                 c.SDL_SCANCODE_R => if (builtin.mode == .Debug) {
                     render.deinit();
@@ -237,7 +236,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 },
             }
         },
-        c.SDL_EVENT_MOUSE_WHEEL => seek(time.getTime() - event.wheel.y),
+        c.SDL_EVENT_MOUSE_WHEEL => seek(render.getTime() - event.wheel.y),
         c.SDL_EVENT_WINDOW_FIRST...c.SDL_EVENT_WINDOW_LAST,
         => if (builtin.mode == .Debug) {
             step_frame = true;

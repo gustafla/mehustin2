@@ -10,6 +10,7 @@ const c = @import("render/c.zig").c;
 const schema = @import("render/schema.zig");
 const Config = schema.Config;
 const shader = @import("render/shader.zig");
+const time = @import("render/time.zig");
 const types = @import("render/types.zig");
 const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
@@ -27,6 +28,10 @@ const SamplerEnum = schema.SamplerEnum(config);
 const PipelineKey = schema.PipelineKey(config);
 const pipeline_set = schema.ComptimeSet(PipelineKey);
 
+pub const bps = if (@hasField(@TypeOf(main_config), "bpm"))
+    @as(comptime_float, main_config.bpm) / 60.0
+else
+    1.0;
 pub const width: f32 = @floatFromInt(main_config.width);
 pub const height: f32 = @floatFromInt(main_config.height);
 pub const aspect = width / height;
@@ -988,39 +993,12 @@ fn renderGraph(
     }
 }
 
-pub fn render(time: f32) !void {
+pub fn render() !void {
     errdefer |e| log.err("{s}", .{@errorName(e)});
-
-    // Update script frame
-    const frame_data = script.frame.update(time);
 
     // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
     errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
-
-    // Update dynamic buffers
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
-    try updateTextures(copy_pass);
-    try updateBuffers(copy_pass);
-    try updateStorageBuffers(copy_pass);
-    c.SDL_EndGPUCopyPass(copy_pass);
-
-    // Update frame uniforms
-    c.SDL_PushGPUVertexUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&frame_data.vertex),
-        @sizeOf(@TypeOf(frame_data.vertex)),
-    );
-    c.SDL_PushGPUFragmentUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&frame_data.fragment),
-        @sizeOf(@TypeOf(frame_data.fragment)),
-    );
-    // Reminder, per shader uniform counts are hardcoded at shader creation:
-    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
-    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
 
     // Acquire swapchain texture
     var swapchain_width: u32 = 0;
@@ -1045,6 +1023,36 @@ pub fn render(time: f32) !void {
 
     // Compute viewport preserving aspect ratio rendering to swapchain
     const swapchain_viewport = viewport(swapchain_width, swapchain_height);
+
+    // Measure this frame's timestamp after the swapchain acquisition blocked
+    const timestamp = time.getTime() * bps;
+
+    // Update script frame
+    const frame_data = script.frame.update(timestamp);
+
+    // Update dynamic buffers
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+    try updateTextures(copy_pass);
+    try updateBuffers(copy_pass);
+    try updateStorageBuffers(copy_pass);
+    c.SDL_EndGPUCopyPass(copy_pass);
+
+    // Update frame uniforms
+    c.SDL_PushGPUVertexUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&frame_data.vertex),
+        @sizeOf(@TypeOf(frame_data.vertex)),
+    );
+    c.SDL_PushGPUFragmentUniformData(
+        cmdbuf,
+        0,
+        @ptrCast(&frame_data.fragment),
+        @sizeOf(@TypeOf(frame_data.fragment)),
+    );
+    // Reminder, per shader uniform counts are hardcoded at shader creation:
+    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
+    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
 
     // Render passes (specializes the renderer for each clip configuration)
     switch (frame_data.clip) {
@@ -1115,9 +1123,25 @@ fn initC(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool {
     return true;
 }
 
-fn renderC(time: f32) callconv(.c) bool {
-    render(time) catch return false;
+fn renderC() callconv(.c) bool {
+    render() catch return false;
     return true;
+}
+
+pub fn pause(state: bool) callconv(.c) void {
+    time.pause(state);
+}
+
+pub fn isPaused() callconv(.c) bool {
+    return time.paused;
+}
+
+pub fn seek(to_sec: f32) callconv(.c) void {
+    time.seek(to_sec);
+}
+
+pub fn getTime() callconv(.c) f32 {
+    return time.getTime();
 }
 
 var host_print: ?*const fn ([*]const u8, usize) callconv(.c) void = null;
@@ -1128,6 +1152,10 @@ comptime {
         @export(&deinitC, .{ .name = "deinit" });
         @export(&initC, .{ .name = "init" });
         @export(&renderC, .{ .name = "render" });
+        @export(&pause, .{ .name = "pause" });
+        @export(&isPaused, .{ .name = "isPaused" });
+        @export(&seek, .{ .name = "seek" });
+        @export(&getTime, .{ .name = "getTime" });
         @export(&host_print, .{ .name = "host_print" });
     }
 }

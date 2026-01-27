@@ -14,7 +14,11 @@ var device: *c.SDL_GPUDevice = undefined;
 var api: struct {
     deinit: *const fn () callconv(.c) void,
     init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool,
-    render: *const fn (f32) callconv(.c) bool,
+    render: *const fn () callconv(.c) bool,
+    pause: *const fn (bool) callconv(.c) void,
+    isPaused: *const fn () callconv(.c) bool,
+    seek: *const fn (f32) callconv(.c) void,
+    getTime: *const fn () callconv(.c) f32,
     host_print: *?*const fn ([*]const u8, usize) callconv(.c) void,
 } = undefined;
 
@@ -43,8 +47,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     init_ok = api.init(win, dev);
 }
 
-pub fn render(t: f32) !void {
-    if (!init_ok or !api.render(t)) {
+pub fn render() !void {
+    if (!init_ok or !api.render()) {
         // Fill window red when render is not succeeding
         const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
         errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
@@ -71,6 +75,26 @@ pub fn render(t: f32) !void {
         c.SDL_EndGPURenderPass(render_pass);
         try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
     }
+}
+
+pub fn pause(state: bool) void {
+    if (!init_ok) return;
+    api.pause(state);
+}
+
+pub fn isPaused() bool {
+    if (!init_ok) return true;
+    return api.isPaused();
+}
+
+pub fn seek(to: f32) void {
+    if (!init_ok) return;
+    api.seek(to);
+}
+
+pub fn getTime() f32 {
+    if (!init_ok) return 0;
+    return api.getTime();
 }
 
 fn load() !void {

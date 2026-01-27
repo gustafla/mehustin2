@@ -1,5 +1,4 @@
-const root = @import("root");
-const c = root.c;
+const c = @import("c.zig").c;
 
 var start: u64 = 0;
 var offset: u64 = 0;
