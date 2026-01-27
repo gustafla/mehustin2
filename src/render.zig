@@ -816,11 +816,14 @@ fn renderGraph(
                         else
                             output_buffer,
                     },
-                    .clear_color = .{
-                        .r = parm.frame_state.clear_color[0],
-                        .g = parm.frame_state.clear_color[1],
-                        .b = parm.frame_state.clear_color[2],
-                        .a = parm.frame_state.clear_color[3],
+                    .clear_color = switch (target.target) {
+                        .index => .{
+                            .r = parm.frame_state.clear_color[0],
+                            .g = parm.frame_state.clear_color[1],
+                            .b = parm.frame_state.clear_color[2],
+                            .a = parm.frame_state.clear_color[3],
+                        },
+                        .swapchain => .{ .r = 0, .g = 0, .b = 0, .a = 1 },
                     },
                     .load_op = @intFromEnum(target.load_op),
                     .store_op = @intFromEnum(target.store_op),
