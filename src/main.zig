@@ -144,6 +144,25 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_ClaimWindowForGPUDevice(device, window));
     InitStep.push(.claim_window);
 
+    // Set swapchain parameters
+    const present_mode = if (c.SDL_WindowSupportsGPUPresentMode(
+        device,
+        window,
+        c.SDL_GPU_PRESENTMODE_MAILBOX,
+    )) blk: {
+        sdl_log.info("Using presentation mode MAILBOX", .{});
+        break :blk @as(c.SDL_GPUPresentMode, c.SDL_GPU_PRESENTMODE_MAILBOX);
+    } else blk: {
+        sdl_log.info("Using presentation mode VSYNC", .{});
+        break :blk @as(c.SDL_GPUPresentMode, c.SDL_GPU_PRESENTMODE_VSYNC);
+    };
+    try sdlerr(c.SDL_SetGPUSwapchainParameters(
+        device,
+        window,
+        c.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        present_mode,
+    ));
+
     // Init audio
     if (@hasField(@TypeOf(config), "audio")) {
         if (audio.init(std.heap.c_allocator, config.audio)) {
