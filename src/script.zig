@@ -18,8 +18,8 @@ const util = @import("script/util.zig");
 const config = @import("config.zon");
 
 pub const Clip = schema.ClipEnum(timeline);
-const clips = schema.clipTable(timeline)[0..].*;
-const cam_entries = schema.camEntryTable(timeline)[0..].*;
+const clips = schema.clipTable(timeline);
+const cam_entries = schema.camEntryTable(timeline);
 
 // ---- GLOBAL ----
 
@@ -67,10 +67,21 @@ pub const frame = struct {
         const cam_idx = util.scanTimeline(CameraSegment, timeline.camera_track, time);
         const cam_seg = timeline.camera_track[cam_idx];
         const cam_next = if (cam_idx + 1 < timeline.camera_track.len)
-            &timeline.camera_track[cam_idx + 1]
+            .{ &timeline.camera_track[cam_idx + 1], &cam_entries[cam_idx + 1] }
         else
-            null;
-        cam = cam_seg.evaluate(cam_next, cam_entries[cam_idx], time);
+            .{ null, null };
+        const cam_time_shift = if (cam_idx > 0)
+            timeline.camera_track[cam_idx - 1].blend
+        else
+            0;
+        cam = cam_seg.evaluate(
+            &cam_entries[cam_idx], // Entry for current segment
+            cam_next[0], // Next segment
+            cam_next[1], // Next segment's clean entry
+            time,
+            cam_time_shift, // Blend time shift for movements that are .slip = true
+            true, // Enable transient movements
+        );
 
         return .{
             .vertex = .{
@@ -82,7 +93,7 @@ pub const frame = struct {
                 ).mmul(math.Mat4.lookAt(
                     cam.pos,
                     cam.target,
-                    math.vec3.YUP,
+                    math.radians(cam.roll),
                 )),
                 .camera_position = .{
                     cam.pos[0],

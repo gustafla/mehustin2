@@ -7,7 +7,9 @@ pub const Vec3 = @Vector(3, f32);
 
 /// Operations on `Vec3`.
 pub const vec3 = struct {
+    pub const XUP: Vec3 = .{ 1.0, 0.0, 0.0 };
     pub const YUP: Vec3 = .{ 0.0, 1.0, 0.0 };
+    pub const ZUP: Vec3 = .{ 0.0, 0.0, 1.0 };
 
     pub fn dot(a: Vec3, b: Vec3) f32 {
         return @reduce(.Add, a * b);
@@ -39,14 +41,19 @@ pub const vec3 = struct {
         return a + (b - a) * t_vec;
     }
 
-    /// Rotates vector v around normalized axis k by angle (radians).
-    /// Assumes v is perpendicular to k (v . k = 0).
-    pub fn rotatePerpendicular(v: Vec3, k: Vec3, angle: f32) Vec3 {
+    /// Rotates vector 'v' around normalized axis 'k' by 'angle' (radians).
+    pub fn rotate(v: Vec3, k: Vec3, angle: f32) Vec3 {
         const cos_v: Vec3 = @splat(std.math.cos(angle));
         const sin_v: Vec3 = @splat(std.math.sin(angle));
 
-        const tangent = vec3.cross(k, v);
-        return (v * cos_v) + (tangent * sin_v);
+        const term1 = v * cos_v;
+        const term2 = vec3.cross(k, v) * sin_v;
+
+        const dot_val = vec3.dot(k, v);
+        const one_minus_cos = @as(Vec3, @splat(1.0)) - cos_v;
+        const term3 = k * @as(Vec3, @splat(dot_val)) * one_minus_cos;
+
+        return term1 + term2 + term3;
     }
 };
 
@@ -137,26 +144,25 @@ pub const Mat4 = extern struct {
     /// Constructs a view matrix that looks at a target from a specific position.
     ///
     /// This matrix transforms coordinates from world space to camera space.
-    pub fn lookAt(
-        /// The position of the camera in world space.
-        camera: Vec3,
-        /// The point in world space the camera is looking at.
-        target: Vec3,
-        /// The "up" direction in world space (usually `vec3.YUP`).
-        up: Vec3,
-    ) Mat4 {
-        const z = vec3.normalize(camera - target);
-        const x = vec3.normalize(vec3.cross(up, z));
-        const y = vec3.normalize(vec3.cross(z, x));
+    pub fn lookAt(pos: Vec3, target: Vec3, roll: f32) Mat4 {
+        const f = vec3.normalize(target - pos);
+        const world_up = if (@abs(f[1]) > 0.999) vec3.ZUP else vec3.YUP;
+        const r_base = vec3.normalize(vec3.cross(f, world_up));
+        const u_base = vec3.cross(r_base, f);
 
-        return .{ .col = .{
-            .{ x[0], y[0], z[0], 0.0 }, .{ x[1], y[1], z[1], 0.0 }, .{ x[2], y[2], z[2], 0.0 }, .{
-                -vec3.dot(x, camera),
-                -vec3.dot(y, camera),
-                -vec3.dot(z, camera),
-                1.0,
+        const c: Vec3 = @splat(std.math.cos(roll));
+        const s: Vec3 = @splat(std.math.sin(roll));
+        const r = (r_base * c) + (u_base * s);
+        const u = (u_base * c) - (r_base * s);
+
+        return .{
+            .col = .{
+                .{ r[0], u[0], -f[0], 0 },
+                .{ r[1], u[1], -f[1], 0 },
+                .{ r[2], u[2], -f[2], 0 },
+                .{ -vec3.dot(r, pos), -vec3.dot(u, pos), vec3.dot(f, pos), 1 },
             },
-        } };
+        };
     }
 };
 

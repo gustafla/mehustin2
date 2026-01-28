@@ -9,44 +9,71 @@ pub const ClipSegment = struct {
 
 pub const CameraSegment = struct {
     t: f32,
-    cam: camera.Motion,
+    motion: []const camera.Motion,
     entry: ?camera.State = null,
-    blend: f32 = 0,
+    blend: f32 = 1,
 
     pub fn evaluate(
         self: CameraSegment,
+        entry: *const camera.State,
         next: ?*const CameraSegment,
-        default_entry: camera.State,
+        next_entry: ?*const camera.State,
         time: f32,
+        time_shift: f32,
+        include_transients: bool,
     ) camera.State {
         const relative_time = time - self.t;
-        const entry = if (self.entry) |entry| entry else default_entry;
+        var current_state = self.entry orelse entry.*;
 
-        const state_current = switch (self.cam) {
-            inline else => |param, tag| blk: {
-                const func = @field(camera.fns, @tagName(tag));
-                if (@TypeOf(param) == void) {
-                    break :blk func(relative_time, entry);
-                } else {
-                    break :blk func(relative_time, entry, param);
-                }
-            },
-        };
+        for (self.motion) |motion| {
+            current_state = switch (motion) {
+                inline else => |param, tag| blk: {
+                    const func = @field(camera.fns, @tagName(tag));
+                    const P = @TypeOf(param);
 
-        if (next) |next_seg| {
-            const blend_start = next_seg.t - self.blend;
+                    const transient = P != void and
+                        @hasField(P, "transient") and
+                        param.transient;
+                    if (!include_transients and transient) continue;
 
-            if (self.blend > 0 and time >= blend_start) {
-                const elapsed_in_blend = time - blend_start;
-                const linear_t = std.math.clamp(elapsed_in_blend / self.blend, 0.0, 1.0);
-                // Hermite interpolation
-                const alpha = linear_t * linear_t * (3.0 - 2.0 * linear_t);
-                const state_next = next_seg.evaluate(null, state_current, next_seg.t);
-                return state_current.lerp(state_next, alpha);
-            }
+                    const discontinuous = P != void and @hasField(P, "slip");
+                    const slip = discontinuous and param.slip;
+
+                    const t = if (transient)
+                        time
+                    else if (slip)
+                        relative_time + time_shift
+                    else if (discontinuous)
+                        @max(0.0, relative_time)
+                    else
+                        relative_time;
+                    break :blk func(t, current_state, param);
+                },
+            };
         }
 
-        return state_current;
+        // Blend with next segment
+        const next_seg = next orelse return current_state;
+        const blend_start = next_seg.t - self.blend;
+
+        if (self.blend > 0 and time >= blend_start) {
+            const elapsed_in_blend = time - blend_start;
+            const t = std.math.clamp(elapsed_in_blend / self.blend, 0.0, 1.0);
+            const alpha = t * t * (3.0 - 2.0 * t);
+
+            const target_entry = next_entry orelse &current_state;
+            const next_state = next_seg.evaluate(
+                target_entry,
+                null,
+                null,
+                time,
+                self.blend,
+                include_transients,
+            );
+            current_state = current_state.lerp(next_state, alpha);
+        }
+
+        return current_state;
     }
 };
 
@@ -74,15 +101,19 @@ pub fn ClipEnum(comptime timeline: Timeline) type {
     } });
 }
 
-pub fn clipTable(comptime timeline: Timeline) []const ClipEnum(timeline) {
+pub fn clipTable(
+    comptime timeline: Timeline,
+) [timeline.clip_track.len]ClipEnum(timeline) {
     var clips: [timeline.clip_track.len]ClipEnum(timeline) = undefined;
     for (timeline.clip_track, &clips) |clip, *clip_enum| {
         clip_enum.* = @field(ClipEnum(timeline), clip.id);
     }
-    return &clips;
+    return clips;
 }
 
-pub fn camEntryTable(comptime timeline: Timeline) []const camera.State {
+pub fn camEntryTable(
+    comptime timeline: Timeline,
+) [timeline.camera_track.len]camera.State {
     var entries: [timeline.camera_track.len]camera.State = undefined;
     entries[0] = .{
         .pos = .{ 0, 0, 1 },
@@ -92,8 +123,16 @@ pub fn camEntryTable(comptime timeline: Timeline) []const camera.State {
     for (1..timeline.camera_track.len) |i| {
         const next = timeline.camera_track[i];
         const prev = timeline.camera_track[i - 1];
-        entries[i] = prev.evaluate(&next, entries[i - 1], next.t);
+        const prev_shift = if (i > 1) timeline.camera_track[i - 2].blend else 0;
+        entries[i] = prev.evaluate(
+            &entries[i - 1],
+            null,
+            null,
+            next.t,
+            prev_shift,
+            false,
+        );
     }
 
-    return &entries;
+    return entries;
 }
