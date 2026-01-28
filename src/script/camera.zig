@@ -22,16 +22,6 @@ pub const State = struct {
 };
 
 pub const fns = struct {
-    pub fn hold(
-        t: f32,
-        e: State,
-        p: void,
-    ) State {
-        _ = t;
-        _ = p;
-        return e;
-    }
-
     pub fn pan(
         t: f32,
         e: State,

@@ -29,14 +29,12 @@ pub const CameraSegment = struct {
             current_state = switch (motion) {
                 inline else => |param, tag| blk: {
                     const func = @field(camera.fns, @tagName(tag));
-                    const P = @TypeOf(param);
 
-                    const transient = P != void and
-                        @hasField(P, "transient") and
+                    const transient = hasParam(param, "transient") and
                         param.transient;
                     if (!include_transients and transient) continue;
 
-                    const discontinuous = P != void and @hasField(P, "slip");
+                    const discontinuous = hasParam(param, "slip");
                     const slip = discontinuous and param.slip;
 
                     const t = if (transient)
@@ -77,10 +75,66 @@ pub const CameraSegment = struct {
     }
 };
 
+pub const CameraEffect = struct {
+    t: f32,
+    duration: f32,
+    motion: camera.Motion,
+    fade_in: f32 = 1,
+    fade_out: f32 = 1,
+};
+
 pub const Timeline = struct {
     clip_track: []const ClipSegment,
     camera_track: []const CameraSegment,
+    camera_effects: []const CameraEffect,
 };
+
+inline fn hasParam(p: anytype, comptime name: []const u8) bool {
+    const P = @TypeOf(p);
+    return P != void and @hasField(P, name);
+}
+
+pub fn applyCameraEffects(
+    effects: []const CameraEffect,
+    base_state: camera.State,
+    time: f32,
+) camera.State {
+    var state = base_state;
+
+    for (effects) |effect| {
+        const start = effect.t;
+        const end = start + effect.duration;
+
+        if (time < start or time >= end) continue;
+
+        const time_in = time - start;
+        const time_left = end - time;
+
+        var intensity: f32 = 1.0;
+        if (effect.fade_in > 0 and time_in < effect.fade_in) {
+            intensity = time_in / effect.fade_in;
+        } else if (effect.fade_out > 0 and time_left < effect.fade_out) {
+            intensity = time_left / effect.fade_out;
+        }
+        intensity = intensity * intensity * (3.0 - 2.0 * intensity);
+
+        state = switch (effect.motion) {
+            inline else => |param, tag| blk: {
+                const func = @field(camera.fns, @tagName(tag));
+
+                var mod_param = param;
+                if (hasParam(param, "mag")) mod_param.mag *= intensity; // shake
+                if (hasParam(param, "amp")) mod_param.amp *= intensity; // wave, swivel
+                if (hasParam(param, "angle")) mod_param.angle *= intensity; // bank
+                if (hasParam(param, "roll")) mod_param.roll *= intensity; // shake roll
+
+                break :blk func(time, state, mod_param);
+            },
+        };
+    }
+
+    return state;
+}
 
 pub fn ClipEnum(comptime timeline: Timeline) type {
     var fields: [timeline.clip_track.len]std.builtin.Type.EnumField = undefined;

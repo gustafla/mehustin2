@@ -82,6 +82,7 @@ pub const frame = struct {
             cam_time_shift, // Blend time shift for movements that are .slip = true
             true, // Enable transient movements
         );
+        cam = schema.applyCameraEffects(timeline.camera_effects, cam, time);
 
         return .{
             .vertex = .{
