@@ -8,7 +8,8 @@
 
 # Backlog
 
-- [ ] Camera control with clipboard export containing camera state in Zig code
+- [ ] k-Curves (Adobe Research) (Camera paths, generalized cylinders etc.)
+- [ ] Camera control with clipboard export containing camera curve parameters in ZON
 - [ ] Clip-to-clip transition effects
 - [ ] Build-time font generation
 - [ ] Compute passes
