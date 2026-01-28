@@ -183,21 +183,16 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         pipeline.frag,
     });
 
-    inline for (.{ "vertex", "instance" }) |buffer_type| {
-        const field_name = buffer_type ++ "_layout";
-        const Layout = @field(key, field_name) orelse continue;
-
-        log.debug("    {s} layout: {s}", .{ buffer_type, @typeName(Layout) });
-
-        comptime var upper: [buffer_type.len]u8 = undefined;
-        comptime for (buffer_type, &upper) |src, *dst| {
-            dst.* = std.ascii.toUpper(src);
-        };
+    inline for (.{
+        .{ .layout = key.vertex_layout, .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX },
+        .{ .layout = key.instance_layout, .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE },
+    }) |buffer| {
+        const Layout = buffer.layout orelse continue;
 
         buffer_descs[num_buffers] = .{
             .slot = num_buffers,
             .pitch = @sizeOf(Layout),
-            .input_rate = @field(c, "SDL_GPU_VERTEXINPUTRATE_" ++ upper),
+            .input_rate = buffer.input_rate,
             .instance_step_rate = 0,
         };
 
