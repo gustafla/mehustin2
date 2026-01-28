@@ -243,10 +243,19 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDL_SCANCODE_PAGEDOWN => seek(render.getTime() + 8),
                 c.SDL_SCANCODE_HOME => seek(0),
                 c.SDL_SCANCODE_R => if (builtin.mode == .Debug) {
+                    // Save runtime state
+                    const paused = render.isPaused();
                     const time = render.getTime();
+
+                    // Reload (the dynlib.zig handles loading transparently)
                     render.deinit();
                     try render.init(@ptrCast(window), @ptrCast(device));
+
+                    // Restore state
                     render.seek(time);
+                    render.pause(paused);
+
+                    // Show update if paused
                     step_frame = true;
                 },
                 c.SDL_SCANCODE_GRAVE => if (builtin.mode == .Debug) {
