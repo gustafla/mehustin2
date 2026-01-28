@@ -8,9 +8,9 @@
 
 # Backlog
 
-- [ ] k-Curves (Adobe Research) (Camera paths, generalized cylinders etc.)
-- [ ] Camera control with clipboard export containing camera curve parameters in ZON
-- [ ] Clip-to-clip transition effects
+- [ ] Camera control with clipboard export containing camera state in ZON
+- [ ] k-Curves (Adobe Research) (generalized cylinders etc.)
+- [ ] Clip-to-clip transition effects (uniform containing clip time left)
 - [ ] Build-time font generation
 - [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
@@ -38,8 +38,10 @@
   - [ ] gbms
   - [ ] zm
 - [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
-  - [ ] Build-time buffer & texture information, automatically injected into script/engine
+  - [ ] Build-time buffer & texture information, automatically injected into script/engine (blocks without create()/init() in script)
 - [ ] Add pass chain macro to render.zon syntax
+- [ ] Scene graph (reduced into instance buffers?)
+  - [ ] glTF support
 
 # Done
 
