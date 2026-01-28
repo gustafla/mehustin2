@@ -324,6 +324,23 @@ pub const storage_buffer = struct {
             util.writeSSBO(Header, Element, dst, header, lights);
         }
     };
+
+    // Assert that all headers and elements are extern structs
+    // and that the header doesn't break alignment
+    comptime {
+        for (@typeInfo(@This()).@"struct".decls) |decl| {
+            const ssbo = @field(@This(), decl.name);
+            if (@typeInfo(ssbo.Header).@"struct".layout != .@"extern") {
+                @compileError(std.fmt.comptimePrint("{s}.Header is not extern", .{decl.name}));
+            }
+            if (@typeInfo(ssbo.Element).@"struct".layout != .@"extern") {
+                @compileError(std.fmt.comptimePrint("{s}.Element is not extern", .{decl.name}));
+            }
+            if (@sizeOf(ssbo.Header) % 16 != 0) {
+                @compileError(std.fmt.comptimePrint("{s}.Header size is not a multiple of 16", .{decl.name}));
+            }
+        }
+    }
 };
 
 pub const StorageBuffer = std.meta.DeclEnum(storage_buffer);
