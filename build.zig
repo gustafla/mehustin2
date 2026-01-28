@@ -106,6 +106,7 @@ pub fn build(b: *Build) void {
             .name = "render",
             .linkage = .dynamic,
             .root_module = render_mod,
+            .use_llvm = true, // TODO: Remove this in upcoming release if fixed
         });
         render.linkLibC();
         b.installArtifact(render);
