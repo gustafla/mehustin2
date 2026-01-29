@@ -20,7 +20,7 @@ const util = @import("script/util.zig");
 
 pub const Clip = schema.ClipEnum(timeline);
 const clips = schema.clipTable(timeline);
-const cam_entries = schema.camEntryTable(timeline.camera.tracks);
+const cam_entry: schema.CameraEntryTable(timeline.camera.tracks) = .init;
 
 // ---- GLOBAL ----
 
@@ -83,7 +83,7 @@ pub const frame = struct {
         const cam_idx = util.scanTimeline(camera.Segment, cam_track, time);
         var cam_state = camera.evaluate(
             cam_track,
-            &cam_entries[cam_control.i],
+            cam_entry.getSlice(cam_control.i),
             cam_idx,
             time,
         );

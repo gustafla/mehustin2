@@ -53,37 +53,59 @@ pub fn clipTable(
     return clips;
 }
 
-pub fn maxLen(comptime slices: anytype) usize {
-    var max = 0;
+fn sumLen(comptime slices: anytype) usize {
+    var sum = 0;
     for (slices) |slice| {
-        if (slice.len > max) max = slice.len;
+        sum += slice.len;
     }
-    return max;
+    return sum;
 }
 
-pub fn camEntryTable(
-    comptime tracks: []const []const camera.Segment,
-) [tracks.len][maxLen(tracks)]camera.State {
-    var entries = std.mem.zeroes([tracks.len][maxLen(tracks)]camera.State);
+pub fn CameraEntryTable(comptime tracks: []const []const camera.Segment) type {
+    return struct {
+        offsets: [tracks.len + 1]usize,
+        table: [sumLen(tracks)]camera.State,
 
-    for (&entries, tracks) |*table, track| {
-        table.*[0] = .{
-            .pos = .{ 0, 0, 1 },
-            .target = .{ 0, 0, 0 },
-        };
-        for (1..track.len) |i| {
-            const next = track[i];
-            const prev = track[i - 1];
-            const prev_shift = if (i > 1) track[i - 2].blend else 0;
-            table.*[i] = prev.evaluate(
-                &table[i - 1],
-                null,
-                null,
-                next.t,
-                prev_shift,
-            );
+        pub fn getSlice(self: *const @This(), i: usize) []const camera.State {
+            const start = self.offsets[i];
+            const end = self.offsets[i + 1];
+            return self.table[start..end];
         }
-    }
 
-    return entries;
+        pub const init: @This() = blk: {
+            var offsets: [tracks.len + 1]usize = undefined;
+            var entries: [sumLen(tracks)]camera.State = undefined;
+            var running_sum = 0;
+
+            for (tracks, offsets[0..tracks.len]) |track, *offset| {
+                const table = entries[running_sum..][0..track.len];
+                offset.* = running_sum;
+                table.*[0] = .{
+                    .pos = .{ 0, 0, 1 },
+                    .target = .{ 0, 0, 0 },
+                };
+                for (1..track.len) |i| {
+                    const next = track[i];
+                    const prev = track[i - 1];
+                    const prev_shift = if (i > 1) track[i - 2].blend else 0;
+                    table.*[i] = prev.evaluate(
+                        &table[i - 1],
+                        null,
+                        null,
+                        next.t,
+                        prev_shift,
+                    );
+                }
+                running_sum += track.len;
+            }
+
+            std.debug.assert(running_sum == entries.len);
+            offsets[tracks.len] = running_sum;
+
+            break :blk .{
+                .offsets = offsets,
+                .table = entries,
+            };
+        };
+    };
 }
