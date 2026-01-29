@@ -35,6 +35,8 @@ else
 pub const width: f32 = @floatFromInt(main_config.width);
 pub const height: f32 = @floatFromInt(main_config.height);
 pub const aspect = width / height;
+pub const near: f32 = 1;
+pub const far: f32 = 1024;
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
     var max = 0;

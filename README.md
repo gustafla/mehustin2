@@ -16,22 +16,24 @@ https://wiki.libsdl.org/SDL3/SDL_CreateGPUShader
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
     vec4 u_camera_position;
-    float u_time;
+    float u_global_time;
 };
 ```
 
 *Fragment Shader Uniforms:*
 ```glsl
 layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
-    vec4 u_sun_direction_intensity;
-    vec4 u_sun_color_ambient;
-    float u_time;
+    float u_global_time;
+    float u_clip_time;
+    float u_clip_remaining_time;
 };
 
 layout(std140, set = 3, binding = 1) uniform FragmentPassData {
     float u_target_scale;
 };
 ```
+
+Total uniform (push constant) size: 92 bytes (each binding padded to 16 bytes).
 
 *Macros:*
 The following macros are defined at shader compilation in the build process:
@@ -95,9 +97,11 @@ The `timeline.zon` file contains various tracks:
 
 The engine supports any number of storage buffers (SSBOs), see `script.zig`.
 
-For example, point light data can be provided to the shaders using an SSBO:
+For example, light source data can be provided to the shaders using an SSBO:
 ```glsl
-layout(std430, readonly, set = 2, binding = X) buffer PointLightData {
+layout(std430, readonly, set = 2, binding = X) buffer LightData {
+    vec4 u_sun_direction_intensity;
+    vec4 u_sun_color_ambient;
     uint num_point_lights;
     uint _pad[3];
     // Even index: Camera-relative position (xyz) + Radius (w)

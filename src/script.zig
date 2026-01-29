@@ -2,25 +2,20 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const config = @import("config.zon");
-const timeline: Timeline = @import("timeline.zon");
 
 const math = @import("math.zig");
 const Vec3 = math.Vec3;
+const vec3 = math.vec3;
 const render = @import("render.zig");
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
 const camera = @import("script/camera.zig");
 const font = @import("script/font.zig");
 const noise_zig = @import("script/noise.zig");
-const schema = @import("script/schema.zig");
-const Timeline = schema.Timeline;
-const ClipSegment = schema.ClipSegment;
-const CameraIndex = schema.CameraControl;
 const util = @import("script/util.zig");
+const timeline = @import("script/timeline.zig");
 
-pub const Clip = schema.ClipEnum(timeline);
-const clips = schema.clipTable(timeline);
-const cam_entry: schema.CameraEntryTable(timeline.camera.tracks) = .init;
+pub const Clip = timeline.Clip;
 
 // ---- GLOBAL ----
 
@@ -30,37 +25,33 @@ pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
 }
 
-const anchor = struct {
+// ---- ANCHORS ----
+
+pub const anchor = struct {
     pub var origin: Vec3 = @splat(0);
 };
 
 pub const Anchor = std.meta.DeclEnum(anchor);
 
-inline fn getAnchor(a: Anchor) Vec3 {
-    return switch (a) {
-        inline else => |tag| @field(anchor, @tagName(tag)),
-    };
-}
-
 // ---- FRAME DATA (1st) ----
 
 pub const frame = struct {
-    pub const VertexData = extern struct {
+    pub const VertexUniforms = extern struct {
         view_projection: math.Mat4,
         camera_position: [4]f32,
-        time: f32,
+        global_time: f32,
     };
 
-    pub const FragmentData = extern struct {
-        sun_direction_intensity: [4]f32,
-        sun_color_ambient: [4]f32,
-        time: f32,
+    pub const FragmentUniforms = extern struct {
+        global_time: f32,
+        clip_time: f32,
+        clip_remaining_time: f32,
     };
 
     pub const State = struct {
         clip: Clip,
-        vertex: VertexData,
-        fragment: FragmentData,
+        vertex: VertexUniforms,
+        fragment: FragmentUniforms,
         clear_color: [4]f32 = .{ 0, 0, 0, 1 },
     };
 
@@ -71,43 +62,17 @@ pub const frame = struct {
     pub fn update(frame_time: f32) State {
         time = frame_time;
 
-        const clip_idx = util.scanTimeline(ClipSegment, timeline.clip_track, time);
-        const clip_seg = timeline.clip_track[clip_idx];
-        clip = clips[clip_idx];
-        const clip_time = time - clip_seg.t;
-        // TODO: next_time = time - timeline.clip_track[idx + 1].t ...
-
-        const cam_control_idx = util.scanTimeline(CameraIndex, timeline.camera.control, time);
-        const cam_control = timeline.camera.control[cam_control_idx];
-        const cam_track = timeline.camera.tracks[cam_control.i];
-        const cam_idx = util.scanTimeline(camera.Segment, cam_track, time);
-        var cam_state = camera.evaluate(
-            cam_track,
-            cam_entry.getSlice(cam_control.i),
-            cam_idx,
-            time,
-        );
-
-        // Process position lock anchor
-        if (cam_control.position_lock) |to| {
-            cam_state.pos = getAnchor(to);
-        }
-
-        // Process target lock anchor
-        if (cam_control.target_lock) |to| {
-            cam_state.target = getAnchor(to);
-        }
-
-        // Finally, apply effects and output to global
-        cam = camera.applyEffects(timeline.camera.effects, cam_state, time);
+        const state = timeline.resolve(time);
+        clip = state.clip;
+        cam = state.camera;
 
         return .{
             .vertex = .{
                 .view_projection = math.Mat4.perspective(
                     math.radians(cam.fov),
                     render.aspect,
-                    1,
-                    4096,
+                    render.near,
+                    render.far,
                 ).mmul(math.Mat4.lookAt(
                     cam.pos,
                     cam.target,
@@ -119,12 +84,12 @@ pub const frame = struct {
                     cam.pos[2],
                     1,
                 },
-                .time = clip_time,
+                .global_time = time,
             },
             .fragment = .{
-                .sun_direction_intensity = .{ 0, -1, 0, 1 },
-                .sun_color_ambient = .{ 1, 1, 1, 0.25 },
-                .time = clip_time,
+                .global_time = time,
+                .clip_time = state.clip_time,
+                .clip_remaining_time = state.clip_remaining_time,
             },
             .clip = clip,
             .clear_color = .{ 0.5, 0.5, 0.5, 1 },

@@ -11,20 +11,6 @@ pub const InstanceText = extern struct {
     pub const locations = .{ 6, 7, 8 };
 };
 
-pub fn scanTimeline(
-    comptime T: type,
-    timeline: []const T,
-    time: f32,
-) usize {
-    for (timeline, 0..) |unit, i| {
-        if (time < unit.t) {
-            return i -| 1;
-        }
-    }
-
-    return timeline.len - 1;
-}
-
 pub fn interleave(
     comptime E: type,
     dst: []E,

@@ -6,18 +6,13 @@
     },
     .camera = .{
         .control = .{
-            .{ .t = 0, .i = 0, .target_lock = .origin },
+            .{ .t = 0, .i = 0 },
         },
         .tracks = .{
             .{ // TRACK 1
                 .{
                     .t = 0.0,
                     .entry = .{ .pos = .{ 0, 0, 3 } },
-                    .blend = 2,
-                },
-                .{
-                    .t = 2.0,
-                    .entry = .{ .pos = .{ 10, 0, 0 } },
                     .blend = 2,
                 },
                 .{
