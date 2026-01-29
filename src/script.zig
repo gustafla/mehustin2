@@ -5,6 +5,7 @@ const config = @import("config.zon");
 const timeline: Timeline = @import("timeline.zon");
 
 const math = @import("math.zig");
+const Vec3 = math.Vec3;
 const render = @import("render.zig");
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
@@ -14,11 +15,12 @@ const noise_zig = @import("script/noise.zig");
 const schema = @import("script/schema.zig");
 const Timeline = schema.Timeline;
 const ClipSegment = schema.ClipSegment;
+const CameraIndex = schema.CameraControl;
 const util = @import("script/util.zig");
 
 pub const Clip = schema.ClipEnum(timeline);
 const clips = schema.clipTable(timeline);
-const cam_entries = schema.camEntryTable(timeline);
+const cam_entries = schema.camEntryTable(timeline.camera.tracks);
 
 // ---- GLOBAL ----
 
@@ -26,6 +28,18 @@ var gpa: Allocator = undefined;
 
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
+}
+
+const anchor = struct {
+    pub var origin: Vec3 = @splat(0);
+};
+
+pub const Anchor = std.meta.DeclEnum(anchor);
+
+inline fn getAnchor(a: Anchor) Vec3 {
+    return switch (a) {
+        inline else => |tag| @field(anchor, @tagName(tag)),
+    };
 }
 
 // ---- FRAME DATA (1st) ----
@@ -63,14 +77,29 @@ pub const frame = struct {
         const clip_time = time - clip_seg.t;
         // TODO: next_time = time - timeline.clip_track[idx + 1].t ...
 
-        const cam_idx = util.scanTimeline(camera.Segment, timeline.camera_track, time);
-        const cam_state = camera.evaluate(
-            timeline.camera_track,
-            &cam_entries,
+        const cam_control_idx = util.scanTimeline(CameraIndex, timeline.camera.control, time);
+        const cam_control = timeline.camera.control[cam_control_idx];
+        const cam_track = timeline.camera.tracks[cam_control.i];
+        const cam_idx = util.scanTimeline(camera.Segment, cam_track, time);
+        var cam_state = camera.evaluate(
+            cam_track,
+            &cam_entries[cam_control.i],
             cam_idx,
             time,
         );
-        cam = camera.applyEffects(timeline.camera_effects, cam_state, time);
+
+        // Process position lock anchor
+        if (cam_control.position_lock) |to| {
+            cam_state.pos = getAnchor(to);
+        }
+
+        // Process target lock anchor
+        if (cam_control.target_lock) |to| {
+            cam_state.target = getAnchor(to);
+        }
+
+        // Finally, apply effects and output to global
+        cam = camera.applyEffects(timeline.camera.effects, cam_state, time);
 
         return .{
             .vertex = .{
@@ -282,7 +311,7 @@ pub const buffer = struct {
                     .rot_quat = math.quat.IDENTITY,
                 };
             }
-            return .{ .num_elements = dst.len };
+            return .{ .num_elements = @intCast(dst.len) };
         }
     };
 };

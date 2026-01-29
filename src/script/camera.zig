@@ -29,7 +29,7 @@ pub const State = struct {
 
 pub const Segment = struct {
     t: f32,
-    motion: []const Motion,
+    motion: []const Motion = &.{},
     entry: ?State = null,
     blend: f32 = 1,
 
@@ -87,8 +87,8 @@ pub const Effect = struct {
 };
 
 pub fn evaluate(
-    comptime track: []const Segment,
-    comptime entries: []const State,
+    track: []const Segment,
+    entries: []const State,
     cam_idx: usize,
     time: f32,
 ) State {

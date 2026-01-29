@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const script = @import("../script.zig");
 const camera = @import("camera.zig");
 
 pub const ClipSegment = struct {
@@ -7,10 +8,20 @@ pub const ClipSegment = struct {
     id: []const u8,
 };
 
+pub const CameraControl = struct {
+    t: f32,
+    i: u32,
+    position_lock: ?script.Anchor = null,
+    target_lock: ?script.Anchor = null,
+};
+
 pub const Timeline = struct {
     clip_track: []const ClipSegment,
-    camera_track: []const camera.Segment,
-    camera_effects: []const camera.Effect,
+    camera: struct {
+        control: []const CameraControl,
+        tracks: []const []const camera.Segment,
+        effects: []const camera.Effect,
+    },
 };
 
 pub fn ClipEnum(comptime timeline: Timeline) type {
@@ -42,26 +53,36 @@ pub fn clipTable(
     return clips;
 }
 
-pub fn camEntryTable(
-    comptime timeline: Timeline,
-) [timeline.camera_track.len]camera.State {
-    var entries: [timeline.camera_track.len]camera.State = undefined;
-    entries[0] = .{
-        .pos = .{ 0, 0, 1 },
-        .target = .{ 0, 0, 0 },
-    };
+pub fn maxLen(comptime slices: anytype) usize {
+    var max = 0;
+    for (slices) |slice| {
+        if (slice.len > max) max = slice.len;
+    }
+    return max;
+}
 
-    for (1..timeline.camera_track.len) |i| {
-        const next = timeline.camera_track[i];
-        const prev = timeline.camera_track[i - 1];
-        const prev_shift = if (i > 1) timeline.camera_track[i - 2].blend else 0;
-        entries[i] = prev.evaluate(
-            &entries[i - 1],
-            null,
-            null,
-            next.t,
-            prev_shift,
-        );
+pub fn camEntryTable(
+    comptime tracks: []const []const camera.Segment,
+) [tracks.len][maxLen(tracks)]camera.State {
+    var entries = std.mem.zeroes([tracks.len][maxLen(tracks)]camera.State);
+
+    for (&entries, tracks) |*table, track| {
+        table.*[0] = .{
+            .pos = .{ 0, 0, 1 },
+            .target = .{ 0, 0, 0 },
+        };
+        for (1..track.len) |i| {
+            const next = track[i];
+            const prev = track[i - 1];
+            const prev_shift = if (i > 1) track[i - 2].blend else 0;
+            table.*[i] = prev.evaluate(
+                &table[i - 1],
+                null,
+                null,
+                next.t,
+                prev_shift,
+            );
+        }
     }
 
     return entries;
