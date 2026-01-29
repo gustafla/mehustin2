@@ -9,6 +9,9 @@
 # Backlog
 
 - [ ] Camera control with clipboard export containing camera state in ZON
+  - [ ] Extend dynlib API with a state struct setter and getter (time, pause, camera_edit, camera_state)
+  - [ ] Extend dynlib API with a camera movement hook ((forward, right) and (up, right))
+  - [ ] Implement camera flight in camera.zig (pass deltatime), maintain edit camera state in script.zig
 - [ ] k-Curves (Adobe Research) (generalized cylinders etc.)
 - [ ] Clip-to-clip transition effects (uniform containing clip time left)
 - [ ] Build-time font generation
