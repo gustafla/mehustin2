@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const config = @import("config.zon");
 const timeline: Timeline = @import("timeline.zon");
 
 const math = @import("math.zig");
@@ -14,7 +15,6 @@ const schema = @import("script/schema.zig");
 const Timeline = schema.Timeline;
 const ClipSegment = schema.ClipSegment;
 const util = @import("script/util.zig");
-const config = @import("config.zon");
 
 pub const Clip = schema.ClipEnum(timeline);
 const clips = schema.clipTable(timeline);

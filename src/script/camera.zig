@@ -17,6 +17,14 @@ pub const State = struct {
             .roll = std.math.lerp(a.roll, b.roll, t),
         };
     }
+
+    pub fn getBasis(self: State) struct { right: Vec3, up: Vec3, fwd: Vec3 } {
+        const fwd = vec3.normalize(self.target - self.pos);
+        const world_up = if (@abs(fwd[1]) > 0.999) vec3.ZUP else vec3.YUP;
+        const right = vec3.normalize(vec3.cross(fwd, world_up));
+        const up = vec3.cross(right, fwd);
+        return .{ .right = right, .up = up, .fwd = fwd };
+    }
 };
 
 pub const Segment = struct {
@@ -135,8 +143,7 @@ pub fn applyEffects(
                 const func = @field(fns, @tagName(tag));
 
                 var mod_param = param;
-                if (hasParam(param, "mag")) mod_param.mag *= intensity; // shake
-                if (hasParam(param, "amp")) mod_param.amp *= intensity; // wave, swivel
+                if (hasParam(param, "amp")) mod_param.amp *= intensity; // shake, wave, swivel
                 if (hasParam(param, "angle")) mod_param.angle *= intensity; // bank
                 if (hasParam(param, "roll")) mod_param.roll *= intensity; // shake roll
 
@@ -153,17 +160,23 @@ inline fn hasParam(p: anytype, comptime name: []const u8) bool {
     return P != void and @hasField(P, name);
 }
 
+pub const LocalAxis = enum { lateral, vertical, longitudinal };
+
 pub const fns = struct {
     pub fn move(
         t: f32,
         e: State,
-        p: struct { axis: Vec3, speed: f32 = 1, pan: bool = false },
+        p: struct {
+            axis: Vec3,
+            speed: f32 = 1,
+            strafe: bool = false,
+        },
     ) State {
         const v = vec3.normalize(p.axis);
         const offset = v * @as(Vec3, @splat(t * p.speed));
         return .{
             .pos = e.pos + offset,
-            .target = e.target + if (p.pan) offset else @as(Vec3, @splat(0)),
+            .target = e.target + if (p.strafe) offset else @as(Vec3, @splat(0)),
             .fov = e.fov,
             .roll = e.roll,
         };
@@ -172,7 +185,9 @@ pub const fns = struct {
     pub fn dolly(
         t: f32,
         e: State,
-        p: struct { speed: f32 = 1 },
+        p: struct {
+            speed: f32 = 1,
+        },
     ) State {
         const v = vec3.normalize(e.target - e.pos);
         const offset = v * @as(Vec3, @splat(t * p.speed));
@@ -187,7 +202,10 @@ pub const fns = struct {
     pub fn circle(
         t: f32,
         e: State,
-        p: struct { axis: Vec3, speed: f32 = 1 },
+        p: struct {
+            axis: Vec3,
+            speed: f32 = 1,
+        },
     ) State {
         const axis = vec3.normalize(p.axis);
         const rel_pos = e.pos - e.target;
@@ -204,7 +222,10 @@ pub const fns = struct {
     pub fn orbit(
         t: f32,
         e: State,
-        p: struct { axis: Vec3, speed: f32 = 1 },
+        p: struct {
+            axis: Vec3,
+            speed: f32 = 1,
+        },
     ) State {
         const rel_pos = e.pos - e.target;
         const view_dir = vec3.normalize(rel_pos);
@@ -234,24 +255,24 @@ pub const fns = struct {
     pub fn spiral(
         t: f32,
         e: State,
-        p: struct { radius: f32 = 1, speed: f32 = 1, pan: bool = false },
+        p: struct {
+            radius: f32 = 1,
+            speed: f32 = 1,
+            strafe: bool = false,
+        },
     ) State {
-        const fwd = vec3.normalize(e.target - e.pos);
-
-        const world_up = if (@abs(fwd[1]) > 0.999) vec3.ZUP else vec3.YUP;
-        const right = vec3.normalize(vec3.cross(fwd, world_up));
-        const up = vec3.cross(right, fwd);
+        const basis = e.getBasis();
 
         const angle = t * p.speed;
         const c: Vec3 = @splat(std.math.cos(angle));
         const s: Vec3 = @splat(std.math.sin(angle));
         const r: Vec3 = @splat(p.radius);
 
-        const offset = (right * c + up * s) * r;
+        const offset = (basis.right * c + basis.up * s) * r;
 
         return .{
             .pos = e.pos + offset,
-            .target = e.target + if (p.pan) offset else @as(Vec3, @splat(0)),
+            .target = e.target + if (p.strafe) offset else @as(Vec3, @splat(0)),
             .fov = e.fov,
             .roll = e.roll,
         };
@@ -259,24 +280,35 @@ pub const fns = struct {
 
     pub fn swivel(
         t: f32,
-        entry: State,
-        param: struct { axis: Vec3, speed: f32 = 1, amp: f32 = 0 },
+        e: State,
+        p: struct {
+            axis: ?Vec3 = null,
+            local: LocalAxis = .vertical,
+            speed: f32 = 1,
+            amp: f32 = 0,
+        },
     ) State {
-        const forward = entry.target - entry.pos;
-        const axis_norm = vec3.normalize(param.axis);
+        const basis = e.getBasis();
+        const axis = if (p.axis) |a| vec3.normalize(a) else blk: {
+            break :blk switch (p.local) {
+                .vertical => basis.up,
+                .lateral => basis.right,
+                .longitudinal => basis.fwd,
+            };
+        };
 
-        const angle = if (param.amp > 0)
-            std.math.sin(t * param.speed) * param.amp
+        const angle = if (p.amp > 0)
+            std.math.sin(t * p.speed) * p.amp
         else
-            t * param.speed;
+            t * p.speed;
 
-        const new_forward = vec3.rotate(forward, axis_norm, angle);
+        const new_forward = vec3.rotate(basis.fwd, axis, angle);
 
         return .{
-            .pos = entry.pos,
-            .target = entry.pos + new_forward,
-            .fov = entry.fov,
-            .roll = entry.roll,
+            .pos = e.pos,
+            .target = e.pos + new_forward,
+            .fov = e.fov,
+            .roll = e.roll,
         };
     }
 
@@ -285,20 +317,27 @@ pub const fns = struct {
         e: State,
         p: struct {
             freq: f32 = 1.0,
-            mag: f32 = 0.1,
+            amp: f32 = 0.1,
             seed: f32 = 0.0,
             roll: f32 = 0.0,
+            local: ?LocalAxis = null,
         },
     ) State {
         const s = p.seed;
 
-        const noise_vec = Vec3{
-            std.math.sin(t * p.freq + s) + std.math.sin(t * p.freq * 0.5 + s + 1.0),
-            std.math.sin(t * p.freq * 1.3 + s + 2.0) * 0.7,
-            std.math.cos(t * p.freq * 0.8 + s + 3.0),
-        };
+        const n1 = std.math.sin(t * p.freq + s) + std.math.sin(t * p.freq * 0.5 + s + 1.0);
+        const n2 = std.math.sin(t * p.freq * 1.3 + s + 2.0) * 0.7;
+        const n3 = std.math.cos(t * p.freq * 0.8 + s + 3.0);
 
-        const offset = noise_vec * @as(Vec3, @splat(p.mag));
+        const offset = if (p.local) |axis| blk: {
+            const basis = e.getBasis();
+            const dir = switch (axis) {
+                .lateral => basis.right,
+                .vertical => basis.up,
+                .longitudinal => basis.fwd,
+            };
+            break :blk dir * @as(Vec3, @splat(n1 * p.amp));
+        } else @as(Vec3, .{ n1, n2, n3 }) * @as(Vec3, @splat(p.amp));
 
         return .{
             .pos = e.pos + offset,
@@ -312,18 +351,29 @@ pub const fns = struct {
         t: f32,
         e: State,
         p: struct {
-            axis: Vec3,
+            axis: ?Vec3 = null,
+            local: LocalAxis = .vertical,
             freq: f32 = 1,
             amp: f32 = 1,
             phase: f32 = 0,
+            strafe: bool = false,
         },
     ) State {
+        const axis = if (p.axis) |a| vec3.normalize(a) else blk: {
+            const basis = e.getBasis();
+            break :blk switch (p.local) {
+                .lateral => basis.right,
+                .vertical => basis.up,
+                .longitudinal => basis.fwd,
+            };
+        };
+
         const s = std.math.sin((t * p.freq) + p.phase) * p.amp;
-        const offset = vec3.normalize(p.axis) * @as(Vec3, @splat(s));
+        const offset = axis * @as(Vec3, @splat(s));
 
         return .{
             .pos = e.pos + offset,
-            .target = e.target,
+            .target = e.target + if (p.strafe) offset else @as(Vec3, @splat(0)),
             .fov = e.fov,
             .roll = e.roll,
         };
