@@ -22,6 +22,7 @@
             .t = 6.0,
             .motion = .{
                 .{ .move = .{ .axis = .{ 0, 1, 3 }, .speed = 1 } },
+                .{ .wave = .{ .axis = .{ 1, 0, 0 }, .freq = 1, .amp = 2 } },
             },
             .blend = 2,
         },
@@ -36,6 +37,14 @@
             .t = 30,
             .motion = .{
                 .{ .orbit = .{ .axis = .{ 1, 1, 0 }, .speed = 0.3 } },
+            },
+        },
+        .{
+            .t = 50,
+            .motion = .{
+                .{ .orbit = .{ .axis = .{ 0, 0.2, -1 }, .speed = 0.4 } },
+                .{ .wave = .{ .axis = .{ 1, 0, 0 }, .freq = 1, .amp = 1 } },
+                .{ .wave = .{ .axis = .{ 0, 1, 0 }, .freq = 1.12, .amp = 1 } },
             },
         },
     },

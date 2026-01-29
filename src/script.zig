@@ -13,7 +13,6 @@ const noise_zig = @import("script/noise.zig");
 const schema = @import("script/schema.zig");
 const Timeline = schema.Timeline;
 const ClipSegment = schema.ClipSegment;
-const CameraSegment = schema.CameraSegment;
 const util = @import("script/util.zig");
 const config = @import("config.zon");
 
@@ -64,25 +63,14 @@ pub const frame = struct {
         const clip_time = time - clip_seg.t;
         // TODO: next_time = time - timeline.clip_track[idx + 1].t ...
 
-        const cam_idx = util.scanTimeline(CameraSegment, timeline.camera_track, time);
-        const cam_seg = timeline.camera_track[cam_idx];
-        const cam_next = if (cam_idx + 1 < timeline.camera_track.len)
-            .{ &timeline.camera_track[cam_idx + 1], &cam_entries[cam_idx + 1] }
-        else
-            .{ null, null };
-        const cam_time_shift = if (cam_idx > 0)
-            timeline.camera_track[cam_idx - 1].blend
-        else
-            0;
-        cam = cam_seg.evaluate(
-            &cam_entries[cam_idx], // Entry for current segment
-            cam_next[0], // Next segment
-            cam_next[1], // Next segment's clean entry
+        const cam_idx = util.scanTimeline(camera.Segment, timeline.camera_track, time);
+        const cam_state = camera.evaluate(
+            timeline.camera_track,
+            &cam_entries,
+            cam_idx,
             time,
-            cam_time_shift, // Blend time shift for movements that are .slip = true
-            true, // Enable transient movements
         );
-        cam = schema.applyCameraEffects(timeline.camera_effects, cam, time);
+        cam = camera.applyEffects(timeline.camera_effects, cam_state, time);
 
         return .{
             .vertex = .{
