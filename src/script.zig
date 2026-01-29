@@ -275,13 +275,14 @@ pub const buffer = struct {
             return 512;
         }
 
-        pub fn updateData(dst: []Layout) !void {
+        pub fn init(dst: []Layout) !BufferInfo {
             for (dst) |*instance| {
                 instance.* = .{
                     .pos_scale = .{ 0, 0, 0, 1 },
                     .rot_quat = math.quat.IDENTITY,
                 };
             }
+            return .{ .num_elements = dst.len };
         }
     };
 };
