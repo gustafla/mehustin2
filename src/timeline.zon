@@ -13,12 +13,17 @@
             .dist_scale = 4,
         }},
         .track = .{
+            // FPS ;)
+            .{
+                .text = .{ .ref = .fps },
+                .pos = .{ -1, 1 },
+                .scale = 0.03,
+            },
             // Title card
             .{
                 .t = 0,
                 .duration = 150,
                 .text = .{ .str = "NEW Demo Engine!\nBy Mehu" },
-                .font = 0,
                 .pos = .{ 0, 0 },
                 .scale = 0.1,
                 .origin = .bottom,
@@ -31,7 +36,6 @@
                 .t = 5,
                 .duration = 145,
                 .text = .{ .str = "Written in Zig" },
-                .font = 0,
                 .pos = .{ 0, -0.1 },
                 .scale = 0.1,
                 .origin = .center,

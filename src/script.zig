@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
 
 const config = @import("config.zon");
 
@@ -7,6 +8,7 @@ const math = @import("math.zig");
 const Vec3 = math.Vec3;
 const vec3 = math.vec3;
 const render = @import("render.zig");
+const c = @import("render/c.zig").c;
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
 const camera = @import("script/camera.zig");
@@ -30,6 +32,18 @@ pub const anchor = struct {
 };
 
 pub const Anchor = std.meta.DeclEnum(anchor);
+
+// ---- STRINGS ----
+
+var frames: u32 = 0;
+var fps_ticks: u64 = 0;
+var fps_buf: [32]u8 = undefined;
+
+pub const string = struct {
+    pub var fps: []const u8 = "";
+};
+
+pub const String = std.meta.DeclEnum(string);
 
 // ---- FRAME DATA (1st) ----
 
@@ -58,6 +72,16 @@ pub const frame = struct {
     pub var cam: camera.State = undefined;
 
     pub fn update(frame_time: f32) State {
+        if (builtin.mode == .Debug) {
+            frames += 1;
+            const ticks = c.SDL_GetTicksNS();
+            if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
+                string.fps = std.fmt.bufPrint(&fps_buf, "FPS: {}", .{frames}) catch unreachable;
+                fps_ticks = ticks;
+                frames = 0;
+            }
+        }
+
         time = frame_time;
 
         const state = timeline.resolve(time);

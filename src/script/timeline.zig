@@ -36,16 +36,16 @@ pub const Font = struct {
 };
 
 pub const TextSegment = struct {
-    t: f32,
-    duration: f32,
+    t: f32 = 0,
+    duration: f32 = std.math.inf(f32),
     text: union(enum) {
         str: []const u8, // Inline string
-        ref: []const u8, // script.zig reflection
+        ref: script.String, // script.zig reflection
     },
-    font: usize,
+    font: usize = 0,
     pos: Vec2, // NDC position
     scale: f32 = 0.1, // Fraction of screen height
-    origin: TextOrigin,
+    origin: TextOrigin = .top_left,
     color: Vec4 = @splat(1),
     anim: ?union(enum) {
         fade: Vec4, // Fade from & to a color value
@@ -458,7 +458,9 @@ pub const text_instances = struct {
             // Resolve string
             const full_text = switch (track.text) {
                 .str => |s| s,
-                .ref => unreachable, // TODO: Needs enum + inline switch case
+                .ref => |r| switch (r) {
+                    inline else => |tag| @field(script.string, @tagName(tag)),
+                },
             };
 
             // Fade in
