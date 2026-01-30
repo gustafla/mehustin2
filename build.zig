@@ -130,6 +130,7 @@ pub fn build(b: *Build) void {
     const exe = b.addExecutable(.{
         .name = exe_name,
         .root_module = exe_mod,
+        .use_llvm = true, // TODO: Remove this in upcoming release if fixed
     });
     exe.linkLibC();
     exe.lto = lto;
