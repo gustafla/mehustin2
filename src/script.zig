@@ -10,16 +10,14 @@ const render = @import("render.zig");
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
 const camera = @import("script/camera.zig");
-const font = @import("script/font.zig");
 const noise_zig = @import("script/noise.zig");
-const util = @import("script/util.zig");
 const timeline = @import("script/timeline.zig");
-
 pub const Clip = timeline.Clip;
+const util = @import("script/util.zig");
 
 // ---- GLOBAL ----
 
-var gpa: Allocator = undefined;
+pub var gpa: Allocator = undefined;
 
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
@@ -102,8 +100,6 @@ pub const frame = struct {
 const logo_font_size = 128.0;
 const noise_size: usize = 64;
 
-var logo_font_glyphs: [128]font.GlyphInfo = undefined;
-
 pub const TextureInfo = struct {
     tex_type: types.TextureType = .@"2d",
     format: types.TextureFormat,
@@ -114,34 +110,7 @@ pub const TextureInfo = struct {
 };
 
 pub const texture = struct {
-    pub const logo_font = struct {
-        const name = "Unitblock.ttf";
-        const dim = 1024;
-
-        pub fn create() !TextureInfo {
-            return .{
-                .format = .r8_unorm,
-                .width = dim,
-                .height = dim,
-            };
-        }
-
-        pub fn init(dst: []u8) !void {
-            const ttf = try util.loadFile(gpa, name);
-            defer gpa.free(ttf);
-
-            try font.bakeSDFAtlas(
-                ttf.ptr,
-                logo_font_size,
-                16,
-                8,
-                dim,
-                dim,
-                &logo_font_glyphs,
-                dst.ptr,
-            );
-        }
-    };
+    pub const font_atlas = timeline.font_atlas;
 
     pub const noise = struct {
         pub fn create() !TextureInfo {
@@ -174,14 +143,14 @@ pub const Texture = std.meta.DeclEnum(texture);
 // ---- BUFFERS (3rd) ----
 
 pub const layout = struct {
+    pub const InstanceText = timeline.InstanceText;
+
     pub const VertexPosColor = extern struct {
         position: [3]f32,
         color: [3]f32,
 
         pub const locations = .{ 0, 2 };
     };
-
-    pub const InstanceText = util.InstanceText;
 
     pub const InstanceTRS = extern struct {
         pos_scale: [4]f32,
@@ -206,6 +175,8 @@ pub const BufferInfo = struct {
 };
 
 pub const buffer = struct {
+    pub const text_instances = timeline.text_instances;
+
     pub const octahedron = struct {
         const coords = .{
             // position1          position2            position3
@@ -239,26 +210,6 @@ pub const buffer = struct {
         pub fn init(dst: []Layout) !BufferInfo {
             util.interleave(Layout, dst, .{ &coords, &colors });
             return .{ .num_elements = num_vertices };
-        }
-    };
-
-    pub const logo_text = struct {
-        const str = "Mehu\nMehu\nMehu";
-
-        pub const Layout = layout.InstanceText;
-
-        pub fn create() !u32 {
-            return str.len;
-        }
-
-        pub fn init(dst: []Layout) !BufferInfo {
-            const num = util.genText(
-                dst,
-                str,
-                logo_font_size,
-                &logo_font_glyphs,
-            );
-            return .{ .num_elements = num };
         }
     };
 

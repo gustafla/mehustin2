@@ -2,6 +2,9 @@
 
 const std = @import("std");
 
+/// A 2-component vector.
+pub const Vec2 = @Vector(2, f32);
+
 /// A 3-component vector.
 pub const Vec3 = @Vector(3, f32);
 
@@ -54,6 +57,17 @@ pub const vec3 = struct {
         const term3 = k * @as(Vec3, @splat(dot_val)) * one_minus_cos;
 
         return term1 + term2 + term3;
+    }
+};
+
+/// A 4-component vector.
+pub const Vec4 = @Vector(4, f32);
+
+pub const vec4 = struct {
+    // TODO: implement anytype-generic versions of these
+    pub fn lerp(a: Vec4, b: Vec4, t: f32) Vec4 {
+        const t_vec: Vec4 = @splat(t);
+        return a + (b - a) * t_vec;
     }
 };
 

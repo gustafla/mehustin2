@@ -4,6 +4,42 @@
         .{ .t = 28.0, .id = "spread" },
         .{ .t = 55.0, .id = "showtime" },
     },
+    .text = .{
+        .atlas_size = 1024,
+        .fonts = .{.{
+            .name = "Unitblock.ttf",
+            .size = 120,
+            .padding = 16,
+            .dist_scale = 4,
+        }},
+        .track = .{
+            // Title card
+            .{
+                .t = 0,
+                .duration = 15,
+                .text = .{ .str = "NEW Demo Engine!\nBy Mehu" },
+                .font = 0,
+                .pos = .{ 0, 0.2 },
+                .scale = 0.3,
+                .origin = .center,
+                .anim = .{ .slide = .{ 0, -1 } },
+                .fade_in = 2,
+                .fade_out = 2,
+            },
+            // Subtitle
+            .{
+                .t = 5,
+                .duration = 10,
+                .text = .{ .str = "Written in Zig" },
+                .font = 0,
+                .pos = .{ 0, -0.1 },
+                .scale = 0.2,
+                .origin = .center,
+                .anim = .typewriter,
+                .color = .{ 1, 1, 1, 0.6 },
+            },
+        },
+    },
     .camera = .{
         .control = .{
             .{ .t = 0, .i = 0 },

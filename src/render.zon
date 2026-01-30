@@ -227,17 +227,12 @@
                     .pipelines = .{
                         .{
                             .vert = "text.vert",
-                            .frag = "text_shadow.frag",
-                            .blend_states = .{.{ .enable = true }},
-                        },
-                        .{
-                            .vert = "text.vert",
-                            .frag = "text_opaque.frag",
+                            .frag = "text.frag",
                             .blend_states = .{.{ .enable = true }},
                         },
                     },
-                    .fragment_samplers = .{.{ .texture = "logo_font", .sampler = "linear" }},
-                    .instance_buffer = "logo_text",
+                    .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
+                    .instance_buffer = "text_instances",
                     .num_vertices = .{ .num = 4 },
                 },
             },

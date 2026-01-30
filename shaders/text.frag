@@ -1,0 +1,23 @@
+#version 450
+
+layout(location = 0) in vec2 in_uv;
+layout(location = 1) flat in vec4 in_color;
+layout(location = 2) flat in uvec2 in_style;
+
+layout(location = 0) out vec4 out_color;
+
+layout(set = 2, binding = 0) uniform sampler2DArray u_font_atlas;
+
+void main() {
+    vec3 coord = vec3(in_uv, float(in_style.x));    
+    float dist = texture(u_font_atlas, coord).r;
+
+    float smoothing = fwidth(dist);
+    float alpha = smoothstep(0.5 - smoothing, 0.5 + smoothing, dist);
+
+    if (alpha <= 0.01) {
+        discard;
+    }
+
+    out_color = vec4(in_color.rgb, in_color.a * alpha);
+}
