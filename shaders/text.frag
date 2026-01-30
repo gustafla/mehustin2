@@ -12,7 +12,7 @@ void main() {
     vec3 coord = vec3(in_uv, float(in_style.x));
     float dist = texture(u_font_atlas, coord).r;
 
-    float smoothing = fwidth(dist);
+    float smoothing = fwidth(dist) * 0.5;
     float alpha = smoothstep(0.5 - smoothing, 0.5 + smoothing, dist);
 
     if (alpha <= 0.01) {
