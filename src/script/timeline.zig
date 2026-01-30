@@ -260,6 +260,10 @@ pub fn resolve(time: f32) State {
 }
 
 pub const TextOrigin = enum {
+    left,
+    right,
+    top,
+    bottom,
     top_left,
     top_right,
     bottom_left,
@@ -331,6 +335,7 @@ fn genText(
 ) u32 {
     const ndc_per_pixel_y = (height_scale * 2.0) / font_sizes[font_idx];
     const ndc_per_pixel_x = ndc_per_pixel_y / render.aspect;
+    const line_height = font_sizes[font_idx] * ndc_per_pixel_y;
 
     // Measure bounding box
     var max_width: f32 = 0;
@@ -351,13 +356,27 @@ fn genText(
         }
     }
     max_width = @max(max_width, line_width);
-    const total_height = num_lines * (font_sizes[font_idx] * ndc_per_pixel_y);
+    const total_height = num_lines * line_height;
 
     // Calculate origin
     var cursor_x = pos_ndc[0];
-    var cursor_y = pos_ndc[1];
+    var cursor_y = pos_ndc[1] - line_height;
 
     switch (origin) {
+        .left => {
+            cursor_y += total_height * 0.5;
+        },
+        .right => {
+            cursor_x -= max_width;
+            cursor_y += total_height * 0.5;
+        },
+        .top => {
+            cursor_x -= max_width * 0.5;
+        },
+        .bottom => {
+            cursor_x -= max_width * 0.5;
+            cursor_y += total_height;
+        },
         .top_left => {},
         .top_right => {
             cursor_x -= max_width;
@@ -371,7 +390,7 @@ fn genText(
         },
         .center => {
             cursor_x -= max_width * 0.5;
-            cursor_y += total_height * 0.5;
+            cursor_y += (total_height * 0.5);
         },
     }
 
@@ -385,7 +404,7 @@ fn genText(
         if (instances >= dst.len) break;
 
         if (char == '\n') {
-            cursor_y -= (font_sizes[font_idx] * ndc_per_pixel_y);
+            cursor_y -= line_height;
             cursor_x = start_x;
             continue;
         }
@@ -397,14 +416,14 @@ fn genText(
 
         const g = font_glyphs[font_idx][char];
 
-        const top = cursor_y + (g.y_off * ndc_per_pixel_y);
+        const top = cursor_y - (g.y_off * ndc_per_pixel_y);
         const bottom = top - (g.height * ndc_per_pixel_y);
         const left = cursor_x + (g.x_off * ndc_per_pixel_x);
         const right = left + (g.width * ndc_per_pixel_x);
 
         dst[instances] = .{
             .uv = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
-            .position = .{ left, bottom, right, top },
+            .position = .{ left, top, right, bottom },
             .color = color,
             .style = .{ @intCast(font_idx), effect },
         };

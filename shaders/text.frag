@@ -9,7 +9,7 @@ layout(location = 0) out vec4 out_color;
 layout(set = 2, binding = 0) uniform sampler2DArray u_font_atlas;
 
 void main() {
-    vec3 coord = vec3(in_uv, float(in_style.x));    
+    vec3 coord = vec3(in_uv, float(in_style.x));
     float dist = texture(u_font_atlas, coord).r;
 
     float smoothing = fwidth(dist);
