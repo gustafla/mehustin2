@@ -4,50 +4,48 @@
   - [ ] Lighting (directional)
   - [ ] Lighting (point light sources)
 - [ ] Particle rendering
-- [ ] Parameter tracks
 
 # Backlog
 
-- [ ] Camera control with clipboard export containing camera state in ZON
-  - [ ] Extend dynlib API with a state struct setter and getter (time, pause, camera_edit, camera_state)
-  - [ ] Extend dynlib API with a camera movement hook ((forward, right) and (up, right))
-  - [ ] Implement camera flight in camera.zig (pass deltatime), maintain edit camera state in script.zig
-- [ ] k-Curves (Adobe Research) (generalized cylinders etc.)
-- [ ] Clip-to-clip transition effects (uniform containing clip time left)
+- [ ] Make clips able to overlap (rename to conditions or logics)
+  - [ ] Clips currently active as a bit mask (Are 32 clips enough? Can extend with more)
+  - [ ] Render.zon condition can be reduced to single logic tag
+  - [ ] Clip times & time left should be an SSBO array
+- [ ] Refactor script.zig resources again. Main unit: resource. Subunits: buffers, textures, storage etc.
+  - [ ] Can write model loaders which also load textures
+  - [ ] Can write the text system as a single unit
+  - [ ] Render.zon schema needs to accommodate a generic "bind all stuff in resource X"
+  - [ ] Each resource should have a field for group tags for targeting in render
+    - [ ] Render.zon for-all-in-group-filter (e.g. "world & transparent") macro syntax
+      - Consider using a generic templating library
 - [ ] Build-time font generation
-- [ ] Compute passes
 - [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture
-- [ ] Parallelize resource inits and updates (thread pool + work splitting utilities if data within a single job is large)
-- [ ] DoF
-  - [ ] Bokeh sprites
+- [ ] Comptime resource loader namespace generators (fns that return a resource namespace)
+  - [ ] textureFromFile
+  - [ ] vertexBufferFromFile
+  - [ ] vertexBufferFromParShapes (par_shapes.h)
+  - [ ] instanceBuffer3D (helper)
+  - [ ] Add optional update fn hooks!
+- [ ] Index buffers
+  - [ ] meshoptimizer
+- [ ] mikttspace.h, generate tangents
+- [ ] Particle simulations (nbody, fluid, noise)
+- [ ] Text layer improvements
+  - [ ] Text effects (multiple, use bit mask in uber shader)
+  - [ ] Multi-layered text (shadows etc)
+  - [ ] More animations (stretch-in-out)
+  - [ ] Position at world anchor projected to NDC space
 - [ ] HDR textures from file
 - [ ] Render scene to cubemap
-- [ ] Text mesh rendering
-  - [ ] libtess2
-- [ ] imgui (dear_imgui_zig)
-- [ ] More physically accurate chromatic aberration
-  - refract(), multiple channels
-  - https://gist.github.com/jjcastro/10bf80b5a5c740056b461f3010787ec1
-- [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
-- [ ] Marching cubes (https://gist.github.com/dwilliamson/c041e3454a713e58baf6e4f8e5fffecd)
-- [ ] Particle simulations
-- [ ] Use (games-by-mason) libraries?
-  - [ ] Zex
-  - [ ] shader_compiler
-  - [ ] tracy_zig
-  - [ ] Tween
-  - [ ] dear_imgui_zig
-  - [ ] gbms
-  - [ ] zm
-- [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
-  - [ ] Build-time buffer & texture information, automatically injected into script/engine (blocks without create()/init() in script)
-- [ ] Add pass chain macro to render.zon syntax
-- [ ] Scene graph (reduced into instance buffers?)
-  - [ ] glTF support
+- [ ] Generic mutable registry (maintain shadow list of mutexes for sync)
+  - [ ] Anchors
+  - [ ] Strings
+- [ ] Compute passes
 
 # Done
 
+- [X] Clip-to-clip transition effects (uniform containing clip time left)
 - [X] script: Give update functions control over num_elements and first_element
 - [X] script/render: Auto-generate buffer layouts from script struct types
 - [X] Make Buffer layouts comptime-known, can remove explicit layouts from pipelines
@@ -87,3 +85,39 @@
     - [X] Keep running when errors
     - [ ] Report error codes over FFI boundary
   - [ ] TODO: https://github.com/ziglang/zig/issues/25026
+
+# Stash of Long Term Development Ideas
+
+- [ ] Marching cubes (https://gist.github.com/dwilliamson/c041e3454a713e58baf6e4f8e5fffecd)
+- [ ] Use (games-by-mason) libraries?
+  - [ ] Zex
+  - [ ] shader_compiler
+  - [ ] tracy_zig
+  - [ ] Tween
+  - [ ] dear_imgui_zig
+  - [ ] gbms
+  - [ ] zm
+- [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
+  - [ ] Build-time buffer & texture information, automatically injected into script/engine (blocks without create()/init() in script)
+- [ ] Add pass chain macro to render.zon syntax
+- [ ] Scene graph (reduced into instance buffers?)
+  - [ ] glTF support
+- [ ] k-Curves (Adobe Research) (generalized cylinders etc.)
+- [ ] Parallelize resource inits and updates (thread pool + work splitting utilities if data within a single job is large)
+  - [ ] Remember to synchronize access to all mutable state
+- [ ] Text mesh rendering
+  - [ ] libtess2
+- [ ] imgui (dear_imgui_zig)
+- [ ] DoF
+  - [ ] Bokeh sprites
+- [ ] More physically accurate chromatic aberration
+  - refract(), multiple channels
+  - https://gist.github.com/jjcastro/10bf80b5a5c740056b461f3010787ec1
+- [ ] Camera control with clipboard export containing camera state in ZON
+  - [ ] Extend dynlib API with a state struct setter and getter (time, pause, camera_edit, camera_state)
+  - [ ] Extend dynlib API with a camera movement hook ((forward, right) and (up, right))
+  - [ ] Implement camera flight in camera.zig (pass deltatime), maintain edit camera state in script.zig
+- [ ] Color grading LUT https://www.youtube.com/shorts/TYx5SgEGemc
+- [ ] Parameter tracks
+- [ ] AABBs and CPU culling (script can update the instance buffer on the fly)
+- [ ] comptime GLSL reflection macro that parses buffer blocks, creating a matching Zig SSBO namespace

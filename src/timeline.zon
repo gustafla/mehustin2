@@ -10,7 +10,7 @@
             .name = "Unitblock.ttf",
             .size = 120,
             .padding = 16,
-            .dist_scale = 4,
+            .dist_scale = 8,
         }},
         .track = .{
             // FPS ;)

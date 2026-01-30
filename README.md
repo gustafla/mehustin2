@@ -82,6 +82,10 @@ The view_projection matrix has a translation component, which transforms
 to view space. The camera position is provided in the vertex shader uniforms for
 camera-relative lighting.
 
+## Scripting and Plugging Render Resources to the Renderer
+
+TODO: Write this section when the design is stabilized. 
+
 ## Demo Orchestration
 
 Time is in musical beats, BPM is configurable in `config.zon`.
@@ -90,8 +94,9 @@ The `timeline.zon` file contains various tracks:
 
 - `clip_track`: For switching the currently active logic (`script.zig`) and
   filtering the frame graph (`render.zon`).
-- `camera_track`: A domain-specific language for camera pathing (`camera.zig`).
-- `camera_effects`: Camera effects overlaid on top of the main track.
+- `camera.tracks`: A domain-specific language for camera pathing (`camera.zig`).
+- `camera.control`: For selecting between multiple tracks and locking on anchors
+- `camera.effects`: Camera effects overlaid on top of the main track.
 
 ## Extra Data, Lighting
 
