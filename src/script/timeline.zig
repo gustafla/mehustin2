@@ -277,7 +277,7 @@ pub const InstanceText = extern struct {
     color: [4]f32,
     style: [2]u8, // .x = font, .y = effect
 
-    pub const locations = .{ 6, 7, 8, 9 };
+    pub const locations = .{ 8, 9, 10, 11 };
 };
 
 var font_sizes: [timeline.text.fonts.len]f32 = undefined;

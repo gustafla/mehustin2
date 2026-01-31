@@ -1,9 +1,9 @@
 #version 450
 
-layout(location = 6) in vec4 in_instance_uv; // xy = min, zw = max
-layout(location = 7) in vec4 in_instance_position; // xy = min, zw = max
-layout(location = 8) in vec4 in_instance_color;
-layout(location = 9) in uvec2 in_instance_style; // NEW: x: font, y: effect
+layout(location = 8) in vec4 in_instance_uv; // xy = min, zw = max
+layout(location = 9) in vec4 in_instance_position; // xy = min, zw = max
+layout(location = 10) in vec4 in_instance_color;
+layout(location = 11) in uvec2 in_instance_style;
 
 layout(location = 0) out vec2 out_uv;
 layout(location = 1) flat out vec4 out_color;

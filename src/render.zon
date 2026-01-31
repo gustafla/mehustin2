@@ -23,9 +23,9 @@
                 .{
                     // TODO: Enable .condition = .{.surface},
                     .pipelines = .{.{
-                        .vert = "3d.vert",
+                        .vert = "water_surface.vert",
                         .frag = "water_surface.frag",
-                        .primitive_type = .trianglelist,
+                        .primitive_type = .trianglestrip,
                         .rasterizer_state = .{
                             .cull_mode = .none,
                         },

@@ -188,6 +188,11 @@ pub const Texture = std.meta.DeclEnum(texture);
 
 // ---- BUFFERS (3rd) ----
 
+const surf_plane = .{ .w = 100, .d = 100 };
+const surf_grid = .{ .w = 128, .d = 128 };
+const surf_num_verts_x = surf_grid.w + 1;
+const surf_num_verts_z = surf_grid.d + 1;
+
 pub const layout = struct {
     pub const InstanceText = timeline.InstanceText;
 
@@ -198,11 +203,18 @@ pub const layout = struct {
         pub const locations = .{ 0, 1 };
     };
 
+    pub const VertexPosUV0 = extern struct {
+        position: [3]f32,
+        uv0: [3]f32,
+
+        pub const locations = .{ 0, 4 };
+    };
+
     pub const InstanceTRS = extern struct {
         pos_scale: [4]f32,
         rot_quat: [4]f32,
 
-        pub const locations = .{ 6, 7 };
+        pub const locations = .{ 8, 9 };
     };
 
     // Assert that all layouts are extern structs
@@ -224,39 +236,70 @@ pub const buffer = struct {
     pub const text_instances = timeline.text_instances;
 
     pub const water_surface_ind = struct {
-        pub const Layout = u16;
+        const per_row = (surf_grid.w + 1) * 2;
+        const num_indices = (per_row * surf_grid.d) + (surf_grid.d - 1) * 2;
+
+        pub const Layout = u32;
 
         pub fn create() !u32 {
-            return 32;
+            return num_indices;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            var i: usize = 0;
+            for (0..surf_grid.d) |z| {
+                const row_current = z * surf_num_verts_x;
+                const row_next = (z + 1) * surf_num_verts_x;
+
+                for (0..surf_num_verts_x) |x| {
+                    const top = @as(u32, @intCast(row_current + x));
+                    const bot = @as(u32, @intCast(row_next + x));
+
+                    dst[i] = top;
+                    i += 1;
+                    dst[i] = bot;
+                    i += 1;
+                }
+
+                // Add Degenerate Triangle at end of row (except for the last row)
+                if (z < surf_grid.d - 1) {
+                    dst[i] = dst[i - 1];
+                    i += 1;
+                    dst[i] = @as(u32, @intCast((z + 1) * surf_num_verts_x));
+                    i += 1;
+                }
+            }
+
+            std.debug.assert(i == num_indices);
+
+            return .{ .num_elements = num_indices };
         }
     };
 
     pub const water_surface = struct {
+        const num_vertices = surf_num_verts_x * surf_num_verts_z;
+
         pub const Layout = layout.VertexPosNormal;
 
         pub fn create() !u32 {
-            return 1;
+            return num_vertices;
         }
 
-        // pub fn init(dst: []Layout) !BufferInfo {
-        // }
-    };
-
-    pub const oct_instances = struct {
-        pub const Layout = layout.InstanceTRS;
-
-        pub fn create() !u32 {
-            return 512;
-        }
-
-        pub fn init(dst: []Layout) !BufferInfo {
-            for (dst) |*instance| {
-                instance.* = .{
-                    .pos_scale = .{ 0, 0, 0, 1 },
-                    .rot_quat = math.quat.IDENTITY,
-                };
+        pub fn updateData(dst: []Layout) !void {
+            var i: usize = 0;
+            for (0..surf_num_verts_z) |z| {
+                for (0..surf_num_verts_x) |x| {
+                    const u = @as(f32, @floatFromInt(x)) / @as(f32, @floatFromInt(surf_grid.w));
+                    const v = @as(f32, @floatFromInt(z)) / @as(f32, @floatFromInt(surf_grid.d));
+                    const px = (u - 0.5) * surf_plane.w;
+                    const pz = (v - 0.5) * surf_plane.d;
+                    dst[i] = .{
+                        .position = .{ px, 0, pz },
+                        .normal = -vec3.YUP,
+                    };
+                    i += 1;
+                }
             }
-            return .{ .num_elements = @intCast(dst.len) };
         }
     };
 };

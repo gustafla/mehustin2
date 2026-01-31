@@ -58,19 +58,19 @@ Here are recommended layouts:
 // Vertex Attributes:
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec3 in_normal;
-layout(location = 2) in vec3 in_color;
-layout(location = 3) in vec2 in_uv;
-layout(location = 4) in vec3 in_tangent;
-layout(location = 5) in vec3 in_bitangent;
+layout(location = 2) in vec3 in_tangent;
+layout(location = 3) in vec3 in_color;
+layout(location = 4) in vec2 in_uv0;
+layout(location = 5) in vec2 in_uv1;
 
 // Instance Attributes (3D rendering):
-layout(location = 6) in vec4 in_instance_pos_scale; // .xyz = pos, .w = scale
-layout(location = 7) in vec4 in_instance_rot_quat;  // Quaternion
+layout(location = 8) in vec4 in_instance_pos_scale; // .xyz = pos, .w = scale
+layout(location = 9) in vec4 in_instance_rot_quat;  // Quaternion
 
 // Instance Attributes (text rendering):
-layout(location = 6) in vec4 in_instance_uv;        // xy = min, zw = max
-layout(location = 7) in vec4 in_instance_position;  // xy = min, zw = max
-layout(location = 8) in vec4 in_instance_color;
+layout(location = 8) in vec4 in_instance_uv;        // xy = min, zw = max
+layout(location = 9) in vec4 in_instance_position;  // xy = min, zw = max
+layout(location = 10) in vec4 in_instance_color;
 ```
 
 ## Coordinate System
