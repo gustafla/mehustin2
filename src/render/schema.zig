@@ -7,6 +7,7 @@ const TextureFormat = types.TextureFormat;
 const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
 const PrimitiveType = types.PrimitiveType;
+const RasterizerState = types.RasterizerState;
 const CompareOp = types.CompareOp;
 const BlendState = types.BlendState;
 const Filter = types.Filter;
@@ -22,6 +23,7 @@ pub const Pipeline = struct {
     vert: []const u8 = "tri.vert",
     frag: []const u8,
     primitive_type: PrimitiveType = .trianglestrip,
+    rasterizer_state: RasterizerState = .{},
     depth_test: ?struct {
         compare_op: CompareOp = .less_or_equal,
         enable: bool = true,

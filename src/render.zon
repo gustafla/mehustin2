@@ -19,25 +19,21 @@
         // Main render pass
         .{
             .drawcalls = .{
-                // Foreground mesh
-                .{
-                    .pipelines = .{.{
-                        .vert = "3d.vert",
-                        .frag = "3d.frag",
-                        .primitive_type = .trianglelist,
-                        .depth_test = .{}, // Enable with defaults
-                    }},
-                    .vertex_buffer = "octahedron",
-                    .num_instances = .{ .num = 512 },
-                },
+                // Water surface
+                // .{
+                //     // TODO: Enable .condition = .{.surface},
+                //     .pipelines = .{.{
+                //         .vert = "3d.vert",
+                //         .frag = "water_surface.frag",
+                //         .primitive_type = .trianglestrip,
+                //         .rasterizer_state = .{
+                //             .cull_mode = .none,
+                //         },
+                //     }},
+                //     .vertex_buffer = "water_surface",
+                //     .fragment_samplers = .{.{ .texture = "cape_hill_1k_hdr", .sampler = "linear" }},
+                // },
                 // Background shader, render last for optimal depth test
-                .{
-                    .condition = .{.showtime},
-                    .pipelines = .{.{
-                        .frag = "shader.frag",
-                        .depth_test = .{ .write = false },
-                    }},
-                },
             },
             .color_targets = .{.{ .target = .{ .index = 0 } }},
             .depth_target = .{ .target = 0, .store_op = .dont_care },

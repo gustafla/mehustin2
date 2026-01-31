@@ -113,6 +113,34 @@ pub const TextureFormat = EnumFromC(
 pub const TextureType = EnumFromC("TextureType", .{});
 
 pub const PrimitiveType = EnumFromC("PrimitiveType", .{});
+pub const FillMode = EnumFromC("FillMode", .{});
+pub const CullMode = EnumFromC("CullMode", .{});
+pub const FrontFace = EnumFromC("FrontFace", .{});
+
+pub const RasterizerState = struct {
+    fill_mode: FillMode = .fill,
+    cull_mode: CullMode = .back,
+    front_face: FrontFace = .counter_clockwise,
+    depth_bias_constant_factor: f32 = 0,
+    depth_bias_clamp: f32 = 0,
+    depth_bias_slope_factor: f32 = 0,
+    enable_depth_bias: bool = false,
+    enable_depth_clip: bool = true,
+
+    pub fn toSDL(self: @This()) c.SDL_GPURasterizerState {
+        return .{
+            .fill_mode = @intFromEnum(self.fill_mode),
+            .cull_mode = @intFromEnum(self.cull_mode),
+            .front_face = @intFromEnum(self.front_face),
+            .depth_bias_constant_factor = self.depth_bias_constant_factor,
+            .depth_bias_clamp = self.depth_bias_clamp,
+            .depth_bias_slope_factor = self.depth_bias_slope_factor,
+            .enable_depth_bias = self.enable_depth_bias,
+            .enable_depth_clip = self.enable_depth_clip,
+        };
+    }
+};
+
 pub const CompareOp = EnumFromC("CompareOp", .{});
 pub const BlendFactor = EnumFromC("BlendFactor", .{});
 pub const BlendOp = EnumFromC("BlendOp", .{});
