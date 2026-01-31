@@ -75,6 +75,7 @@ pub const TextureSamplerBinding = struct {
 pub const Drawcall = struct {
     condition: ?[]const Clip = null,
     pipelines: []const Pipeline,
+    index_buffer: ?[]const u8 = null,
     vertex_buffer: ?[]const u8 = null,
     instance_buffer: ?[]const u8 = null,
     vertex_samplers: []const TextureSamplerBinding = &.{},

@@ -78,14 +78,6 @@ pub const Segment = struct {
     }
 };
 
-pub const Effect = struct {
-    t: f32,
-    duration: f32,
-    motion: Motion,
-    fade_in: f32 = 1,
-    fade_out: f32 = 1,
-};
-
 pub fn evaluate(
     track: []const Segment,
     entries: []const State,
@@ -113,6 +105,14 @@ pub fn evaluate(
         time_shift,
     );
 }
+
+pub const Effect = struct {
+    t: f32 = 0,
+    duration: f32 = std.math.inf(f32),
+    motion: Motion,
+    fade_in: f32 = 1,
+    fade_out: f32 = 1,
+};
 
 pub fn applyEffects(
     effects: []const Effect,

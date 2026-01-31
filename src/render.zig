@@ -863,6 +863,27 @@ fn renderGraph(
                 first_instance = buffer_infos[idx].first_element;
             }
 
+            // Bind index buffer, overriding num_vertices
+            if (drawcall.index_buffer) |name| {
+                const idx = @intFromEnum(@field(script.Buffer, name));
+                const info = @typeInfo(@field(script.buffer, name).Layout);
+                std.debug.assert(info.int.signedness == .unsigned);
+                const element_size = switch (info.int.bits) {
+                    16 => c.SDL_GPU_INDEXELEMENTSIZE_16BIT,
+                    32 => c.SDL_GPU_INDEXELEMENTSIZE_32BIT,
+                    else => unreachable,
+                };
+                c.SDL_BindGPUIndexBuffer(
+                    render_pass,
+                    &.{ .buffer = buffers[idx], .offset = 0 },
+                    element_size,
+                );
+                if (drawcall.num_vertices == .infer) {
+                    num_vertices = buffer_infos[idx].num_elements;
+                }
+                first_vertex = buffer_infos[idx].first_element;
+            }
+
             // Bind textures
             var vertex_set0_slot: u32 = 0;
             var fragment_set2_slot: u32 = 0;
@@ -917,13 +938,24 @@ fn renderGraph(
                 const pipeline_key = comptime PipelineKey.init(pass, drawcall, pipeline);
                 const pipeline_index = comptime pipeline_set.getIndex(pipeline_key);
                 c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
-                c.SDL_DrawGPUPrimitives(
-                    render_pass,
-                    num_vertices,
-                    num_instances,
-                    first_vertex,
-                    first_instance,
-                );
+                if (drawcall.index_buffer == null) {
+                    c.SDL_DrawGPUPrimitives(
+                        render_pass,
+                        num_vertices,
+                        num_instances,
+                        first_vertex,
+                        first_instance,
+                    );
+                } else {
+                    c.SDL_DrawGPUIndexedPrimitives(
+                        render_pass,
+                        num_vertices,
+                        num_instances,
+                        first_vertex,
+                        0,
+                        first_instance,
+                    );
+                }
             }
         }
 

@@ -160,6 +160,28 @@ pub const texture = struct {
             }
         }
     };
+
+    pub const cape_hill_1k_hdr = struct {
+        var data: [*]f32 = undefined;
+
+        pub fn create() !TextureInfo {
+            const path = try resource.dataFilePath(gpa, "cape_hill_1k.hdr");
+            defer gpa.free(path);
+            var x: c_int, var y: c_int, var cif: c_int = .{ 0, 0, 0 };
+            data = c.stbi_loadf(path, &x, &y, &cif, 4) orelse return error.StbiLoadFailed;
+            return .{
+                .format = .r32g32b32a32_float,
+                .width = @intCast(x),
+                .height = @intCast(y),
+            };
+        }
+
+        pub fn init(dst: []u8) !void {
+            const ptr: [*]u8 = @ptrCast(data);
+            @memcpy(dst, ptr);
+            c.stbi_image_free(data);
+        }
+    };
 };
 
 pub const Texture = std.meta.DeclEnum(texture);
@@ -169,11 +191,11 @@ pub const Texture = std.meta.DeclEnum(texture);
 pub const layout = struct {
     pub const InstanceText = timeline.InstanceText;
 
-    pub const VertexPosColor = extern struct {
+    pub const VertexPosNormal = extern struct {
         position: [3]f32,
-        color: [3]f32,
+        normal: [3]f32,
 
-        pub const locations = .{ 0, 2 };
+        pub const locations = .{ 0, 1 };
     };
 
     pub const InstanceTRS = extern struct {
@@ -201,40 +223,23 @@ pub const BufferInfo = struct {
 pub const buffer = struct {
     pub const text_instances = timeline.text_instances;
 
-    pub const octahedron = struct {
-        const coords = .{
-            // position1          position2            position3
-            0.0, -1.0, 0.0, 0.66, 0.0, 0.66, -0.66, 0.0, 0.66, // lower front
-            0.0, -1.0, 0.0, 0.66, 0.0, -0.66, 0.66, 0.0, 0.66, // lower right
-            0.0, -1.0, 0.0, -0.66, 0.0, -0.66, 0.66, 0.0, -0.66, // lower back
-            0.0, -1.0, 0.0, -0.66, 0.0, 0.66, -0.66, 0.0, -0.66, // lower left
-            0.0, 1.0, 0.0, -0.66, 0.0, 0.66, 0.66, 0.0, 0.66, // upper front
-            0.0, 1.0, 0.0, 0.66, 0.0, 0.66, 0.66, 0.0, -0.66, // upper right
-            0.0, 1.0, 0.0, 0.66, 0.0, -0.66, -0.66, 0.0, -0.66, // upper back
-            0.0, 1.0, 0.0, -0.66, 0.0, -0.66, -0.66, 0.0, 0.66, // upper left
-        };
-        const colors = .{
-            0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
-            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
-            0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3,
-            0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
-            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-            0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
-            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-            0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7,
-        };
-        const num_vertices = coords.len / 3;
-
-        pub const Layout = layout.VertexPosColor;
+    pub const water_surface_ind = struct {
+        pub const Layout = u16;
 
         pub fn create() !u32 {
-            return num_vertices;
+            return 32;
+        }
+    };
+
+    pub const water_surface = struct {
+        pub const Layout = layout.VertexPosNormal;
+
+        pub fn create() !u32 {
+            return 1;
         }
 
-        pub fn init(dst: []Layout) !BufferInfo {
-            util.interleave(Layout, dst, .{ &coords, &colors });
-            return .{ .num_elements = num_vertices };
-        }
+        // pub fn init(dst: []Layout) !BufferInfo {
+        // }
     };
 
     pub const oct_instances = struct {
