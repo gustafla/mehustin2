@@ -360,7 +360,10 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             num_elements, layout_size, size.*,
         });
         buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
-            .usage = c.SDL_GPU_BUFFERUSAGE_VERTEX,
+            .usage = if (@typeInfo(buffer_src.Layout) == .int)
+                c.SDL_GPU_BUFFERUSAGE_INDEX
+            else
+                c.SDL_GPU_BUFFERUSAGE_VERTEX,
             .size = size.*,
         }));
         errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
