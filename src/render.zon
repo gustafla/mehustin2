@@ -31,7 +31,10 @@
                     }},
                     .index_buffer = "water_surface_ind",
                     .vertex_buffer = "water_surface",
-                    .fragment_samplers = .{.{ .texture = "sky_envmap_hdr", .sampler = "linear" }},
+                    .fragment_samplers = .{
+                        .{ .texture = "sky_envmap_hdr", .sampler = "linear" },
+                        .{ .texture = "static_noise", .sampler = "linear" },
+                    },
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
                 // Water volume below surface

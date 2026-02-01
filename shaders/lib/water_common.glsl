@@ -1,15 +1,89 @@
-const float BRIGHTNESS = 5.0;
-const vec3 SUN_DIR = normalize(vec3(0.5, 0.2, 0.5));
+#ifndef WATER_COMMON_GLSL
+#define WATER_COMMON_GLSL
 
-vec3 getWaterColor(vec3 view_dir) {
-    vec3 base = mix(deep_color.rgb, sky_color.rgb, pow(max(view_dir.y, 0.0), 0.5));
+#include <lib/pbr.glsl>
 
-    float sun_alignment = max(dot(view_dir, SUN_DIR), 0.0);
+#define SUN_COLOR (vec3(1, 0.9, 0.8) * brightness)
+#define SKY_COLOR (sky_color.rgb * brightness)
 
-    vec3 water = deep_color.rgb;
-    vec3 haze0 = water * sun_alignment;
-    vec3 haze1 = water * pow(sun_alignment, 2.0) * 2.0;
-    vec3 haze2 = water * pow(sun_alignment, 16.0) * 10.0;
+const float water_ior = 1.333;
+const vec3 k_sigma_a = vec3(0.09, 0.04, 0.03);
+const vec3 k_sigma_s = vec3(0.02, 0.023, 0.03);
+const vec3 k_sigma_t = k_sigma_a + k_sigma_s;
+const float k_g = 0.7;
 
-    return (base + haze0 + haze1 + haze2) * BRIGHTNESS;
+vec3 integrateScattering(vec3 radiance, vec3 ext_sun, vec3 ext_view, float dist) {
+    vec3 extinction = ext_sun + ext_view;
+    vec3 result = (1.0 - exp(-extinction * dist)) / extinction;
+    return radiance * result;
 }
+
+vec3 underwaterScattering(
+    vec3 ro,
+    vec3 rd,
+    float dist,
+    vec3 sun_dir
+) {
+    // If waves move vertices above y=0, we must clamp depth to 0
+    // to prevent exploding exponential light values.
+    float depth = max(-ro.y, 0.0);
+
+    // Refract sun dir
+    vec3 refracted_sun = normalize(vec3(sun_dir.x, sun_dir.y * water_ior, sun_dir.z));
+
+    // Phase function (how much )
+    float cos_theta = dot(rd, refracted_sun);
+    float phase = phaseHenyeyGreenstein(cos_theta, k_g);
+
+    // Radiance at start point
+    float dist_sun_to_camera = depth / refracted_sun.y;
+    vec3 sun_at_camera = SUN_COLOR * exp(-k_sigma_t * dist_sun_to_camera);
+
+    // Integrate
+    // If looking down (rd.y < 0), we move deeper -> path to sun gets longer
+    // If looking up (rd.y > 0), we move shallower -> path to sun gets shorter
+    float gradient = -rd.y; // + when going down, - when going up
+    float sun_gradient = gradient / refracted_sun.y;
+
+    // Scattering term
+    vec3 sunlight = integrateScattering(
+            sun_at_camera * phase,
+            k_sigma_t * sun_gradient,
+            k_sigma_t,
+            dist
+        ) * k_sigma_s;
+
+    // Ambient term
+    // Geometric scale is just vertical gradient
+    vec3 skylight = integrateScattering(
+            SKY_COLOR * exp(-k_sigma_t * depth) * (1.0 / 3.14),
+            k_sigma_t * gradient,
+            k_sigma_t,
+            dist
+        ) * k_sigma_s;
+
+    return sunlight + skylight;
+}
+
+vec3 underwaterFog(
+    vec3 color,
+    float dist,
+    vec3 ro,
+    vec3 rd,
+    vec3 sun_dir
+) {
+    float dist_surface = 1e9;
+
+    if (rd.y > 0.001) {
+        dist_surface = max(-ro.y, 0.0) / rd.y;
+    }
+
+    float effective_dist = min(dist, dist_surface);
+
+    vec3 volume_light = underwaterScattering(ro, rd, effective_dist, sun_dir);
+    vec3 transmission = exp(-k_sigma_t * dist);
+
+    return volume_light + (color * transmission);
+}
+
+#endif

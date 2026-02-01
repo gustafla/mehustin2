@@ -22,17 +22,16 @@
                 .scale = 0.03,
             },
             // // Title card
-            // .{
-            //     .t = 0,
-            //     .duration = 150,
-            //     .text = .{ .str = "NEW Demo Engine!\nBy Mehu" },
-            //     .pos = .{ 0, 0 },
-            //     .scale = 0.1,
-            //     .origin = .bottom,
-            //     .anim = .{ .slide = .{ 0, -2 } },
-            //     .fade_in = 2,
-            //     .fade_out = 2,
-            // },
+            .{
+                .t = 0,
+                .duration = 15,
+                .text = .{ .str = "Mehu" },
+                .pos = .{ 0, 0 },
+                .scale = 0.2,
+                .origin = .center,
+                .fade_in = 8,
+                .fade_out = 2,
+            },
             // // Subtitle
             // .{
             //     .t = 5,
@@ -56,11 +55,10 @@
             .{ // TRACK 1
                 .{
                     .t = 0.0,
-                    .entry = .{
-                        .pos = .{ 0, -3, 7 },
-                        .fov = 90,
+                    .entry = .{ .pos = .{ -7, -3, -7 }, .target = .{ 0, 0, 0 }, .fov = 90 },
+                    .motion = .{
+                        // .{ .move = .{ .axis = .{ 0, -1, 0 } } },
                     },
-                    .motion = .{.{ .circle = .{ .axis = .{ 0, 1, 0 }, .speed = 0.1 } }},
                 },
             },
         },

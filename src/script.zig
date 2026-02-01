@@ -169,6 +169,29 @@ pub const texture = struct {
         }
     };
 
+    pub const static_noise = struct {
+        pub fn create() !TextureInfo {
+            return .{
+                .format = .r8_unorm,
+                .width = noise_size,
+                .height = noise_size,
+            };
+        }
+
+        pub fn init(dst: []u8) !void {
+            for (0..noise_size) |y| {
+                for (0..noise_size) |x| {
+                    const noise_val = noise_zig.simplex2(
+                        (@as(f32, @floatFromInt(x))),
+                        (@as(f32, @floatFromInt(y))),
+                    );
+                    dst[y * noise_size + x] =
+                        @intFromFloat((noise_val * 0.5 + 0.5) * 256);
+                }
+            }
+        }
+    };
+
     pub const sky_envmap_hdr = struct {
         var data: [*]f32 = undefined;
 
@@ -333,7 +356,8 @@ pub const storage_buffer = struct {
     pub const water_parameters = struct {
         pub const Header = extern struct {
             sky_color: [4]f32,
-            deep_color: [4]f32,
+            sun_dir: [3]f32,
+            brightness: f32,
         };
 
         pub const Element = void;
@@ -345,7 +369,8 @@ pub const storage_buffer = struct {
         pub fn init(dst: []u8) !void {
             util.writeSSBO(Header, Element, dst, .{
                 .sky_color = sky_color,
-                .deep_color = .{ 0.01, 0.05, 0.06, 1.0 },
+                .sun_dir = vec3.normalize(.{ 1, 0.5, 1 }),
+                .brightness = 15,
             }, &.{});
         }
     };

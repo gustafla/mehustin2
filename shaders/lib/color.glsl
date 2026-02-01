@@ -1,3 +1,6 @@
+#ifndef COLOR_GLSL
+#define COLOR_GLSL
+
 vec3 acesApprox(vec3 v) {
     v *= 0.6;
     float a = 2.51;
@@ -11,3 +14,5 @@ vec3 acesApprox(vec3 v) {
 float brightness(vec3 v) {
     return dot(v, vec3(0.2126, 0.7152, 0.0722));
 }
+
+#endif

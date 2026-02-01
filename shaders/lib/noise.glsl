@@ -1,3 +1,6 @@
+#ifndef NOISE_GLSL
+#define NOISE_GLSL
+
 // By Morgan McGuire @morgan3d, http://graphicscodex.com
 // https://www.shadertoy.com/view/4dS3Wd
 // Reuse permitted under the BSD license.
@@ -106,3 +109,5 @@ float fbm(vec3 x) {
     }
     return v;
 }
+
+#endif

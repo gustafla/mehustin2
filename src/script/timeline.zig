@@ -48,9 +48,9 @@ pub const TextSegment = struct {
     origin: TextOrigin = .top_left,
     color: Vec4 = @splat(1),
     anim: ?union(enum) {
-        fade: Vec4, // Fade from & to a color value
-        slide: Vec2, // Slide from & to an NDC position
-        typewriter, // Reveal & remove text letter by letter
+        fade: Vec4, // Fade from a color value
+        slide: Vec2, // Slide from an NDC position
+        typewriter, // Reveal text letter by letter
     } = null,
     fade_in: f32 = 0,
     fade_out: f32 = 0,

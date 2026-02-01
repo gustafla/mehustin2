@@ -4,6 +4,7 @@ layout(location = 0) in vec3 in_position;
 
 layout(location = 0) out vec3 out_position;
 layout(location = 1) out vec3 out_normal;
+layout(location = 2) flat out vec3 out_cam_pos;
 
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
@@ -36,6 +37,7 @@ void gerstnerWave(vec2 dir, float steepness, float wavelength, inout vec3 p, ino
 
 void main() {
     vec3 cam_pos = u_cam_pos.xyz;
+    out_cam_pos = cam_pos;
 
     vec3 pos = in_position;
     vec3 normal = vec3(0, 1, 0);
