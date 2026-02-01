@@ -6,18 +6,13 @@ layout(location = 1) in vec3 in_normal;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_envmap_texture;
-layout(std430, set = 2, binding = 1) buffer WaterData {
+layout(std430, set = 2, binding = 1) readonly buffer WaterData {
     vec4 sky_color;
     vec4 deep_color;
 };
 
+#include <lib/water_common.glsl>
 #include <lib/transform.glsl>
-
-const float brightness = 5;
-
-vec3 getWaterColor(vec3 dir) {
-    return mix(deep_color.rgb, sky_color.rgb, pow(max(dir.y, 0.0), 0.5)) * brightness;
-}
 
 void main() {
     vec3 view_dir = normalize(in_position);
@@ -29,12 +24,12 @@ void main() {
 
     if (length(refract_dir) > 0.0) {
         color = texture(u_envmap_texture, equirectangularUV(refract_dir)).rgb;
-        color *= brightness;
+        color *= BRIGHTNESS;
     } else {
         color = getWaterColor(reflect_dir);
     }
 
-    float fog = 1.0 - exp(-length(view_dir) * 0.05);
+    float fog = 1.0 - exp(-length(in_position) * 0.05);
     color = mix(color, getWaterColor(view_dir), fog);
     out_color = vec4(color, 1.);
 }

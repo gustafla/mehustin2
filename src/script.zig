@@ -116,9 +116,9 @@ pub const frame = struct {
             },
             .clip = clip,
             .clear_color = .{
-                cape_hill_1k_hdr_sky_color[0],
-                cape_hill_1k_hdr_sky_color[1],
-                cape_hill_1k_hdr_sky_color[2],
+                sky_color[0],
+                sky_color[1],
+                sky_color[2],
                 1,
             },
         };
@@ -129,7 +129,7 @@ pub const frame = struct {
 
 const logo_font_size = 128.0;
 const noise_size: usize = 64;
-var cape_hill_1k_hdr_sky_color: Vec4 = @splat(0.0);
+var sky_color: Vec4 = @splat(0.0);
 
 pub const TextureInfo = struct {
     tex_type: types.TextureType = .@"2d",
@@ -168,26 +168,26 @@ pub const texture = struct {
         }
     };
 
-    pub const cape_hill_1k_hdr = struct {
+    pub const sky_envmap_hdr = struct {
         var data: [*]f32 = undefined;
 
         pub fn create() !TextureInfo {
-            const path = try resource.dataFilePath(gpa, "cape_hill_1k.hdr");
+            const path = try resource.dataFilePath(gpa, "lonely_road_afternoon_puresky_1k.hdr");
             defer gpa.free(path);
             var w: c_int, var h: c_int, var cif: c_int = .{ 0, 0, 0 };
             data = c.stbi_loadf(path, &w, &h, &cif, 4) orelse return error.StbiLoadFailed;
 
             // Compute average color, sky is the upper half
-            cape_hill_1k_hdr_sky_color = @splat(0);
+            sky_color = @splat(0);
             const wu: usize, const hu: usize = .{ @intCast(w), @intCast(h) };
             for (0..hu / 2) |y| {
                 for (0..wu) |x| {
                     const i = (y * wu + x) * 4;
                     const color: Vec4 = .{ data[i], data[i + 1], data[i + 2], data[i + 3] };
-                    cape_hill_1k_hdr_sky_color += std.math.clamp(color, @as(Vec4, @splat(0.0)), @as(Vec4, @splat(10.0)));
+                    sky_color += std.math.clamp(color, @as(Vec4, @splat(0.0)), @as(Vec4, @splat(10.0)));
                 }
             }
-            cape_hill_1k_hdr_sky_color /= @as(Vec4, @splat(@floatFromInt(wu * hu / 2)));
+            sky_color /= @as(Vec4, @splat(@floatFromInt(wu * hu / 2)));
 
             return .{
                 .format = .r32g32b32a32_float,
@@ -343,8 +343,8 @@ pub const storage_buffer = struct {
 
         pub fn init(dst: []u8) !void {
             util.writeSSBO(Header, Element, dst, .{
-                .sky_color = cape_hill_1k_hdr_sky_color,
-                .deep_color = .{ 0.005, 0.05, 0.1, 1.0 },
+                .sky_color = sky_color,
+                .deep_color = .{ 0.01, 0.05, 0.06, 1.0 },
             }, &.{});
         }
     };
