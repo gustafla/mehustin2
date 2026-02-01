@@ -19,7 +19,6 @@
     - [ ] Render.zon for-all-in-group-filter (e.g. "world & transparent") macro syntax
       - Consider using a generic templating library
 - [ ] Build-time font generation
-- [ ] `tri.frag`: Add corner rays for interpolator
 - [ ] MSAA with resolve texture
 - [ ] Comptime resource loader namespace generators (fns that return a resource namespace)
   - [ ] textureFromFile
@@ -45,6 +44,7 @@
 
 # Done
 
+- [X] `tri.frag`: Add corner rays for interpolator
 - [X] Clip-to-clip transition effects (uniform containing clip time left)
 - [X] script: Give update functions control over num_elements and first_element
 - [X] script/render: Auto-generate buffer layouts from script struct types

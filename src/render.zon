@@ -26,13 +26,21 @@
                         .vert = "water_surface.vert",
                         .frag = "water_surface.frag",
                         .primitive_type = .trianglestrip,
-                        .rasterizer_state = .{
-                            .cull_mode = .none,
-                        },
+                        .rasterizer_state = .{ .cull_mode = .none },
+                        .depth_test = .{},
                     }},
                     .index_buffer = "water_surface_ind",
                     .vertex_buffer = "water_surface",
                     .fragment_samplers = .{.{ .texture = "cape_hill_1k_hdr", .sampler = "linear" }},
+                    .fragment_storage_buffers = .{"water_parameters"},
+                },
+                // Water volume below surface
+                .{
+                    .pipelines = .{.{
+                        .frag = "water_volume.frag",
+                        .depth_test = .{},
+                    }},
+                    .fragment_storage_buffers = .{"water_parameters"},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 0 } }},

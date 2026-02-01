@@ -6,6 +6,7 @@ const config = @import("config.zon");
 
 const math = @import("math.zig");
 const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
 const vec3 = math.vec3;
 const render = @import("render.zig");
 const c = @import("render/c.zig").c;
@@ -114,7 +115,12 @@ pub const frame = struct {
                 .clip_remaining_time = state.clip_remaining_time,
             },
             .clip = clip,
-            .clear_color = .{ 0.5, 0.5, 0.5, 1 },
+            .clear_color = .{
+                cape_hill_1k_hdr_sky_color[0],
+                cape_hill_1k_hdr_sky_color[1],
+                cape_hill_1k_hdr_sky_color[2],
+                1,
+            },
         };
     }
 };
@@ -123,6 +129,7 @@ pub const frame = struct {
 
 const logo_font_size = 128.0;
 const noise_size: usize = 64;
+var cape_hill_1k_hdr_sky_color: Vec4 = @splat(0.0);
 
 pub const TextureInfo = struct {
     tex_type: types.TextureType = .@"2d",
@@ -167,12 +174,25 @@ pub const texture = struct {
         pub fn create() !TextureInfo {
             const path = try resource.dataFilePath(gpa, "cape_hill_1k.hdr");
             defer gpa.free(path);
-            var x: c_int, var y: c_int, var cif: c_int = .{ 0, 0, 0 };
-            data = c.stbi_loadf(path, &x, &y, &cif, 4) orelse return error.StbiLoadFailed;
+            var w: c_int, var h: c_int, var cif: c_int = .{ 0, 0, 0 };
+            data = c.stbi_loadf(path, &w, &h, &cif, 4) orelse return error.StbiLoadFailed;
+
+            // Compute average color, sky is the upper half
+            cape_hill_1k_hdr_sky_color = @splat(0);
+            const wu: usize, const hu: usize = .{ @intCast(w), @intCast(h) };
+            for (0..hu / 2) |y| {
+                for (0..wu) |x| {
+                    const i = (y * wu + x) * 4;
+                    const color: Vec4 = .{ data[i], data[i + 1], data[i + 2], data[i + 3] };
+                    cape_hill_1k_hdr_sky_color += std.math.clamp(color, @as(Vec4, @splat(0.0)), @as(Vec4, @splat(10.0)));
+                }
+            }
+            cape_hill_1k_hdr_sky_color /= @as(Vec4, @splat(@floatFromInt(wu * hu / 2)));
+
             return .{
                 .format = .r32g32b32a32_float,
-                .width = @intCast(x),
-                .height = @intCast(y),
+                .width = @intCast(w),
+                .height = @intCast(h),
             };
         }
 
@@ -196,18 +216,17 @@ const surf_num_verts_z = surf_grid.d + 1;
 pub const layout = struct {
     pub const InstanceText = timeline.InstanceText;
 
+    pub const VertexPos = extern struct {
+        position: [3]f32,
+
+        pub const locations = .{0};
+    };
+
     pub const VertexPosNormal = extern struct {
         position: [3]f32,
         normal: [3]f32,
 
         pub const locations = .{ 0, 1 };
-    };
-
-    pub const VertexPosUV0 = extern struct {
-        position: [3]f32,
-        uv0: [3]f32,
-
-        pub const locations = .{ 0, 4 };
     };
 
     pub const InstanceTRS = extern struct {
@@ -279,13 +298,13 @@ pub const buffer = struct {
     pub const water_surface = struct {
         const num_vertices = surf_num_verts_x * surf_num_verts_z;
 
-        pub const Layout = layout.VertexPosNormal;
+        pub const Layout = layout.VertexPos;
 
         pub fn create() !u32 {
             return num_vertices;
         }
 
-        pub fn updateData(dst: []Layout) !void {
+        pub fn init(dst: []Layout) !BufferInfo {
             var i: usize = 0;
             for (0..surf_num_verts_z) |z| {
                 for (0..surf_num_verts_x) |x| {
@@ -293,13 +312,12 @@ pub const buffer = struct {
                     const v = @as(f32, @floatFromInt(z)) / @as(f32, @floatFromInt(surf_grid.d));
                     const px = (u - 0.5) * surf_plane.w;
                     const pz = (v - 0.5) * surf_plane.d;
-                    dst[i] = .{
-                        .position = .{ px, 0, pz },
-                        .normal = -vec3.YUP,
-                    };
+                    dst[i] = .{ .position = .{ px, 0, pz } };
                     i += 1;
                 }
             }
+
+            return .{ .num_elements = num_vertices };
         }
     };
 };
@@ -311,6 +329,26 @@ pub const Buffer = std.meta.DeclEnum(buffer);
 // ---- STORAGE BUFFERS (4th) ----
 
 pub const storage_buffer = struct {
+    pub const water_parameters = struct {
+        pub const Header = extern struct {
+            sky_color: [4]f32,
+            deep_color: [4]f32,
+        };
+
+        pub const Element = void;
+
+        pub fn create() !u32 {
+            return 0;
+        }
+
+        pub fn init(dst: []u8) !void {
+            util.writeSSBO(Header, Element, dst, .{
+                .sky_color = cape_hill_1k_hdr_sky_color,
+                .deep_color = .{ 0.005, 0.05, 0.1, 1.0 },
+            }, &.{});
+        }
+    };
+
     pub const point_lights = struct {
         pub const Header = extern struct {
             count: u32,
@@ -351,7 +389,7 @@ pub const storage_buffer = struct {
             if (@typeInfo(ssbo.Header).@"struct".layout != .@"extern") {
                 @compileError(std.fmt.comptimePrint("{s}.Header is not extern", .{decl.name}));
             }
-            if (@typeInfo(ssbo.Element).@"struct".layout != .@"extern") {
+            if (ssbo.Element != void and @typeInfo(ssbo.Element).@"struct".layout != .@"extern") {
                 @compileError(std.fmt.comptimePrint("{s}.Element is not extern", .{decl.name}));
             }
             if (@sizeOf(ssbo.Header) % 16 != 0) {

@@ -6,8 +6,8 @@ layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
 
-#define THRESHOLD 1.0
-#define KNEE 0.5
+#define THRESHOLD 6.0
+#define KNEE 2
 #define EPSILON 0.00001
 
 #include <lib/color.glsl>
@@ -16,6 +16,7 @@ layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
 
 void main() {
     vec3 color = texture(u_input_texture, in_uv).rgb;
+    color = clamp(color, 0.0, 10.0);
 
     float luma = brightness(color);
     float soft = luma - THRESHOLD + KNEE;

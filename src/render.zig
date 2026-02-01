@@ -888,31 +888,26 @@ fn renderGraph(
             }
 
             // Bind textures
-            var vertex_set0_slot: u32 = 0;
-            var fragment_set2_slot: u32 = 0;
             inline for (.{
                 .{
                     .bind = c.SDL_BindGPUVertexSamplers,
-                    .slot = &vertex_set0_slot,
                     .tex = drawcall.vertex_samplers,
                 },
                 .{
                     .bind = c.SDL_BindGPUFragmentSamplers,
-                    .slot = &fragment_set2_slot,
                     .tex = drawcall.fragment_samplers,
                 },
             }) |stage| {
-                inline for (stage.tex) |tex| {
+                inline for (stage.tex, 0..) |tex, slot| {
                     const reference = comptime schema.parseIndex(tex.texture) catch |e|
                         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-                    stage.bind(render_pass, stage.slot.*, &.{
+                    stage.bind(render_pass, @intCast(slot), &.{
                         .texture = if (reference) |result|
                             @field(@This(), result.ref)[result.idx]
                         else
                             textures[@intFromEnum(@field(script.Texture, tex.texture))],
                         .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
                     }, 1);
-                    stage.slot.* += 1;
                 }
             }
 
@@ -920,19 +915,16 @@ fn renderGraph(
             inline for (.{
                 .{
                     .bind = c.SDL_BindGPUVertexStorageBuffers,
-                    .slot = &vertex_set0_slot,
                     .storage_buffers = drawcall.vertex_storage_buffers,
                 },
                 .{
                     .bind = c.SDL_BindGPUFragmentStorageBuffers,
-                    .slot = &fragment_set2_slot,
                     .storage_buffers = drawcall.fragment_storage_buffers,
                 },
             }) |stage| {
-                inline for (stage.storage_buffers) |name| {
+                inline for (stage.storage_buffers, 0..) |name, slot| {
                     const idx = @intFromEnum(@field(script.StorageBuffer, name));
-                    stage.bind(render_pass, stage.slot.*, &.{storage_buffers[idx]}, 1);
-                    stage.slot.* += 1;
+                    stage.bind(render_pass, @intCast(slot), &storage_buffers[idx], 1);
                 }
             }
 
