@@ -104,7 +104,7 @@ The engine supports any number of storage buffers (SSBOs), see `script.zig`.
 
 For example, light source data can be provided to the shaders using an SSBO:
 ```glsl
-layout(std430, readonly, set = 2, binding = X) buffer LightData {
+layout(std430, set = 2, binding = X) readonly buffer LightData {
     vec4 u_sun_direction_intensity;
     vec4 u_sun_color_ambient;
     uint num_point_lights;
@@ -119,7 +119,7 @@ When a sync track system is implemented, all shaders get an SSBO with the
 current frame's interpolated sync parameter values.
 There are 64 floating point tracks available, i.e.:
 ```glsl
-layout(std430, readonly, set = 2, binding = X) buffer SyncData {
+layout(std430, set = 2, binding = X) readonly buffer SyncData {
     float tracks[64];
 };
 ```
