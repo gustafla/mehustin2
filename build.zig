@@ -27,9 +27,15 @@ pub fn build(b: *Build) void {
         "render-dynlib",
         "Load (and enable reloading) render logic from librender.so",
     ) orelse !release_build;
+    const show_fps = b.option(
+        bool,
+        "show-fps",
+        "Show FPS on the HUD",
+    ) orelse !release_build;
     const options = b.addOptions();
     options.addOption(bool, "system_sdl", system_sdl);
     options.addOption(bool, "render_dynlib", render_dynlib);
+    options.addOption(bool, "show_fps", show_fps);
     options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, config.data_dir));
 
     // Get SDL3 dependency from build.zig.zon

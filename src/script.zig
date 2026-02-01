@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
+const options = @import("options");
 
 const config = @import("config.zon");
 
@@ -73,7 +74,7 @@ pub const frame = struct {
     pub var cam: camera.State = undefined;
 
     pub fn update(frame_time: f32) State {
-        if (builtin.mode == .Debug) {
+        if (options.show_fps) {
             frames += 1;
             const ticks = c.SDL_GetTicksNS();
             if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
