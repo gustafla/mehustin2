@@ -7,6 +7,9 @@
 
 # Backlog
 
+- [ ] Reorganize uniforms
+  - 128 bytes per uniform slot per shader stage (4 slots per stage)
+  - [ ] Use the corner rays method in tri.vert, no inverse matrices on the GPU
 - [ ] Make clips able to overlap (rename to conditions or logics)
   - [ ] Clips currently active as a bit mask (Are 32 clips enough? Can extend with more)
   - [ ] Render.zon condition can be reduced to single logic tag
