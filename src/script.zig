@@ -131,6 +131,7 @@ pub const frame = struct {
 const logo_font_size = 128.0;
 const noise_size: usize = 64;
 var sky_color: Vec4 = @splat(0.0);
+const sun_dir = vec3.normalize(.{ 1, 0.5, 1 });
 
 pub const TextureInfo = struct {
     tex_type: types.TextureType = .@"2d",
@@ -246,11 +247,11 @@ pub const layout = struct {
         pub const locations = .{0};
     };
 
-    pub const VertexPosNormal = extern struct {
+    pub const VertexPosUV0 = extern struct {
         position: [3]f32,
-        normal: [3]f32,
+        uv0: [2]f32,
 
-        pub const locations = .{ 0, 1 };
+        pub const locations = .{ 0, 4 };
     };
 
     pub const InstanceTRS = extern struct {
@@ -344,6 +345,80 @@ pub const buffer = struct {
             return .{ .num_elements = num_vertices };
         }
     };
+
+    pub const light_shaft_ind = struct {
+        pub const num_tris = light_shaft.num_vertices;
+
+        pub const Layout = u16;
+
+        pub fn create() !u32 {
+            return num_tris * 3;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            for (0..num_tris) |tri| {
+                const i = tri * 3;
+                dst[i] = 0;
+                dst[i + 1] = @intCast(1 + (tri + 0) % num_tris);
+                dst[i + 2] = @intCast(1 + (tri + 1) % num_tris);
+            }
+            return .{ .num_elements = num_tris * 3 };
+        }
+    };
+
+    pub const light_shaft = struct {
+        pub const num_vertices = 6;
+        const radius = 0.05;
+
+        pub const Layout = layout.VertexPos;
+
+        pub fn create() !u32 {
+            return 1 + num_vertices;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            dst[0] = .{
+                .position = .{ 0, 1, 0 },
+            };
+            for (dst[1..], 0..) |*vertex, i| {
+                const i_f32: f32 = @floatFromInt(i);
+                const t: f32 = (i_f32 / num_vertices) * std.math.tau;
+                vertex.* = .{
+                    .position = .{ @cos(t) * radius, 0, @sin(t) * radius },
+                };
+            }
+
+            return .{ .num_elements = 1 + num_vertices };
+        }
+    };
+
+    pub const light_shaft_inst = struct {
+        const num_inst = 3;
+
+        pub const Layout = layout.InstanceTRS;
+
+        pub fn create() !u32 {
+            return num_inst;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            const rot = math.quat.rotationBetween(vec3.YUP, sun_dir);
+            dst[0] = .{
+                .pos_scale = .{ 0, -10, 0, 64 * 8 },
+                .rot_quat = rot,
+            };
+            dst[1] = .{
+                .pos_scale = .{ 0, -5, 0, 42 * 8 },
+                .rot_quat = rot,
+            };
+            dst[2] = .{
+                .pos_scale = .{ 0, 0, 0, 32 * 8 },
+                .rot_quat = rot,
+            };
+
+            return .{ .num_elements = num_inst };
+        }
+    };
 };
 
 pub const Buffer = std.meta.DeclEnum(buffer);
@@ -369,7 +444,7 @@ pub const storage_buffer = struct {
         pub fn init(dst: []u8) !void {
             util.writeSSBO(Header, Element, dst, .{
                 .sky_color = sky_color,
-                .sun_dir = vec3.normalize(.{ 1, 0.5, 1 }),
+                .sun_dir = sun_dir,
                 .brightness = 15,
             }, &.{});
         }

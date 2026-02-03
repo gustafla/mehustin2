@@ -186,7 +186,7 @@ pub const Quat = @Vector(4, f32);
 /// Operations on `Quat`.
 pub const quat = struct {
     /// The identity quaternion (no rotation).
-    pub const IDENTITY = Quat{ 0.0, 0.0, 0.0, 1.0 };
+    pub const IDENTITY: Quat = .{ 0.0, 0.0, 0.0, 1.0 }; // TODO: lowercase these
 
     /// Creates a rotation from an axis and an angle (in radians).
     ///
@@ -201,6 +201,39 @@ pub const quat = struct {
             axis[1] * s,
             axis[2] * s,
             c,
+        };
+    }
+
+    /// Creates a rotation that aligns the 'start' vector to the 'dest' vector.
+    /// Both vectors must be normalized.
+    pub fn rotationBetween(start: Vec3, dest: Vec3) Quat {
+        const cos_theta = vec3.dot(start, dest);
+        var axis: Vec3 = undefined;
+
+        if (cos_theta < -1.0 + 0.001) {
+            // Corner case: vectors are exactly opposite
+            // We need to rotate 180 degrees around any arbitrary perpendicular axis
+            axis = vec3.cross(vec3.ZUP, start);
+            if (vec3.lengthSq(axis) < 0.01) {
+                // If start was parallel to Z, try X
+                axis = vec3.cross(vec3.XUP, start);
+            }
+            axis = vec3.normalize(axis);
+            // Construct 180 degree quaternion (w=0, axis=normalized)
+            return .{ axis[0], axis[1], axis[2], 0.0 };
+        }
+
+        // Standard case
+        axis = vec3.cross(start, dest);
+
+        const s = @sqrt((1.0 + cos_theta) * 2.0);
+        const invs = 1.0 / s;
+
+        return .{
+            axis[0] * invs,
+            axis[1] * invs,
+            axis[2] * invs,
+            s * 0.5,
         };
     }
 

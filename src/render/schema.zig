@@ -283,6 +283,7 @@ pub fn PipelineKey(comptime config: Config) type {
 }
 
 pub fn ComptimeSet(comptime T: type) type {
+    @setEvalBranchQuota(10000);
     var count_iter: T.Iterator = .{};
     var max_count = 0;
     while (count_iter.next()) |_| : (max_count += 1) {}

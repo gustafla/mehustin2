@@ -45,6 +45,24 @@
                     }},
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
+                // Light shafts
+                .{
+                    .pipelines = .{.{
+                        .vert = "light_shaft.vert",
+                        .frag = "light_shaft.frag",
+                        .primitive_type = .trianglelist,
+                        .depth_test = .{ .write = false },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .one,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .index_buffer = "light_shaft_ind",
+                    .vertex_buffer = "light_shaft",
+                    .instance_buffer = "light_shaft_inst",
+                    .fragment_storage_buffers = .{"water_parameters"},
+                },
             },
             .color_targets = .{.{ .target = .{ .index = 0 } }},
             .depth_target = .{ .target = 0, .store_op = .dont_care },
