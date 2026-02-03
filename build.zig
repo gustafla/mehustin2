@@ -169,7 +169,10 @@ pub fn build(b: *Build) void {
             std.fmt.comptimePrint("-DWIDTH={}", .{config.width}),
             std.fmt.comptimePrint("-DHEIGHT={}", .{config.height}),
             std.fmt.comptimePrint("-DMAX_LIGHTS={}", .{config.max_lights}),
+            "-MD",
+            "-MF",
         });
+        _ = shaderc_run.addDepFileOutputArg("shader.d");
         shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
         const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
         shaderc_run.addFileArg(b.path(input_path));
