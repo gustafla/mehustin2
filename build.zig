@@ -32,10 +32,17 @@ pub fn build(b: *Build) void {
         "show-fps",
         "Show FPS on the HUD",
     ) orelse !release_build;
+    const PresentationMode = enum { vsync, mailbox };
+    const present_mode: PresentationMode = b.option(
+        PresentationMode,
+        "present-mode",
+        "Presentation mode",
+    ) orelse .vsync;
     const options = b.addOptions();
     options.addOption(bool, "system_sdl", system_sdl);
     options.addOption(bool, "render_dynlib", render_dynlib);
     options.addOption(bool, "show_fps", show_fps);
+    options.addOption(PresentationMode, "present_mode", present_mode);
     options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, config.data_dir));
 
     // Get SDL3 dependency from build.zig.zon

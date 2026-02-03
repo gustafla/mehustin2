@@ -145,17 +145,13 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     InitStep.push(.claim_window);
 
     // Set swapchain parameters
-    const present_mode = if (c.SDL_WindowSupportsGPUPresentMode(
-        device,
-        window,
-        c.SDL_GPU_PRESENTMODE_MAILBOX,
-    )) blk: {
-        sdl_log.info("Using presentation mode MAILBOX", .{});
-        break :blk @as(c.SDL_GPUPresentMode, c.SDL_GPU_PRESENTMODE_MAILBOX);
-    } else blk: {
-        sdl_log.info("Using presentation mode VSYNC", .{});
-        break :blk @as(c.SDL_GPUPresentMode, c.SDL_GPU_PRESENTMODE_VSYNC);
+    var present_mode: c.SDL_GPUPresentMode = switch (options.present_mode) {
+        .mailbox => c.SDL_GPU_PRESENTMODE_MAILBOX,
+        .vsync => c.SDL_GPU_PRESENTMODE_VSYNC,
     };
+    if (!c.SDL_WindowSupportsGPUPresentMode(device, window, present_mode)) {
+        present_mode = c.SDL_GPU_PRESENTMODE_VSYNC;
+    }
     try sdlerr(c.SDL_SetGPUSwapchainParameters(
         device,
         window,
