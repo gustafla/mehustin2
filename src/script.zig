@@ -368,7 +368,7 @@ pub const buffer = struct {
 
     pub const light_shaft = struct {
         pub const num_vertices = 6;
-        const radius = 0.05;
+        const radius = 0.01;
 
         pub const Layout = layout.VertexPos;
 
@@ -393,7 +393,7 @@ pub const buffer = struct {
     };
 
     pub const light_shaft_inst = struct {
-        const num_inst = 3;
+        const num_inst = 2;
 
         pub const Layout = layout.InstanceTRS;
 
@@ -408,11 +408,7 @@ pub const buffer = struct {
                 .rot_quat = rot,
             };
             dst[1] = .{
-                .pos_scale = .{ 0, -5, 0, 42 * 8 },
-                .rot_quat = rot,
-            };
-            dst[2] = .{
-                .pos_scale = .{ 0, 0, 0, 32 * 8 },
+                .pos_scale = .{ -3, -5, 7, 42 * 8 },
                 .rot_quat = rot,
             };
 

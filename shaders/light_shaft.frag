@@ -22,9 +22,9 @@ layout(std430, set = 2, binding = 0) readonly buffer WaterData {
 #include <lib/water_common.glsl>
 
 void main() {
-    float t = u_time + in_anim_offset;
+    float t = u_time_g + in_anim_offset;
     float angle = atan(in_local_pos.z, in_local_pos.x);
-    float fade = in_local_pos.y;
+    float fade = in_local_pos.y * clamp(-in_pos.y * 0.4, 0., 1.);
     float noise = sin(angle * 10.0 + t * 2.0);
     noise += sin(angle * 12.0 - t * 2.3);
     noise += sin(angle * 4.0 + t * 2.5);
