@@ -825,10 +825,7 @@ fn renderGraph(
 
             // Bind vertex buffer, storing number of instances to draw
             var num_buffers: u32 = 0;
-            var num_vertices: u32 = switch (drawcall.num_vertices) {
-                .num => |n| n,
-                .infer => 3,
-            };
+            var num_vertices: u32 = drawcall.num_vertices orelse 3;
             var first_vertex: u32 = 0;
             if (drawcall.vertex_buffer) |name| {
                 const idx = @intFromEnum(@field(script.Buffer, name));
@@ -839,17 +836,14 @@ fn renderGraph(
                     1,
                 );
                 num_buffers += 1;
-                if (drawcall.num_vertices == .infer) {
+                if (drawcall.num_vertices == null) {
                     num_vertices = buffer_infos[idx].num_elements;
                 }
                 first_vertex = buffer_infos[idx].first_element;
             }
 
             // Bind instance buffer, storing number of instances to draw
-            var num_instances: u32 = switch (drawcall.num_instances) {
-                .num => |n| n,
-                .infer => 1,
-            };
+            var num_instances: u32 = drawcall.num_instances orelse 1;
             var first_instance: u32 = 0;
             if (drawcall.instance_buffer) |name| {
                 const idx = @intFromEnum(@field(script.Buffer, name));
@@ -860,7 +854,7 @@ fn renderGraph(
                     1,
                 );
                 num_buffers += 1;
-                if (drawcall.num_instances == .infer) {
+                if (drawcall.num_instances == null) {
                     num_instances = buffer_infos[idx].num_elements;
                 }
                 first_instance = buffer_infos[idx].first_element;
@@ -881,7 +875,7 @@ fn renderGraph(
                     &.{ .buffer = buffers[idx], .offset = 0 },
                     element_size,
                 );
-                if (drawcall.num_vertices == .infer) {
+                if (drawcall.num_vertices == null) {
                     num_vertices = buffer_infos[idx].num_elements;
                 }
                 first_vertex = buffer_infos[idx].first_element;

@@ -32,11 +32,6 @@ pub const Pipeline = struct {
     blend_states: []const BlendState = &.{},
 };
 
-pub const DrawNum = union(enum) {
-    infer,
-    num: u32,
-};
-
 pub const ColorTarget = union(enum) {
     index: usize,
     swapchain,
@@ -82,8 +77,8 @@ pub const Drawcall = struct {
     fragment_samplers: []const TextureSamplerBinding = &.{},
     vertex_storage_buffers: []const []const u8 = &.{},
     fragment_storage_buffers: []const []const u8 = &.{},
-    num_vertices: DrawNum = .infer,
-    num_instances: DrawNum = .infer,
+    num_vertices: ?u32 = null,
+    num_instances: ?u32 = null,
 };
 
 pub const Pass = struct {

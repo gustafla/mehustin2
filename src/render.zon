@@ -25,7 +25,6 @@
                     .pipelines = .{.{
                         .vert = "water_surface.vert",
                         .frag = "water_surface.frag",
-                        .primitive_type = .trianglestrip,
                         .rasterizer_state = .{ .cull_mode = .none },
                         .depth_test = .{},
                     }},
@@ -63,6 +62,20 @@
                     .instance_buffer = "light_shaft_inst",
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
+                // Particles
+                // .{
+                //     .pipelines = .{.{
+                //         .vert = "particle.vert",
+                //         .frag = "particle.frag",
+                //         .depth_test = .{ .write = false },
+                //         .blend_states = .{.{
+                //             .enable = true,
+                //             .src_color = .one,
+                //             .dst_color = .one,
+                //         }},
+                //     }},
+                //     .num_instances = 512,
+                // },
             },
             .color_targets = .{.{ .target = .{ .index = 0 } }},
             .depth_target = .{ .target = 0, .store_op = .dont_care },
@@ -258,7 +271,7 @@
                     },
                     .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
                     .instance_buffer = "text_instances",
-                    .num_vertices = .{ .num = 4 },
+                    .num_vertices = 4,
                 },
             },
         },
