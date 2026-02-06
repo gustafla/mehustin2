@@ -53,6 +53,8 @@ pub const frame = struct {
     pub const VertexUniforms = extern struct {
         view_projection: math.Mat4,
         camera_position: [4]f32,
+        camera_right: [4]f32,
+        camera_up: [4]f32,
         global_time: f32,
     };
 
@@ -90,6 +92,12 @@ pub const frame = struct {
         clip = state.clip;
         cam = state.camera;
 
+        const view = math.Mat4.lookAt(
+            cam.pos,
+            cam.target,
+            math.radians(cam.roll),
+        );
+
         return .{
             .vertex = .{
                 .view_projection = math.Mat4.perspective(
@@ -97,17 +105,10 @@ pub const frame = struct {
                     render.aspect,
                     render.near,
                     render.far,
-                ).mmul(math.Mat4.lookAt(
-                    cam.pos,
-                    cam.target,
-                    math.radians(cam.roll),
-                )),
-                .camera_position = .{
-                    cam.pos[0],
-                    cam.pos[1],
-                    cam.pos[2],
-                    1,
-                },
+                ).mmul(view),
+                .camera_position = .{ cam.pos[0], cam.pos[1], cam.pos[2], 1 },
+                .camera_right = .{ view.col[0][0], view.col[1][0], view.col[2][0], 0 },
+                .camera_up = .{ view.col[0][1], view.col[1][1], view.col[2][1], 0 },
                 .global_time = time,
             },
             .fragment = .{

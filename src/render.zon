@@ -63,19 +63,20 @@
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
                 // Particles
-                // .{
-                //     .pipelines = .{.{
-                //         .vert = "particle.vert",
-                //         .frag = "particle.frag",
-                //         .depth_test = .{ .write = false },
-                //         .blend_states = .{.{
-                //             .enable = true,
-                //             .src_color = .one,
-                //             .dst_color = .one,
-                //         }},
-                //     }},
-                //     .num_instances = 512,
-                // },
+                .{
+                    .pipelines = .{.{
+                        .vert = "particle.vert",
+                        .frag = "particle.frag",
+                        .depth_test = .{ .write = false },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .one,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .num_vertices = 4,
+                    .num_instances = 1512,
+                },
             },
             .color_targets = .{.{ .target = .{ .index = 0 } }},
             .depth_target = .{ .target = 0, .store_op = .dont_care },

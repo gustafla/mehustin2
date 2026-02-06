@@ -16,6 +16,8 @@ https://wiki.libsdl.org/SDL3/SDL_CreateGPUShader
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
     vec4 u_camera_position;
+    vec4 u_camera_right;
+    vec4 u_camera_up;
     float u_global_time;
 };
 ```

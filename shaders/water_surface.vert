@@ -9,6 +9,8 @@ layout(location = 2) flat out vec3 out_cam_pos;
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
     vec4 u_cam_pos;
+    vec4 u_cam_right;
+    vec4 u_cam_up;
     float u_time;
 };
 
