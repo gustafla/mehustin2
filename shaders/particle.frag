@@ -1,11 +1,13 @@
 #version 450
 
 layout(location = 0) in vec2 in_uv;
-layout(location = 1) in vec3 in_pos;
-layout(location = 2) flat in vec3 in_cam_pos;
+layout(location = 1) flat in float in_alpha_fade;
 
 layout(location = 0) out vec4 out_color;
 
 void main() {
-    out_color = vec4(clamp(1.0 - length(in_uv - 0.5) * 2., 0.0, 1.0));
+    float circle = length(in_uv * 2.0 - 1.0);
+    float alpha = 1.0 - smoothstep(0.9, 1.0, circle);
+
+    out_color = vec4(alpha * in_alpha_fade);
 }
