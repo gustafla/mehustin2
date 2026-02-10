@@ -1,10 +1,11 @@
+// Music: D2 by Amarent, BPM: 110, length: 352
 .{
     .clip_track = .{
         .{ .t = 0.0, .id = "surface" },
-        .{ .t = 28.0, .id = "descent" },
-        .{ .t = 55.0, .id = "garden" },
-        .{ .t = 100.0, .id = "currents" },
-        .{ .t = 120.0, .id = "void" },
+        .{ .t = 74.0, .id = "descent" },
+        .{ .t = 150.0, .id = "garden" },
+        .{ .t = 260.0, .id = "currents" },
+        .{ .t = 320.0, .id = "void" },
     },
     .text = .{
         .atlas_size = 1024,
