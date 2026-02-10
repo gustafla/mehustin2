@@ -15,6 +15,8 @@ const SamplerMipmapMode = types.SamplerMipmapMode;
 const SamplerAddressMode = types.SamplerAddressMode;
 const LoadOp = types.LoadOp;
 const StoreOp = types.StoreOp;
+const SampleCount = types.SampleCount;
+const MultisampleState = types.MultisampleState;
 
 pub const num_vertex_uniform_buffers = 1;
 pub const num_fragment_uniform_buffers = 2;
@@ -24,7 +26,8 @@ pub const Pipeline = struct {
     frag: []const u8,
     primitive_type: PrimitiveType = .trianglestrip,
     rasterizer_state: RasterizerState = .{},
-    depth_test: ?struct {
+    multisample_state: MultisampleState = .{},
+    depth_test: ?struct { // TODO: Consider implementing full DepthStencilState
         compare_op: CompareOp = .less_or_equal,
         enable: bool = true,
         write: bool = true,
@@ -40,6 +43,7 @@ pub const ColorTarget = union(enum) {
 pub fn RenderTarget(T: type) type {
     return struct {
         target: T,
+        resolve_target: ?T = null,
         load_op: LoadOp = .clear,
         store_op: StoreOp = .store,
     };
@@ -92,6 +96,7 @@ pub const TargetTexture = struct {
     format: TextureFormat,
     p: u32 = 1,
     q: u32 = 1,
+    sample_count: SampleCount = .@"1",
 };
 
 pub const Config = struct {

@@ -1,7 +1,8 @@
 .{
     .color_targets = .{
-        .{ .format = .r11g11b10_ufloat },
-        .{ .format = .r11g11b10_ufloat, .q = 2 },
+        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
+        .{ .format = .r16g16b16a16_float }, // MSAA Resolve Texture
+        .{ .format = .r11g11b10_ufloat, .q = 2 }, // Kawase Bloom Result
         .{ .format = .r11g11b10_ufloat, .q = 4 },
         .{ .format = .r11g11b10_ufloat, .q = 8 },
         .{ .format = .r11g11b10_ufloat, .q = 16 },
@@ -9,7 +10,7 @@
         .{ .format = .r11g11b10_ufloat, .q = 64 },
     },
     .depth_targets = .{
-        .{ .format = .d16_unorm },
+        .{ .format = .d16_unorm, .sample_count = .@"4" },
     },
     .samplers = .{
         .{ .name = "nearest" },
@@ -26,6 +27,7 @@
                         .vert = "water_surface.vert",
                         .frag = "water_surface.frag",
                         .rasterizer_state = .{ .cull_mode = .none },
+                        .multisample_state = .{ .sample_count = .@"4" },
                         .depth_test = .{},
                     }},
                     .index_buffer = "water_surface_ind",
@@ -40,6 +42,7 @@
                 .{
                     .pipelines = .{.{
                         .frag = "water_volume.frag",
+                        .multisample_state = .{ .sample_count = .@"4" },
                         .depth_test = .{},
                     }},
                     .fragment_storage_buffers = .{"water_parameters"},
@@ -50,6 +53,7 @@
                         .vert = "light_shaft.vert",
                         .frag = "light_shaft.frag",
                         .primitive_type = .trianglelist,
+                        .multisample_state = .{ .sample_count = .@"4" },
                         .depth_test = .{ .write = false },
                         .blend_states = .{.{
                             .enable = true,
@@ -67,10 +71,11 @@
                     .pipelines = .{.{
                         .vert = "particle.vert",
                         .frag = "particle.frag",
+                        .multisample_state = .{ .sample_count = .@"4", .enable_alpha_to_coverage = true },
                         .depth_test = .{ .write = false },
                         .blend_states = .{.{
                             .enable = true,
-                            .src_color = .one,
+                            .src_color = .src_alpha,
                             .dst_color = .one,
                         }},
                     }},
@@ -78,7 +83,11 @@
                     .num_instances = 1512,
                 },
             },
-            .color_targets = .{.{ .target = .{ .index = 0 } }},
+            .color_targets = .{.{
+                .target = .{ .index = 0 },
+                .resolve_target = .{ .index = 1 },
+                .store_op = .resolve,
+            }},
             .depth_target = .{ .target = 0, .store_op = .dont_care },
         },
         // Bloom prefilter to 1/2
@@ -88,24 +97,12 @@
                     .pipelines = .{
                         .{ .frag = "bloom_prefilter.frag" },
                     },
-                    .fragment_samplers = .{.{ .texture = "color_targets[0]", .sampler = "linear" }},
-                },
-            },
-            .color_targets = .{.{ .target = .{ .index = 1 } }},
-        },
-        // Kawase blur down 1/4
-        .{
-            .drawcalls = .{
-                .{
-                    .pipelines = .{
-                        .{ .frag = "dual_kawase_down.frag" },
-                    },
                     .fragment_samplers = .{.{ .texture = "color_targets[1]", .sampler = "linear" }},
                 },
             },
             .color_targets = .{.{ .target = .{ .index = 2 } }},
         },
-        // Kawase blur down 1/8
+        // Kawase blur down 1/4
         .{
             .drawcalls = .{
                 .{
@@ -117,7 +114,7 @@
             },
             .color_targets = .{.{ .target = .{ .index = 3 } }},
         },
-        // Kawase blur down 1/16
+        // Kawase blur down 1/8
         .{
             .drawcalls = .{
                 .{
@@ -129,7 +126,7 @@
             },
             .color_targets = .{.{ .target = .{ .index = 4 } }},
         },
-        // Kawase blur down 1/32
+        // Kawase blur down 1/16
         .{
             .drawcalls = .{
                 .{
@@ -141,7 +138,7 @@
             },
             .color_targets = .{.{ .target = .{ .index = 5 } }},
         },
-        // Kawase blur down 1/64
+        // Kawase blur down 1/32
         .{
             .drawcalls = .{
                 .{
@@ -153,7 +150,38 @@
             },
             .color_targets = .{.{ .target = .{ .index = 6 } }},
         },
+        // Kawase blur down 1/64
+        .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "dual_kawase_down.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[6]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 7 } }},
+        },
         // Kawase blur up 1/32
+        .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{
+                            .frag = "dual_kawase_up.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                                .src_color = .one,
+                                .dst_color = .one,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[7]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 6 }, .load_op = .load }},
+        },
+        // Kawase blur up 1/16
         .{
             .drawcalls = .{
                 .{
@@ -172,7 +200,7 @@
             },
             .color_targets = .{.{ .target = .{ .index = 5 }, .load_op = .load }},
         },
-        // Kawase blur up 1/16
+        // Kawase blur up 1/8
         .{
             .drawcalls = .{
                 .{
@@ -191,7 +219,7 @@
             },
             .color_targets = .{.{ .target = .{ .index = 4 }, .load_op = .load }},
         },
-        // Kawase blur up 1/8
+        // Kawase blur up 1/4
         .{
             .drawcalls = .{
                 .{
@@ -210,7 +238,7 @@
             },
             .color_targets = .{.{ .target = .{ .index = 3 }, .load_op = .load }},
         },
-        // Kawase blur up 1/4
+        // Kawase blur up 1/2
         .{
             .drawcalls = .{
                 .{
@@ -229,25 +257,6 @@
             },
             .color_targets = .{.{ .target = .{ .index = 2 }, .load_op = .load }},
         },
-        // Kawase blur up 1/2
-        .{
-            .drawcalls = .{
-                .{
-                    .pipelines = .{
-                        .{
-                            .frag = "dual_kawase_up.frag",
-                            .blend_states = .{.{
-                                .enable = true,
-                                .src_color = .one,
-                                .dst_color = .one,
-                            }},
-                        },
-                    },
-                    .fragment_samplers = .{.{ .texture = "color_targets[2]", .sampler = "linear" }},
-                },
-            },
-            .color_targets = .{.{ .target = .{ .index = 1 }, .load_op = .load }},
-        },
         // Post processing output pass
         .{
             .drawcalls = .{
@@ -256,8 +265,8 @@
                         .frag = "post.frag",
                     }},
                     .fragment_samplers = .{
-                        .{ .texture = "color_targets[0]", .sampler = "nearest" },
-                        .{ .texture = "color_targets[1]", .sampler = "linear" },
+                        .{ .texture = "color_targets[1]", .sampler = "nearest" },
+                        .{ .texture = "color_targets[2]", .sampler = "linear" },
                         .{ .texture = "noise", .sampler = "nearest" },
                     },
                 },

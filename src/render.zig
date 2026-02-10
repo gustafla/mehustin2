@@ -216,9 +216,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         },
         .primitive_type = @intFromEnum(pipeline.primitive_type),
         .rasterizer_state = pipeline.rasterizer_state.toSDL(),
-        .multisample_state = .{
-            .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-        },
+        .multisample_state = pipeline.multisample_state.toSDL(),
         .depth_stencil_state = if (pipeline.depth_test) |state| .{
             .compare_op = @intFromEnum(state.compare_op),
             .enable_depth_test = state.enable,
@@ -595,12 +593,13 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
                 .format = resolveTextureFormat(tex.format),
-                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+                .usage = c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
+                    if (tex.sample_count == .@"1") c.SDL_GPU_TEXTUREUSAGE_SAMPLER else 0,
                 .width = main_config.width * tex.p / tex.q,
                 .height = main_config.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,
                 .num_levels = 1,
-                .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+                .sample_count = @intFromEnum(tex.sample_count),
             }));
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
@@ -610,13 +609,13 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
                 .format = resolveTextureFormat(tex.format),
-                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+                .usage = c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET |
+                    if (tex.sample_count == .@"1") c.SDL_GPU_TEXTUREUSAGE_SAMPLER else 0,
                 .width = main_config.width * tex.p / tex.q,
                 .height = main_config.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,
                 .num_levels = 1,
-                .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-                .props = 0,
+                .sample_count = @intFromEnum(tex.sample_count),
             }));
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
@@ -765,7 +764,18 @@ fn renderGraph(
                     },
                     .load_op = @intFromEnum(target.load_op),
                     .store_op = @intFromEnum(target.store_op),
+                    .resolve_texture = if (target.resolve_target) |resolve|
+                        switch (resolve) {
+                            .index => |index| color_targets[index],
+                            .swapchain => if (parm.resolution_match)
+                                parm.swapchain_texture
+                            else
+                                output_buffer,
+                        }
+                    else
+                        null,
                     .cycle = target.load_op != .load,
+                    .cycle_resolve_texture = target.load_op != .load, // TODO: ?
                 };
             }
             break :blk infos;
