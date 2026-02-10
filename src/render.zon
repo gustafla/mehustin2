@@ -27,7 +27,6 @@
                         .vert = "water_surface.vert",
                         .frag = "water_surface.frag",
                         .rasterizer_state = .{ .cull_mode = .none },
-                        .multisample_state = .{ .sample_count = .@"4" },
                         .depth_test = .{},
                     }},
                     .index_buffer = "water_surface_ind",
@@ -42,7 +41,6 @@
                 .{
                     .pipelines = .{.{
                         .frag = "water_volume.frag",
-                        .multisample_state = .{ .sample_count = .@"4" },
                         .depth_test = .{},
                     }},
                     .fragment_storage_buffers = .{"water_parameters"},
@@ -53,7 +51,6 @@
                         .vert = "light_shaft.vert",
                         .frag = "light_shaft.frag",
                         .primitive_type = .trianglelist,
-                        .multisample_state = .{ .sample_count = .@"4" },
                         .depth_test = .{ .write = false },
                         .blend_states = .{.{
                             .enable = true,
@@ -71,7 +68,7 @@
                     .pipelines = .{.{
                         .vert = "particle.vert",
                         .frag = "particle.frag",
-                        .multisample_state = .{ .sample_count = .@"4", .enable_alpha_to_coverage = true },
+                        .enable_alpha_to_coverage = true,
                         .depth_test = .{ .write = false },
                         .blend_states = .{.{
                             .enable = true,

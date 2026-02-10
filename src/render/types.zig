@@ -176,15 +176,3 @@ pub const LoadOp = EnumFromC("LoadOp", .{});
 pub const StoreOp = EnumFromC("StoreOp", .{});
 
 pub const SampleCount = EnumFromC("SampleCount", .{});
-
-pub const MultisampleState = struct {
-    sample_count: SampleCount = .@"1",
-    enable_alpha_to_coverage: bool = false,
-
-    pub fn toSDL(self: @This()) c.SDL_GPUMultisampleState {
-        return .{
-            .sample_count = @intFromEnum(self.sample_count),
-            .enable_alpha_to_coverage = self.enable_alpha_to_coverage,
-        };
-    }
-};

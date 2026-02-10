@@ -26,7 +26,7 @@ pub const Pipeline = struct {
     frag: []const u8,
     primitive_type: PrimitiveType = .trianglestrip,
     rasterizer_state: RasterizerState = .{},
-    multisample_state: MultisampleState = .{},
+    enable_alpha_to_coverage: bool = false,
     depth_test: ?struct { // TODO: Consider implementing full DepthStencilState
         compare_op: CompareOp = .less_or_equal,
         enable: bool = true,
@@ -196,6 +196,7 @@ pub fn PipelineKey(comptime config: Config) type {
         color_targets_buf: [max_color_targets]TextureFormat,
         num_color_targets: u32,
         depth_target: ?TextureFormat,
+        sample_count: SampleCount,
 
         pub const max_color_targets = fold(config.passes, &.{
             "color_targets",
@@ -252,6 +253,15 @@ pub fn PipelineKey(comptime config: Config) type {
                     .swapchain => .swapchain,
                 };
             }
+
+            const sample_count: SampleCount = blk: {
+                if (pass.color_targets.len == 0) break :blk .@"1";
+                break :blk switch (pass.color_targets[0].target) {
+                    .index => |idx| config.color_targets[idx].sample_count,
+                    .swapchain => .@"1",
+                };
+            };
+
             return .{
                 .pipeline = pipeline,
                 .vert_info = .{
@@ -277,6 +287,7 @@ pub fn PipelineKey(comptime config: Config) type {
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
                 .depth_target = if (pass.depth_target) |t| config.depth_targets[t.target].format else null,
+                .sample_count = sample_count,
             };
         }
     };

@@ -216,7 +216,10 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         },
         .primitive_type = @intFromEnum(pipeline.primitive_type),
         .rasterizer_state = pipeline.rasterizer_state.toSDL(),
-        .multisample_state = pipeline.multisample_state.toSDL(),
+        .multisample_state = .{
+            .sample_count = @intFromEnum(key.sample_count),
+            .enable_alpha_to_coverage = pipeline.enable_alpha_to_coverage,
+        },
         .depth_stencil_state = if (pipeline.depth_test) |state| .{
             .compare_op = @intFromEnum(state.compare_op),
             .enable_depth_test = state.enable,
