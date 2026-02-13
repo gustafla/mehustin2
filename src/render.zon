@@ -51,10 +51,11 @@
                         .vert = "light_shaft.vert",
                         .frag = "light_shaft.frag",
                         .primitive_type = .trianglelist,
+                        .rasterizer_state = .{ .cull_mode = .none },
                         .depth_test = .{ .write = false },
                         .blend_states = .{.{
                             .enable = true,
-                            .src_color = .one,
+                            .src_color = .src_alpha,
                             .dst_color = .one,
                         }},
                     }},

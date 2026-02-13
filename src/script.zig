@@ -203,28 +203,7 @@ pub const texture = struct {
             var w: c_int, var h: c_int, var cif: c_int = .{ 0, 0, 0 };
             data = c.stbi_loadf(path, &w, &h, &cif, 4) orelse return error.StbiLoadFailed;
 
-            // Compute average color, sky is the upper half
-            sky_color = @splat(0);
-            var total_weight: f32 = 0.0;
-
-            const wu: usize, const hu: usize = .{ @intCast(w), @intCast(h) };
-            const h_f32: f32 = @floatFromInt(hu);
-
-            for (0..hu / 2) |y| {
-                const v = (@as(f32, @floatFromInt(y)) + 0.5) / h_f32;
-                const theta = std.math.pi * v;
-                const weight = @sin(theta);
-                const weight_vec: Vec4 = @splat(weight);
-
-                for (0..wu) |x| {
-                    const i = (y * wu + x) * 4;
-                    const color: Vec4 = .{ data[i], data[i + 1], data[i + 2], data[i + 3] };
-                    const clamped = std.math.clamp(color, @as(Vec4, @splat(0.0)), @as(Vec4, @splat(10.0)));
-                    sky_color += clamped * weight_vec;
-                    total_weight += weight;
-                }
-            }
-            sky_color /= @as(Vec4, @splat(total_weight));
+            sky_color = util.ambientFromEnvmap(w, h, data, .{});
 
             return .{
                 .format = .r32g32b32a32_float,
@@ -245,8 +224,8 @@ pub const Texture = std.meta.DeclEnum(texture);
 
 // ---- BUFFERS (3rd) ----
 
-const surf_plane = .{ .w = 100, .d = 100 };
-const surf_grid = .{ .w = 128, .d = 128 };
+const surf_plane = .{ .w = 1024, .d = 1024 };
+const surf_grid = .{ .w = 255, .d = 255 };
 const surf_num_verts_x = surf_grid.w + 1;
 const surf_num_verts_z = surf_grid.d + 1;
 
@@ -380,7 +359,7 @@ pub const buffer = struct {
 
     pub const light_shaft = struct {
         pub const num_vertices = 6;
-        const radius = 0.01;
+        const radius = 0.1;
 
         pub const Layout = layout.VertexPos;
 
@@ -453,7 +432,7 @@ pub const storage_buffer = struct {
             util.writeSSBO(Header, Element, dst, .{
                 .sky_color = sky_color,
                 .sun_dir = sun_dir,
-                .brightness = 15,
+                .brightness = 5,
             }, &.{});
         }
     };

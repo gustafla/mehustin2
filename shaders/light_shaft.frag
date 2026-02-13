@@ -23,16 +23,19 @@ layout(std430, set = 2, binding = 0) readonly buffer WaterData {
 
 void main() {
     float t = u_time_g + in_anim_offset;
-    float angle = atan(in_local_pos.z, in_local_pos.x);
-    float fade = in_local_pos.y * clamp(-in_pos.y * 0.4, 0., 1.);
+    float angle = atan(in_local_pos.z, in_local_pos.x) * 1.5;
+    float fade = in_local_pos.y * clamp(-0.5 - (in_cam_pos.y + in_pos.y) * 0.2, 0.0, 1.0);
     float noise = sin(angle * 10.0 + t * 2.0);
     noise += sin(angle * 12.0 - t * 2.3);
     noise += sin(angle * 4.0 + t * 2.5);
     noise += sin(angle * 5.0 - t * 1.4);
     noise = noise * 0.5 + 0.5;
-    noise = pow(noise, 4.0);
+    noise = pow(noise, 6.0);
     float alpha = noise * fade * 0.1;
+    if (alpha < 0.01) {
+        discard;
+    }
 
     vec3 color = underwaterFog(vec3(0.0), 1e9, in_cam_pos, normalize(in_pos), sun_dir);
-    out_color = vec4(color * alpha, alpha);
+    out_color = vec4(color, alpha);
 }

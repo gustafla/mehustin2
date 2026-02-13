@@ -56,16 +56,16 @@
             .{ // TRACK 1
                 .{
                     .t = 0.0,
-                    .entry = .{ .pos = .{ -7, -3, -7 }, .target = .{ 0, 0, 0 }, .fov = 90 },
+                    .entry = .{ .pos = .{ -16, -20, -16 }, .target = .{ 0, 0, 0 }, .fov = 90 },
                     .motion = .{
                         .{ .circle = .{ .axis = .{ 0, 1, 0 }, .speed = 0.02 } },
                     },
                 },
                 .{
                     .t = 74.0,
-                    .entry = .{ .pos = .{ -7, -8, -7 }, .target = .{ 0, -5, 0 }, .fov = 90 },
+                    .entry = .{ .pos = .{ -7, -208, -7 }, .target = .{ 0, -205, 0 }, .fov = 90 },
                     .motion = .{
-                        .{ .wave = .{ .local = .vertical, .strafe = true, .amp = 5 } },
+                        .{ .wave = .{ .axis = .{ 0, 1, 0 }, .strafe = true, .amp = 200, .freq = 0.5 } },
                     },
                 },
             },

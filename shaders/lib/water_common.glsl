@@ -4,11 +4,11 @@
 #include <lib/pbr.glsl>
 
 #define SUN_COLOR (vec3(1, 0.9, 0.8) * brightness)
-#define SKY_COLOR (sky_color.rgb * brightness)
+#define SKY_COLOR (sky_color.rgb * brightness * 3)
 
 const float water_ior = 1.333;
-const vec3 k_sigma_a = vec3(0.09, 0.04, 0.03);
-const vec3 k_sigma_s = vec3(0.02, 0.023, 0.03);
+const vec3 k_sigma_a = vec3(0.19, 0.04, 0.03) * 0.1;
+const vec3 k_sigma_s = vec3(0.02, 0.023, 0.03) * 0.1;
 const vec3 k_sigma_t = k_sigma_a + k_sigma_s;
 const float k_g = 0.7;
 
@@ -31,7 +31,7 @@ vec3 underwaterScattering(
     // Refract sun dir
     vec3 refracted_sun = normalize(vec3(sun_dir.x, sun_dir.y * water_ior, sun_dir.z));
 
-    // Phase function (how much )
+    // Phase function
     float cos_theta = dot(rd, refracted_sun);
     float phase = phaseHenyeyGreenstein(cos_theta, k_g);
 

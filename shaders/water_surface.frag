@@ -40,7 +40,7 @@ vec3 ripple(vec3 normal, vec2 uv) {
 void main() {
     float dist = length(in_position);
     vec3 view_dir = normalize(in_position);
-    vec3 normal = ripple(-in_normal, in_position.xz * 0.2);
+    vec3 normal = ripple(-in_normal, in_position.xz * 0.05);
 
     float ior_spread = 0.03;
     vec3 refract_r = refract(view_dir, normal, water_ior - ior_spread);
