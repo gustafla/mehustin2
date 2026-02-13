@@ -205,15 +205,26 @@ pub const texture = struct {
 
             // Compute average color, sky is the upper half
             sky_color = @splat(0);
+            var total_weight: f32 = 0.0;
+
             const wu: usize, const hu: usize = .{ @intCast(w), @intCast(h) };
+            const h_f32: f32 = @floatFromInt(hu);
+
             for (0..hu / 2) |y| {
+                const v = (@as(f32, @floatFromInt(y)) + 0.5) / h_f32;
+                const theta = std.math.pi * v;
+                const weight = @sin(theta);
+                const weight_vec: Vec4 = @splat(weight);
+
                 for (0..wu) |x| {
                     const i = (y * wu + x) * 4;
                     const color: Vec4 = .{ data[i], data[i + 1], data[i + 2], data[i + 3] };
-                    sky_color += std.math.clamp(color, @as(Vec4, @splat(0.0)), @as(Vec4, @splat(10.0)));
+                    const clamped = std.math.clamp(color, @as(Vec4, @splat(0.0)), @as(Vec4, @splat(10.0)));
+                    sky_color += clamped * weight_vec;
+                    total_weight += weight;
                 }
             }
-            sky_color /= @as(Vec4, @splat(@floatFromInt(wu * hu / 2)));
+            sky_color /= @as(Vec4, @splat(total_weight));
 
             return .{
                 .format = .r32g32b32a32_float,
