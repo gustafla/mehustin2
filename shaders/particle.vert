@@ -3,9 +3,11 @@
 layout(location = 0) out vec2 out_uv;
 layout(location = 1) flat out float out_alpha_fade;
 
-const float base_radius = 0.02;
-const float min_pixels = 2.0;
-const float max_pixels = 4.0;
+const float cube_size = 200.0;
+const float cube_size_rcp = 1.0 / cube_size;
+const float base_radius = 0.2;
+const float min_pixels = 3.0;
+const float max_pixels = 6.0;
 
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
@@ -16,10 +18,30 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 };
 
 vec3 worldPos() {
-    float x = fract(sin(float(gl_InstanceIndex) * 0.371));
-    float y = fract(cos(float(gl_InstanceIndex) * 0.114));
-    float z = fract(sin(float(gl_InstanceIndex) * 0.324));
-    return (vec3(x, y, z) - 0.5) * 20.;
+    float t = u_time * 0.5;
+
+    float idx = float(gl_InstanceIndex);
+    vec3 seed = vec3(
+            fract(sin(idx * 0.371) * 43758.54),
+            fract(cos(idx * 0.114) * 43758.54),
+            fract(sin(idx * 0.324) * 43758.54)
+        );
+
+    vec3 drift_velocity = vec3(0.01, -0.005, -0.005);
+    vec3 moving_pos = seed + (drift_velocity * t);
+
+    vec3 cam = u_cam_pos.xyz * cube_size_rcp;
+    vec3 p = moving_pos - cam;
+    p = fract(p) - 0.5;
+    vec3 world_pos = (p + cam) * cube_size;
+
+    vec3 turbulence = vec3(
+            sin(world_pos.z * 0.05 + t) * 2.0,
+            cos(world_pos.y * 0.04 + t * 0.8) * 2.0,
+            sin(world_pos.x * 0.03 + t * 0.5) * 4.0
+        );
+
+    return world_pos + turbulence;
 }
 
 void main() {

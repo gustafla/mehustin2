@@ -61,6 +61,13 @@
                         // .{ .circle = .{ .axis = .{ 0, 1, 0 } } },
                     },
                 },
+                .{
+                    .t = 74.0,
+                    .entry = .{ .pos = .{ -7, -8, -7 }, .target = .{ 0, -5, 0 }, .fov = 90 },
+                    .motion = .{
+                        .{ .wave = .{ .local = .vertical, .strafe = true, .amp = 5 } },
+                    },
+                },
             },
         },
         .effects = .{
