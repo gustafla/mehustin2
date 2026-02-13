@@ -3,7 +3,6 @@
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [ ] Lighting (point light sources)
-- [ ] Particle rendering
 
 # Backlog
 
@@ -22,16 +21,14 @@
     - [ ] Render.zon for-all-in-group-filter (e.g. "world & transparent") macro syntax
       - Consider using a generic templating library
 - [ ] Build-time font generation
-- [ ] MSAA with resolve texture
 - [ ] Comptime resource loader namespace generators (fns that return a resource namespace)
   - [ ] textureFromFile
   - [ ] vertexBufferFromFile
   - [ ] vertexBufferFromParShapes (par_shapes.h)
   - [ ] instanceBuffer3D (helper)
   - [ ] Add optional update fn hooks!
-- [ ] Index buffers
   - [ ] meshoptimizer
-- [ ] mikttspace.h, generate tangents
+  - [ ] mikttspace.h, generate tangents
 - [ ] Particle simulations (nbody, fluid, noise)
 - [ ] Text layer improvements
   - [ ] Text effects (multiple, use bit mask in uber shader)
@@ -47,6 +44,9 @@
 
 # Done
 
+- [X] Index buffers
+- [X] MSAA with resolve texture
+- [X] Particle rendering
 - [X] `tri.frag`: Add corner rays for interpolator
 - [X] Clip-to-clip transition effects (uniform containing clip time left)
 - [X] script: Give update functions control over num_elements and first_element
