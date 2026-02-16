@@ -77,7 +77,7 @@
                         }},
                     }},
                     .num_vertices = 4,
-                    .num_instances = 10064,
+                    .num_instances = 1024,
                 },
             },
             .color_targets = .{.{
