@@ -13,12 +13,12 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 };
 
 void main() {
-    // Generates: (-1, -1), (3, -1), (-1, 3)
+    // Generates: (0, 0), (2, 0), (0, 2)
     vec2 pos = vec2(float((gl_VertexIndex << 1) & 2), float(gl_VertexIndex & 2));
     out_uv = vec2(pos.x, 1.0 - pos.y);
 
     // Clip coordinates at the far plane
-    vec2 ndc_pos = pos * 2.0 - 1.0;
+    vec2 ndc_pos = pos * 2.0 - 1.0; // (-1, -1), (3, -1), (-1, 3)
     vec4 clip_pos = vec4(ndc_pos, 1.0, 1.0);
 
     // Unproject view frustum rays to world space

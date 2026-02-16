@@ -3,9 +3,9 @@
 
 // Henyey-Greenstein phase function
 // Determines how much light scatters towards the camera given the angle.
-float phaseHenyeyGreenstein(float cosTheta, float g) {
+float phaseHenyeyGreenstein(float cos_theta, float g) {
     float num = 1.0 - g * g;
-    float denom = 1.0 + g * g - 2.0 * g * cosTheta;
+    float denom = 1.0 + g * g - 2.0 * g * cos_theta;
     return num / (4.0 * 3.14159 * pow(denom, 1.5));
 }
 
