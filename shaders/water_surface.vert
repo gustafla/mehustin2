@@ -2,8 +2,8 @@
 
 layout(location = 0) in vec3 in_position;
 
-layout(location = 0) out vec3 out_position;
-layout(location = 1) out vec3 out_normal;
+layout(location = 0) sample out vec3 out_position;
+layout(location = 1) sample out vec3 out_normal;
 layout(location = 2) flat out vec3 out_cam_pos;
 
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {

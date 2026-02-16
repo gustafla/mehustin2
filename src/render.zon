@@ -69,7 +69,6 @@
                     .pipelines = .{.{
                         .vert = "particle.vert",
                         .frag = "particle.frag",
-                        .enable_alpha_to_coverage = true,
                         .depth_test = .{ .write = false },
                         .blend_states = .{.{
                             .enable = true,
@@ -78,7 +77,7 @@
                         }},
                     }},
                     .num_vertices = 4,
-                    .num_instances = 64,
+                    .num_instances = 10064,
                 },
             },
             .color_targets = .{.{

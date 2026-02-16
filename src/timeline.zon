@@ -63,10 +63,8 @@
                 },
                 .{
                     .t = 74.0,
-                    .entry = .{ .pos = .{ -7, -208, -7 }, .target = .{ 0, -205, 0 }, .fov = 90 },
-                    .motion = .{
-                        .{ .wave = .{ .axis = .{ 0, 1, 0 }, .strafe = true, .amp = 200, .freq = 0.5 } },
-                    },
+                    .entry = .{ .pos = .{ -7, -200, -7 }, .target = .{ 0, -200, 0 }, .fov = 90 },
+                    .motion = .{},
                 },
             },
         },
