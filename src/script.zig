@@ -224,8 +224,8 @@ pub const Texture = std.meta.DeclEnum(texture);
 
 // ---- BUFFERS (3rd) ----
 
-const surf_plane = .{ .w = 1024, .d = 1024 };
-const surf_grid = .{ .w = 255, .d = 255 };
+const surf_plane = .{ .w = 768, .d = 768 };
+const surf_grid = .{ .w = 127, .d = 127 };
 const surf_num_verts_x = surf_grid.w + 1;
 const surf_num_verts_z = surf_grid.d + 1;
 
@@ -384,7 +384,7 @@ pub const buffer = struct {
     };
 
     pub const light_shaft_inst = struct {
-        const num_inst = 2;
+        const num_inst = 1;
 
         pub const Layout = layout.InstanceTRS;
 
@@ -396,10 +396,6 @@ pub const buffer = struct {
             const rot = math.quat.rotationBetween(vec3.YUP, sun_dir);
             dst[0] = .{
                 .pos_scale = .{ 0, -10, 0, 64 * 8 },
-                .rot_quat = rot,
-            };
-            dst[1] = .{
-                .pos_scale = .{ -3, -5, 7, 42 * 8 },
                 .rot_quat = rot,
             };
 

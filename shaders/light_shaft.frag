@@ -37,5 +37,5 @@ void main() {
     }
 
     vec3 color = underwaterFog(vec3(0.0), 1e9, in_cam_pos, normalize(in_pos), sun_dir);
-    out_color = vec4(color, alpha);
+    out_color = vec4(color, clamp(alpha, 0.0, 1.0));
 }
