@@ -52,16 +52,18 @@ void main() {
     vec3 center_pos = worldPos();
     vec4 center_clip = u_view_projection * vec4(center_pos, 1.0);
     float projected_dia = (base_dia * HEIGHT) / center_clip.w;
+
+    float alpha = projected_dia / pixels;
+    alpha *= alpha;
+    alpha = min(alpha, 1.0 / alpha);
+    out_alpha = alpha;
+
     float clamped_dia = max(projected_dia, pixels);
     float scale_factor = clamped_dia / projected_dia;
 
     vec3 vertex_pos = center_pos
             + (u_cam_right.xyz * offset.x * base_dia * scale_factor)
             + (u_cam_up.xyz * offset.y * base_dia * scale_factor);
-
-    float alpha = projected_dia / pixels;
-    alpha *= alpha;
-    out_alpha = min(alpha, 1.0 / alpha);
 
     gl_Position = u_view_projection * vec4(vertex_pos, 1.0);
 }

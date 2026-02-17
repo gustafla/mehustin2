@@ -57,11 +57,13 @@ pub const Segment = struct {
         // Blend with next segment
         const blend_target = next orelse return current_state;
         const blend_target_entry = next_entry.?;
-        const blend_start = blend_target.t - self.blend;
 
-        if (self.blend > 0 and time >= blend_start) {
+        const blend = if (self.blend < 0) blend_target.t - self.t else self.blend;
+        const blend_start = blend_target.t - blend;
+
+        if (blend > 0 and time >= blend_start) {
             const elapsed_in_blend = time - blend_start;
-            const t = std.math.clamp(elapsed_in_blend / self.blend, 0.0, 1.0);
+            const t = std.math.clamp(elapsed_in_blend / blend, 0.0, 1.0);
             const alpha = t * t * (3.0 - 2.0 * t);
 
             const next_state = blend_target.evaluate(
@@ -69,7 +71,7 @@ pub const Segment = struct {
                 null, // No "next next". Blend periods should not overlap.
                 null,
                 time,
-                self.blend,
+                blend,
             );
             current_state = current_state.lerp(next_state, alpha);
         }

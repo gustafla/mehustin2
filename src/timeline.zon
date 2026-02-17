@@ -34,7 +34,7 @@
                 .fade_out = 2,
             },
             .{
-                .t = 35,
+                .t = 40,
                 .duration = 30,
                 .text = .{ .str = "Abyss" },
                 .pos = .{ 0, 0.2 },
@@ -65,7 +65,7 @@
         .tracks = .{
             .{ // TRACK 1
                 .{
-                    .t = 0.0,
+                    .t = 0,
                     .entry = .{ .pos = .{ -16, -20, -16 }, .target = .{ 0, 0, 0 }, .fov = 90 },
                     .motion = .{
                         .{ .circle = .{ .axis = .{ 0, 1, 0 }, .speed = 0.02 } },
@@ -73,12 +73,12 @@
                     .blend = 17,
                 },
                 .{
-                    .t = 32,
+                    .t = 56,
                     .entry = .{ .pos = .{ -16, -30, -16 }, .target = .{ 0, -128, 0 }, .fov = 90 },
-                    .blend = 42,
+                    .blend = -1,
                 },
                 .{
-                    .t = 74.0,
+                    .t = 96,
                     .entry = .{ .pos = .{ -7, -1000, -7 }, .target = .{ 0, -1000, 0 }, .fov = 90 },
                     .motion = .{},
                 },
