@@ -1,7 +1,7 @@
 .{
     .color_targets = .{
-        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
-        .{ .format = .r16g16b16a16_float }, // MSAA Resolve Texture
+        .{ .format = .r11g11b10_ufloat, .sample_count = .@"4" },
+        .{ .format = .r11g11b10_ufloat }, // MSAA Resolve Texture
         .{ .format = .r11g11b10_ufloat, .q = 2 }, // Kawase Bloom Result
         .{ .format = .r11g11b10_ufloat, .q = 4 },
         .{ .format = .r11g11b10_ufloat, .q = 8 },
