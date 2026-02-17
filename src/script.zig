@@ -72,8 +72,7 @@ pub const frame = struct {
     };
 
     pub var time: f32 = undefined;
-    pub var clip: Clip = undefined;
-    pub var cam: camera.State = undefined;
+    pub var state: timeline.State = undefined;
 
     pub fn update(frame_time: f32) State {
         if (options.show_fps) {
@@ -88,25 +87,28 @@ pub const frame = struct {
 
         time = frame_time;
 
-        const state = timeline.resolve(time);
-        clip = state.clip;
-        cam = state.camera;
+        state = timeline.resolve(time);
 
         const view = math.Mat4.lookAt(
-            cam.pos,
-            cam.target,
-            math.radians(cam.roll),
+            state.camera.pos,
+            state.camera.target,
+            math.radians(state.camera.roll),
         );
 
         return .{
             .vertex = .{
                 .view_projection = math.Mat4.perspective(
-                    math.radians(cam.fov),
+                    math.radians(state.camera.fov),
                     render.aspect,
                     render.near,
                     render.far,
                 ).mmul(view),
-                .camera_position = .{ cam.pos[0], cam.pos[1], cam.pos[2], 1 },
+                .camera_position = .{
+                    state.camera.pos[0],
+                    state.camera.pos[1],
+                    state.camera.pos[2],
+                    1,
+                },
                 .camera_right = .{ view.col[0][0], view.col[1][0], view.col[2][0], 0 },
                 .camera_up = .{ view.col[0][1], view.col[1][1], view.col[2][1], 0 },
                 .global_time = time,
@@ -116,7 +118,7 @@ pub const frame = struct {
                 .clip_time = state.clip_time,
                 .clip_remaining_time = state.clip_remaining_time,
             },
-            .clip = clip,
+            .clip = state.clip,
             .clear_color = .{
                 sky_color[0],
                 sky_color[1],
@@ -400,6 +402,29 @@ pub const buffer = struct {
             };
 
             return .{ .num_elements = num_inst };
+        }
+    };
+
+    pub const particle_inst = struct {
+        pub const Layout = void;
+
+        pub fn create() !u32 {
+            return 0;
+        }
+
+        pub fn updateInfo() BufferInfo {
+            return .{
+                .first_element = 0,
+                .num_elements = switch (frame.state.clip) {
+                    .surface => 64,
+                    .descent => 64 +
+                        @as(u32, @intFromFloat((8192 - 64) *
+                            math.smoothstep(
+                                frame.state.clip_time / frame.state.clip_length,
+                            ))),
+                    else => 8192,
+                },
+            };
         }
     };
 };

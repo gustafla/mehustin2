@@ -74,6 +74,7 @@ pub const State = struct {
     clip: script.Clip,
     clip_time: f32,
     clip_remaining_time: f32,
+    clip_length: f32,
     camera: camera.State,
 };
 
@@ -178,10 +179,14 @@ pub fn resolve(time: f32) State {
     const clip_idx = scan(timeline.clip_track, time);
     const clip = clip_table[clip_idx];
     const clip_time = time - timeline.clip_track[clip_idx].t;
-    const clip_remaining_time = if (clip_idx + 1 < timeline.clip_track.len)
-        timeline.clip_track[clip_idx + 1].t - time
-    else
-        std.math.inf(f32);
+    const clip_remaining_time, const clip_length =
+        if (clip_idx + 1 < timeline.clip_track.len)
+            .{
+                timeline.clip_track[clip_idx + 1].t - time,
+                timeline.clip_track[clip_idx + 1].t - timeline.clip_track[clip_idx].t,
+            }
+        else
+            .{ std.math.inf(f32), std.math.inf(f32) };
 
     const cam_control_idx = scan(timeline.camera.control, time);
     const cam_control = timeline.camera.control[cam_control_idx];
@@ -208,7 +213,7 @@ pub fn resolve(time: f32) State {
                 0.0,
                 1.0,
             );
-            blend_alpha = t * t * (3.0 - 2.0 * t);
+            blend_alpha = math.smoothstep(t);
         }
     }
 
@@ -255,6 +260,7 @@ pub fn resolve(time: f32) State {
         .clip = clip,
         .clip_time = clip_time,
         .clip_remaining_time = clip_remaining_time,
+        .clip_length = clip_length,
         .camera = cam,
     };
 }
@@ -467,14 +473,14 @@ pub const text_instances = struct {
             var in_progress: f32 = 1.0;
             if (track.fade_in > 0 and local_t < track.fade_in) {
                 const t = local_t / track.fade_in;
-                in_progress = t * t * (3.0 - 2.0 * t);
+                in_progress = math.smoothstep(t);
             }
             var alpha: f32 = in_progress;
 
             // Fade out
             if (track.fade_out > 0 and remaining < track.fade_out) {
                 const t = remaining / track.fade_out;
-                alpha *= t * t * (3.0 - 2.0 * t);
+                alpha *= math.smoothstep(t);
             }
 
             var draw_text = full_text;

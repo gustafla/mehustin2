@@ -2,8 +2,8 @@
 .{
     .clip_track = .{
         .{ .t = 0.0, .id = "surface" },
-        .{ .t = 74.0, .id = "descent" },
-        .{ .t = 150.0, .id = "garden" },
+        .{ .t = 56.0, .id = "descent" },
+        .{ .t = 96.0, .id = "garden" },
         .{ .t = 260.0, .id = "currents" },
         .{ .t = 320.0, .id = "void" },
     },

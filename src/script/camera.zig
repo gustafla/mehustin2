@@ -64,7 +64,7 @@ pub const Segment = struct {
         if (blend > 0 and time >= blend_start) {
             const elapsed_in_blend = time - blend_start;
             const t = std.math.clamp(elapsed_in_blend / blend, 0.0, 1.0);
-            const alpha = t * t * (3.0 - 2.0 * t);
+            const alpha = math.smoothstep(t);
 
             const next_state = blend_target.evaluate(
                 blend_target_entry,
@@ -138,7 +138,7 @@ pub fn applyEffects(
         } else if (effect.fade_out > 0 and time_left < effect.fade_out) {
             intensity = time_left / effect.fade_out;
         }
-        intensity = intensity * intensity * (3.0 - 2.0 * intensity);
+        intensity = math.smoothstep(intensity);
 
         state = switch (effect.motion) {
             inline else => |param, tag| blk: {
@@ -394,7 +394,7 @@ pub const fns = struct {
         else
             std.math.clamp(t * p.speed, 0.0, 1.0);
 
-        const ease = ts * ts * (3.0 - 2.0 * ts);
+        const ease = math.smoothstep(ts);
 
         return .{
             .pos = e.pos,
@@ -417,7 +417,7 @@ pub const fns = struct {
         else
             std.math.clamp(t * p.speed, 0.0, 1.0);
 
-        const ease = ts * ts * (3.0 - 2.0 * ts);
+        const ease = math.smoothstep(ts);
 
         return .{
             .pos = e.pos,

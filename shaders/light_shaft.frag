@@ -30,7 +30,7 @@ void main() {
     noise += sin(angle * 4.0 + t * 2.5);
     noise += sin(angle * 5.0 - t * 1.4);
     noise = noise * 0.5 + 0.5;
-    noise = pow(noise, 6.0);
+    noise = pow(noise, 4.0);
     float alpha = noise * fade * 0.1;
     if (alpha < 0.01) {
         discard;

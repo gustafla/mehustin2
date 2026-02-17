@@ -182,6 +182,7 @@ fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
         .{ .layout = key.instance_layout, .input_rate = c.SDL_GPU_VERTEXINPUTRATE_INSTANCE },
     }) |buffer| {
         const Layout = buffer.layout orelse continue;
+        if (@sizeOf(Layout) == 0) continue;
 
         buffer_descs[num_buffers] = .{
             .slot = num_buffers,
@@ -353,6 +354,9 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         const num_elements = try buffer_src.create();
         const layout_size = @sizeOf(buffer_src.Layout);
         size.* = num_elements * layout_size;
+
+        // Zero-size buffers may be used for programmable instance counts
+        if (layout_size == 0) continue;
 
         log.debug("Initializing Buffer {s} ({}) with {s}", .{
             id.name, id.value, @typeName(buffer_src.Layout),
@@ -675,14 +679,16 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
 
         try buffer_src.updateData(@ptrCast(@alignCast(tbp[offset..][0..size])));
 
-        c.SDL_UploadToGPUBuffer(copy_pass, &.{
-            .transfer_buffer = update_transfer_buffer,
-            .offset = offset,
-        }, &.{
-            .buffer = buffer,
-            .offset = 0,
-            .size = size,
-        }, true);
+        if (size > 0) {
+            c.SDL_UploadToGPUBuffer(copy_pass, &.{
+                .transfer_buffer = update_transfer_buffer,
+                .offset = offset,
+            }, &.{
+                .buffer = buffer,
+                .offset = 0,
+                .size = size,
+            }, true);
+        }
 
         offset += size;
     }
@@ -842,13 +848,15 @@ fn renderGraph(
             var first_vertex: u32 = 0;
             if (drawcall.vertex_buffer) |name| {
                 const idx = @intFromEnum(@field(script.Buffer, name));
-                c.SDL_BindGPUVertexBuffers(
-                    render_pass,
-                    num_buffers,
-                    &.{ .buffer = buffers[idx], .offset = 0 },
-                    1,
-                );
-                num_buffers += 1;
+                if (buffer_sizes[idx] > 0) {
+                    c.SDL_BindGPUVertexBuffers(
+                        render_pass,
+                        num_buffers,
+                        &.{ .buffer = buffers[idx], .offset = 0 },
+                        1,
+                    );
+                    num_buffers += 1;
+                }
                 if (drawcall.num_vertices == null) {
                     num_vertices = buffer_infos[idx].num_elements;
                 }
@@ -860,13 +868,15 @@ fn renderGraph(
             var first_instance: u32 = 0;
             if (drawcall.instance_buffer) |name| {
                 const idx = @intFromEnum(@field(script.Buffer, name));
-                c.SDL_BindGPUVertexBuffers(
-                    render_pass,
-                    num_buffers,
-                    &.{ .buffer = buffers[idx], .offset = 0 },
-                    1,
-                );
-                num_buffers += 1;
+                if (buffer_sizes[idx] > 0) {
+                    c.SDL_BindGPUVertexBuffers(
+                        render_pass,
+                        num_buffers,
+                        &.{ .buffer = buffers[idx], .offset = 0 },
+                        1,
+                    );
+                    num_buffers += 1;
+                }
                 if (drawcall.num_instances == null) {
                     num_instances = buffer_infos[idx].num_elements;
                 }

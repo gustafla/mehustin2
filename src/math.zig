@@ -271,3 +271,8 @@ pub const quat = struct {
 pub fn radians(degrees: f32) f32 {
     return degrees * (std.math.pi / 180.0);
 }
+
+/// Hermite interpolation curve.
+pub fn smoothstep(t: f32) f32 {
+    return t * t * (3.0 - 2.0 * t);
+}
