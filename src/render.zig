@@ -351,12 +351,16 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     var update_transfer_buffer_size: u32 = 0;
     inline for (buffer_ids, &buffers, &buffer_sizes) |id, *buffer, *size| {
         const buffer_src = @field(script.buffer, id.name);
-        const num_elements = try buffer_src.create();
         const layout_size = @sizeOf(buffer_src.Layout);
-        size.* = num_elements * layout_size;
 
         // Zero-size buffers may be used for programmable instance counts
-        if (layout_size == 0) continue;
+        if (layout_size == 0) {
+            size.* = 0;
+            continue;
+        }
+
+        const num_elements = try buffer_src.create();
+        size.* = num_elements * layout_size;
 
         log.debug("Initializing Buffer {s} ({}) with {s}", .{
             id.name, id.value, @typeName(buffer_src.Layout),

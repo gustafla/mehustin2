@@ -247,6 +247,13 @@ pub const layout = struct {
         pub const locations = .{ 0, 4 };
     };
 
+    pub const VertexPosNormal = extern struct {
+        position: [3]f32,
+        normal: [3]f32,
+
+        pub const locations = .{ 0, 1 };
+    };
+
     pub const InstanceTRS = extern struct {
         pos_scale: [4]f32,
         rot_quat: [4]f32,
@@ -408,10 +415,6 @@ pub const buffer = struct {
     pub const particle_inst = struct {
         pub const Layout = void;
 
-        pub fn create() !u32 {
-            return 0;
-        }
-
         pub fn updateInfo() BufferInfo {
             return .{
                 .first_element = 0,
@@ -424,6 +427,107 @@ pub const buffer = struct {
                             ))),
                     else => 8192,
                 },
+            };
+        }
+    };
+
+    pub const jellyfish = struct {
+        pub const Layout = layout.VertexPosNormal;
+
+        pub const size_u = 12;
+        pub const size_v = 6;
+
+        pub fn create() !u32 {
+            return 1 + size_u * (size_v - 1);
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            dst[0] = .{
+                .position = .{ 0, 0.5, 0 },
+                .normal = .{ 0, 1, 0 },
+            };
+
+            for (1..size_v) |vu| {
+                const vf: f32 = @floatFromInt(vu);
+                const v = vf / (size_v * 2);
+
+                for (0..size_u) |uu| {
+                    const uf: f32 = @floatFromInt(uu);
+                    const u = uf / size_u;
+
+                    const sinv = @sin(v * std.math.pi) * 0.5;
+                    const x = @sin(u * std.math.pi * 2) * sinv;
+                    const z = @cos(u * std.math.pi * 2) * sinv;
+                    const y = @cos(v * std.math.pi) * 0.5;
+
+                    dst[1 + (vu - 1) * size_u + uu] = .{
+                        .position = .{ x, y, z },
+                        .normal = math.vec3.normalize(.{ x, y, z }),
+                    };
+                }
+            }
+
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
+
+    pub const jellyfish_ind = struct {
+        pub const Layout = u32;
+
+        pub fn create() !u32 {
+            return 3 * jellyfish.size_u + 6 * jellyfish.size_u * (jellyfish.size_v - 1);
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            for (0..jellyfish.size_u) |tri| {
+                dst[tri * 3 + 0] = 0;
+                dst[tri * 3 + 1] = @intCast(1 + tri);
+                dst[tri * 3 + 2] = @intCast(1 + ((1 + tri) % jellyfish.size_u));
+            }
+
+            const base = 3 * jellyfish.size_u;
+
+            for (1..jellyfish.size_v - 1) |vu| {
+                const ring = 6 * jellyfish.size_u * (vu - 1);
+
+                for (0..jellyfish.size_u) |uu| {
+                    const quad = 6 * uu;
+
+                    const v_0: u16 = @intCast(1 + (vu - 1) * jellyfish.size_u);
+                    const v_1: u16 = @intCast(1 + vu * jellyfish.size_u);
+                    const u_0: u16 = @intCast(uu);
+                    const u_1: u16 = @intCast((uu + 1) % jellyfish.size_u);
+                    dst[base + ring + quad + 0] = v_1 + u_0;
+                    dst[base + ring + quad + 1] = v_0 + u_1;
+                    dst[base + ring + quad + 2] = v_0 + u_0;
+                    dst[base + ring + quad + 3] = v_1 + u_0;
+                    dst[base + ring + quad + 4] = v_1 + u_1;
+                    dst[base + ring + quad + 5] = v_0 + u_1;
+                }
+            }
+
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
+
+    pub const jellyfish_inst = struct {
+        pub const Layout = layout.InstanceTRS;
+
+        pub fn create() !u32 {
+            return 1;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            dst[0] = .{
+                .pos_scale = .{ 0, -1000, 0, 3 },
+                .rot_quat = math.quat.IDENTITY,
+            };
+            return .{
+                .num_elements = @intCast(dst.len),
             };
         }
     };

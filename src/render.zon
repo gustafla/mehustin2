@@ -19,10 +19,10 @@
     .passes = .{
         // Main render pass
         .{
-            .condition = .{.surface},
             .drawcalls = .{
                 // Water surface
                 .{
+                    .condition = .{.surface},
                     .pipelines = .{.{
                         .vert = "water_surface.vert",
                         .frag = "water_surface.frag",
@@ -47,6 +47,7 @@
                 },
                 // Light shafts
                 .{
+                    .condition = .{.surface},
                     .pipelines = .{.{
                         .vert = "light_shaft.vert",
                         .frag = "light_shaft.frag",
@@ -64,37 +65,19 @@
                     .instance_buffer = "light_shaft_inst",
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
-                // Particles
+                // Jellyfish
                 .{
+                    .condition = .{.garden},
                     .pipelines = .{.{
-                        .vert = "particle.vert",
-                        .frag = "particle.frag",
-                        .depth_test = .{ .write = false },
-                        .blend_states = .{.{
-                            .enable = true,
-                            .src_color = .src_alpha,
-                            .dst_color = .one,
-                        }},
+                        .vert = "jellyfish.vert",
+                        .frag = "jellyfish.frag",
+                        .primitive_type = .trianglelist,
+                        .rasterizer_state = .{ .cull_mode = .none },
+                        .depth_test = .{ .enable = true },
                     }},
-                    .num_vertices = 4,
-                    .instance_buffer = "particle_inst",
-                },
-            },
-            .color_targets = .{.{
-                .target = .{ .index = 0 },
-                .resolve_target = .{ .index = 1 },
-                .store_op = .resolve,
-            }},
-            .depth_target = .{ .target = 0, .store_op = .dont_care },
-        },
-        .{
-            .condition = .{ .descent, .garden, .currents, .void },
-            .drawcalls = .{
-                .{
-                    .pipelines = .{.{
-                        .frag = "water_volume.frag",
-                        .depth_test = .{},
-                    }},
+                    .index_buffer = "jellyfish_ind",
+                    .vertex_buffer = "jellyfish",
+                    .instance_buffer = "jellyfish_inst",
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
                 // Particles
