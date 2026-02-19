@@ -543,23 +543,27 @@ pub const buffer = struct {
 
         pub fn updateData(dst: []Layout) !void {
             for (dst, 0..) |*inst, i| {
-                const t = @as(f32, @floatFromInt(i)) / n;
                 const dt = 1.0 / 60.0;
                 const pos0 = position(i, frame.time);
                 const pos1 = position(i, frame.time + dt);
                 inst.* = .{
                     .pos_scale = .{
                         pos0[0],
-                        pos0[1] - 1000.0,
+                        pos0[1],
                         pos0[2],
-                        5 + @sin(t),
+                        scale(i),
                     },
                     .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.normalize(pos1 - pos0)),
                 };
             }
         }
 
-        fn position(i: usize, time: f32) Vec3 {
+        pub fn scale(i: usize) f32 {
+            const t = @as(f32, @floatFromInt(i)) / n;
+            return 5 + @sin(t);
+        }
+
+        pub fn position(i: usize, time: f32) Vec3 {
             const t = time * 0.1;
             const o: f32 = @floatFromInt(i);
             var pos = origins[i];
@@ -568,7 +572,15 @@ pub const buffer = struct {
             pos[1] += @cos(o * 2 + t * 0.143) + @sin(pos[0] * 0.1);
             pos[2] += @sin(o * 1 + t * 0.253) + @sin(pos[1] * 0.23);
 
-            return pos * @as(Vec3, @splat(20.0));
+            const offset: Vec3 = .{ 0, -1000, 0 };
+            return pos * @as(Vec3, @splat(20.0)) + offset;
+        }
+
+        pub fn updateInfo() BufferInfo {
+            const t = std.math.clamp((frame.state.clip_time * 16) / frame.state.clip_length, 0, 1);
+            return .{
+                .num_elements = @intFromFloat(n * math.smoothstep(t)),
+            };
         }
     };
 };
@@ -623,14 +635,20 @@ pub const storage_buffer = struct {
 
         pub fn updateData(dst: []u8) !void {
             const header: Header = .{
-                .count = 1,
+                .count = @intCast(buffer.jellyfish_inst.updateInfo().num_elements),
             };
 
-            const lights: []const Element = &.{
-                .{ .position = .{ 0, 2, 0 }, .radius = 0.5, .color = .{ 1, 0, 0 }, .brightness = 5 },
-            };
+            var lights: [max_lights]Element = undefined;
+            for (lights[0..header.count], 0..) |*light, i| {
+                light.* = .{
+                    .position = buffer.jellyfish_inst.position(i, frame.time),
+                    .radius = 0.5,
+                    .color = .{ 0.5, 0.7, 1.0 },
+                    .brightness = buffer.jellyfish_inst.scale(i),
+                };
+            }
 
-            util.writeSSBO(Header, Element, dst, header, lights);
+            util.writeSSBO(Header, Element, dst, header, &lights);
         }
     };
 
