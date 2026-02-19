@@ -3,8 +3,13 @@
 
 #include <lib/pbr.glsl>
 
+#ifndef SUN_COLOR
 #define SUN_COLOR (vec3(1, 0.9, 0.8) * brightness)
+#endif
+
+#ifndef SKY_COLOR
 #define SKY_COLOR (sky_color.rgb * brightness * 3)
+#endif
 
 const float water_ior = 1.333;
 const vec3 k_sigma_a = vec3(0.19, 0.04, 0.03) * 0.1;

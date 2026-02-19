@@ -13,16 +13,14 @@ layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
     float u_time_r;
 };
 
-layout(std430, set = 2, binding = 0) readonly buffer WaterData {
-    vec4 sky_color;
-    vec3 sun_dir;
-    float brightness;
-};
-
+#define SUN_COLOR vec3(0)
+#define SKY_COLOR vec3(0)
 #include <lib/water_common.glsl>
 
 void main() {
-    // vec3 color = underwaterFog(vec3(1.0), 1e9, in_cam_pos, normalize(in_pos), sun_dir);
-    // out_color = vec4(color, 1.0);
-    out_color = vec4(in_normal, 1.0);
+    float v = 1.0 - in_local_pos.y * 2.0;
+    vec3 color = vec3(pow(v * cos(v * 3.14 * 3) * 0.333 + 1.0, 6.0));
+    color.g *= color.g;
+    color.b *= color.b * color.b;
+    out_color = vec4(color * exp(-k_sigma_t * length(in_pos)), 1.0);
 }

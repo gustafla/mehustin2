@@ -434,7 +434,7 @@ pub const buffer = struct {
     pub const jellyfish = struct {
         pub const Layout = layout.VertexPosNormal;
 
-        pub const size_u = 12;
+        pub const size_u = 24;
         pub const size_v = 6;
 
         pub fn create() !u32 {
@@ -517,18 +517,58 @@ pub const buffer = struct {
     pub const jellyfish_inst = struct {
         pub const Layout = layout.InstanceTRS;
 
+        const n = 32;
+        var origins: [n]Vec3 = undefined;
+
         pub fn create() !u32 {
-            return 1;
+            return n;
         }
 
         pub fn init(dst: []Layout) !BufferInfo {
-            dst[0] = .{
-                .pos_scale = .{ 0, -1000, 0, 3 },
-                .rot_quat = math.quat.IDENTITY,
-            };
-            return .{
-                .num_elements = @intCast(dst.len),
-            };
+            _ = dst;
+
+            var rng: std.Random.Xoshiro256 = .init(123);
+            const r = rng.random();
+            for (&origins) |*pos| {
+                const cube: Vec3 = .{
+                    std.Random.float(r, f32),
+                    std.Random.float(r, f32),
+                    std.Random.float(r, f32),
+                };
+                pos.* = cube * @as(Vec3, @splat(2.0)) - @as(Vec3, @splat(1.0));
+            }
+
+            return .{ .num_elements = n };
+        }
+
+        pub fn updateData(dst: []Layout) !void {
+            for (dst, 0..) |*inst, i| {
+                const t = @as(f32, @floatFromInt(i)) / n;
+                const dt = 1.0 / 60.0;
+                const pos0 = position(i, frame.time);
+                const pos1 = position(i, frame.time + dt);
+                inst.* = .{
+                    .pos_scale = .{
+                        pos0[0],
+                        pos0[1] - 1000.0,
+                        pos0[2],
+                        5 + @sin(t),
+                    },
+                    .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.normalize(pos1 - pos0)),
+                };
+            }
+        }
+
+        fn position(i: usize, time: f32) Vec3 {
+            const t = time * 0.1;
+            const o: f32 = @floatFromInt(i);
+            var pos = origins[i];
+
+            pos[0] += @sin(o * 3 + t * 0.453);
+            pos[1] += @cos(o * 2 + t * 0.143) + @sin(pos[0] * 0.1);
+            pos[2] += @sin(o * 1 + t * 0.253) + @sin(pos[1] * 0.23);
+
+            return pos * @as(Vec3, @splat(20.0));
         }
     };
 };

@@ -78,7 +78,6 @@
                     .index_buffer = "jellyfish_ind",
                     .vertex_buffer = "jellyfish",
                     .instance_buffer = "jellyfish_inst",
-                    .fragment_storage_buffers = .{"water_parameters"},
                 },
                 // Particles
                 .{
