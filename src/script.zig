@@ -432,7 +432,7 @@ pub const buffer = struct {
     };
 
     pub const jellyfish = struct {
-        pub const Layout = layout.VertexPosNormal;
+        pub const Layout = layout.VertexPos;
 
         pub const size_u = 24;
         pub const size_v = 6;
@@ -442,10 +442,7 @@ pub const buffer = struct {
         }
 
         pub fn init(dst: []Layout) !BufferInfo {
-            dst[0] = .{
-                .position = .{ 0, 0.5, 0 },
-                .normal = .{ 0, 1, 0 },
-            };
+            dst[0] = .{ .position = .{ 0, 0.5, 0 } };
 
             for (1..size_v) |vu| {
                 const vf: f32 = @floatFromInt(vu);
@@ -460,10 +457,7 @@ pub const buffer = struct {
                     const z = @cos(u * std.math.pi * 2) * sinv;
                     const y = @cos(v * std.math.pi) * 0.5;
 
-                    dst[1 + (vu - 1) * size_u + uu] = .{
-                        .position = .{ x, y, z },
-                        .normal = math.vec3.normalize(.{ x, y, z }),
-                    };
+                    dst[1 + (vu - 1) * size_u + uu] = .{ .position = .{ x, y, z } };
                 }
             }
 
