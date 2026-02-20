@@ -306,7 +306,14 @@
                         .{
                             .vert = "text.vert",
                             .frag = "text.frag",
-                            .blend_states = .{.{ .enable = true }},
+                            .blend_states = .{.{
+                                .enable = true,
+                                // .src_color = .one,
+                                // .dst_color = .one_minus_dst_color,
+                                // .color_op = .add,
+                                // .src_alpha = .one_minus_src_alpha,
+                                // .dst_alpha = .one_minus_dst_alpha,
+                            }},
                         },
                     },
                     .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},

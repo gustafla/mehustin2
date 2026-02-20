@@ -47,6 +47,10 @@ pub const TextSegment = struct {
     scale: f32 = 0.1, // Fraction of screen height
     origin: TextOrigin = .top_left,
     color: Vec4 = @splat(1),
+    effect: enum(u8) {
+        none,
+        uv_ripple,
+    } = .none,
     anim: ?union(enum) {
         fade: Vec4, // Fade from a color value
         slide: Vec2, // Slide from an NDC position
@@ -522,7 +526,7 @@ pub const text_instances = struct {
                 pos,
                 color,
                 track.font,
-                0, // No effects for now
+                @intFromEnum(track.effect),
             );
         }
     }
