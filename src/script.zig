@@ -511,7 +511,7 @@ pub const buffer = struct {
     pub const jellyfish_inst = struct {
         pub const Layout = layout.InstanceTRS;
 
-        const n = 32;
+        pub const n = 32;
         var origins: [n]Vec3 = undefined;
 
         pub fn create() !u32 {
@@ -577,6 +577,50 @@ pub const buffer = struct {
             };
         }
     };
+
+    pub const seafloor = struct {
+        pub const Layout = layout.VertexPosNormal;
+
+        pub var mesh: *c.par_shapes_mesh = undefined;
+        pub var nverts: u32 = undefined;
+        pub var ninds: u32 = undefined;
+
+        pub fn create() !u32 {
+            mesh = c.par_shapes_create_plane(1, 1);
+            c.par_shapes_rotate(mesh, -std.math.pi / 2.0, @ptrCast(&math.vec3.XUP));
+            c.par_shapes_scale(mesh, 1000, 1000, 1000);
+            c.par_shapes_translate(mesh, -500, -1004, 500);
+            nverts = @intCast(mesh.npoints);
+            ninds = @intCast(mesh.ntriangles * 3);
+            return nverts;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            util.interleave(Layout, dst, .{
+                mesh.points[0 .. nverts * 3],
+                mesh.normals[0 .. nverts * 3],
+            });
+            return .{
+                .num_elements = nverts,
+            };
+        }
+    };
+
+    pub const seafloor_ind = struct {
+        pub const Layout = c.PAR_SHAPES_T;
+
+        pub fn create() !u32 {
+            return seafloor.ninds;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            @memcpy(dst, seafloor.mesh.triangles);
+            c.par_shapes_free_mesh(seafloor.mesh);
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
 };
 
 pub const Buffer = std.meta.DeclEnum(buffer);
@@ -610,15 +654,15 @@ pub const storage_buffer = struct {
 
     pub const point_lights = struct {
         pub const Header = extern struct {
+            ambient: [3]f32,
             count: u32,
-            _pad: [3]u32 = @splat(0),
         };
 
         pub const Element = extern struct {
             position: [3]f32,
-            radius: f32,
+            _pad0: f32 = 0.0,
             color: [3]f32,
-            brightness: f32,
+            _pad1: f32 = 0.0,
         };
 
         const max_lights = config.max_lights;
@@ -628,17 +672,22 @@ pub const storage_buffer = struct {
         }
 
         pub fn updateData(dst: []u8) !void {
+            const num_lights: u32 = @intCast(buffer.jellyfish_inst.updateInfo().num_elements);
+            const base = 1.333;
+            const color: Vec3 = .{ base, base * base, base * base * base };
+            const ambient_factor = @as(f32, @floatFromInt(num_lights)) /
+                @as(f32, @floatFromInt(buffer.jellyfish_inst.n));
+
             const header: Header = .{
-                .count = @intCast(buffer.jellyfish_inst.updateInfo().num_elements),
+                .ambient = color * @as(Vec3, @splat(ambient_factor * 0.1)),
+                .count = num_lights,
             };
 
             var lights: [max_lights]Element = undefined;
             for (lights[0..header.count], 0..) |*light, i| {
                 light.* = .{
                     .position = buffer.jellyfish_inst.position(i, frame.time),
-                    .radius = 0.5,
-                    .color = .{ 0.5, 0.7, 1.0 },
-                    .brightness = buffer.jellyfish_inst.scale(i),
+                    .color = color * @as(Vec3, @splat(buffer.jellyfish_inst.scale(i))),
                 };
             }
 

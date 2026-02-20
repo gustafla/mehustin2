@@ -44,6 +44,10 @@
             .url = "git+https://github.com/nothings/stb.git#f58f558c120e9b32c217290b80bad1a0729fbb2c",
             .hash = "N-V-__8AAO8tTgBJoAbyWoWhdnNsGrx_ql6PT0ZLfoz2ms6b",
         },
+        .par = .{
+            .url = "git+https://github.com/prideout/par#b3571fdf83518d921af3b69d13ea0cb8749147aa",
+            .hash = "N-V-__8AALTJ3wB-ghbZfn2Z1wjc7OuwddGMVwOncg7BHs28",
+        },
     },
     .paths = .{
         "build.zig",

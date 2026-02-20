@@ -37,6 +37,37 @@
                     },
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
+                // Jellyfish
+                .{
+                    .condition = .{.garden},
+                    .pipelines = .{.{
+                        .vert = "jellyfish.vert",
+                        .frag = "jellyfish.frag",
+                        .primitive_type = .trianglelist,
+                        .rasterizer_state = .{ .cull_mode = .none },
+                        .depth_test = .{ .enable = true },
+                    }},
+                    .index_buffer = "jellyfish_ind",
+                    .vertex_buffer = "jellyfish",
+                    .instance_buffer = "jellyfish_inst",
+                },
+                // Seafloor
+                .{
+                    .condition = .{ .descent, .garden },
+                    .pipelines = .{.{
+                        .vert = "static_tris.vert",
+                        .frag = "diffuse.frag",
+                        .primitive_type = .trianglelist,
+                        // .rasterizer_state = .{ .cull_mode = .none },
+                        .depth_test = .{ .enable = true },
+                    }},
+                    .index_buffer = "seafloor_ind",
+                    .vertex_buffer = "seafloor",
+                    .fragment_storage_buffers = .{
+                        "water_parameters",
+                        "point_lights",
+                    },
+                },
                 // Water volume below surface
                 .{
                     .pipelines = .{.{
@@ -64,20 +95,6 @@
                     .vertex_buffer = "light_shaft",
                     .instance_buffer = "light_shaft_inst",
                     .fragment_storage_buffers = .{"water_parameters"},
-                },
-                // Jellyfish
-                .{
-                    .condition = .{.garden},
-                    .pipelines = .{.{
-                        .vert = "jellyfish.vert",
-                        .frag = "jellyfish.frag",
-                        .primitive_type = .trianglelist,
-                        .rasterizer_state = .{ .cull_mode = .none },
-                        .depth_test = .{ .enable = true },
-                    }},
-                    .index_buffer = "jellyfish_ind",
-                    .vertex_buffer = "jellyfish",
-                    .instance_buffer = "jellyfish_inst",
                 },
                 // Particles
                 .{

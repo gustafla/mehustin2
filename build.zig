@@ -88,21 +88,31 @@ pub fn build(b: *Build) void {
     exe_mod.addIncludePath(stb_dep.path("."));
     render_mod.addIncludePath(stb_dep.path("."));
 
+    // Get the par dependency
+    const par_dep = b.dependency("par", .{});
+    exe_mod.addIncludePath(par_dep.path("."));
+    render_mod.addIncludePath(par_dep.path("."));
+
     // Add stb_vorbis to exe
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
 
-    // Generate stb_image.c, stb_truetype.c
-    const stb_write = b.addWriteFiles();
-    const stb_image_c = stb_write.add("stb_image.c",
+    // Generate C files for C header libraries
+    const c_write = b.addWriteFiles();
+    const stb_image_c = c_write.add("stb_image.c",
         \\#define STB_IMAGE_IMPLEMENTATION
         \\#define STBI_NO_FAILURE_STRINGS
         \\#define STBI_ASSERT(x)
         \\#include <stb_image.h>
         \\
     );
-    const stb_truetype_c = stb_write.add("stb_truetype.c",
+    const stb_truetype_c = c_write.add("stb_truetype.c",
         \\#define STB_TRUETYPE_IMPLEMENTATION
         \\#include <stb_truetype.h>
+        \\
+    );
+    const par_shapes_c = c_write.add("par_shapes.c",
+        \\#define PAR_SHAPES_IMPLEMENTATION
+        \\#include <par_shapes.h>
         \\
     );
 
@@ -114,6 +124,7 @@ pub fn build(b: *Build) void {
         render_mod.addOptions("options", options);
         render_mod.addCSourceFile(.{ .file = stb_image_c });
         render_mod.addCSourceFile(.{ .file = stb_truetype_c });
+        render_mod.addCSourceFile(.{ .file = par_shapes_c });
 
         const render = b.addLibrary(.{
             .name = "render",
@@ -126,6 +137,7 @@ pub fn build(b: *Build) void {
     } else {
         exe_mod.addCSourceFile(.{ .file = stb_image_c });
         exe_mod.addCSourceFile(.{ .file = stb_truetype_c });
+        exe_mod.addCSourceFile(.{ .file = par_shapes_c });
     }
 
     // Add target triple to executable name if target isn't native

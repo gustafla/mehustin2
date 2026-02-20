@@ -10,12 +10,12 @@ float phaseHenyeyGreenstein(float cos_theta, float g) {
 }
 
 // Schlick's approximation of the fresnel factor.
-float fresnelSchlick(float cosTheta, float f0) {
-    return f0 + (1. - f0) * pow(1.0 - cosTheta, 5.);
+float fresnelSchlick(float cos_theta, float f0) {
+    return f0 + (1. - f0) * pow(1.0 - cos_theta, 5.);
 }
 
-vec3 fresnelSchlick(float cosTheta, vec3 f0) {
-    return f0 + (1. - f0) * pow(1.0 - cosTheta, 5.);
+vec3 fresnelSchlick(float cos_theta, vec3 f0) {
+    return f0 + (1. - f0) * pow(1.0 - cos_theta, 5.);
 }
 
 #endif

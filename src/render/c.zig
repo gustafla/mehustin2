@@ -4,4 +4,5 @@ pub const c = @cImport({
     @cInclude("SDL3/SDL_timer.h");
     @cInclude("stb_image.h");
     @cInclude("stb_truetype.h");
+    @cInclude("par_shapes.h");
 });
