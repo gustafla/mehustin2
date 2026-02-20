@@ -62,10 +62,11 @@
         .control = .{
             .{ .t = 0, .i = 0 },
             .{ .t = 112, .i = 1 },
-            .{ .t = 128, .i = 2, .target_lock = .jellyfish0 },
-            .{ .t = 144, .i = 2, .target_lock = .jellyfish1 },
-            .{ .t = 160, .i = 2, .target_lock = .jellyfish2 },
-            .{ .t = 176, .i = 2, .target_lock = .jellyfish3 },
+            .{ .t = 128, .i = 2, .position_lock = .jellyfish0, .target_lock = .jellyfish0 },
+            .{ .t = 144, .i = 3, .position_lock = .jellyfish1, .target_lock = .jellyfish1 },
+            .{ .t = 160, .i = 4, .position_lock = .jellyfish2, .target_lock = .jellyfish2 },
+            .{ .t = 176, .i = 2, .position_lock = .jellyfish3, .target_lock = .jellyfish3 },
+            .{ .t = 192, .i = 5 },
         },
         .tracks = .{
             .{ // TRACK 0
@@ -97,7 +98,35 @@
             .{ // TRACK 2
                 .{
                     .t = 0,
-                    .entry = .{ .pos = .{ 40, -990, 20 }, .target = .{ 0, -1000, 0 }, .fov = 90 },
+                    .entry = .{ .pos = .{ 14, 16, 12 }, .target = .{ 0, 0, 0 }, .fov = 90 },
+                    .motion = .{.{
+                        .orbit = .{ .axis = .{ 0.1, 0.6, 0.4 }, .speed = 0.12 },
+                    }},
+                },
+            },
+            .{ // TRACK 3
+                .{
+                    .t = 0,
+                    .entry = .{ .pos = .{ 5, 12, 6 }, .target = .{ 0, 0, 0 }, .fov = 90 },
+                    .motion = .{.{
+                        .circle = .{ .axis = .{ 1.1, 0.6, -0.4 }, .speed = -0.1 },
+                    }},
+                },
+            },
+            .{ // TRACK 4
+                .{
+                    .t = 0,
+                    .entry = .{ .pos = .{ -9, 10, 8 }, .target = .{ 0, 0, 0 }, .fov = 90 },
+                    .motion = .{.{
+                        .circle = .{ .axis = .{ 0.1, 1.0, -0.1 }, .speed = 0.01 },
+                    }},
+                },
+            },
+            .{ // TRACK 5
+                .{
+                    .t = 0,
+                    .entry = .{ .pos = .{ -32, -980, -32 }, .target = .{ 0, -1000, 0 }, .fov = 90 },
+                    .motion = .{.{ .circle = .{ .axis = .{ 0, 1, -0.3 }, .speed = -0.04 } }},
                 },
             },
         },

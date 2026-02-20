@@ -548,12 +548,16 @@ pub const buffer = struct {
                     .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.normalize(pos1 - pos0)),
                 };
             }
-            inline for (@typeInfo(anchor).@"struct".decls, 0..) |decl, i| {
+
+            var rng: std.Random.Xoshiro256 = .init(4);
+            const r = rng.random();
+            inline for (@typeInfo(anchor).@"struct".decls) |decl| {
                 comptime if (!std.mem.startsWith(u8, decl.name, "jellyfish")) continue;
+                const index = std.Random.intRangeLessThanBiased(r, usize, 0, n);
                 @field(anchor, decl.name) = .{
-                    dst[i].pos_scale[0],
-                    dst[i].pos_scale[1],
-                    dst[i].pos_scale[2],
+                    dst[index].pos_scale[0],
+                    dst[index].pos_scale[1],
+                    dst[index].pos_scale[2],
                 };
             }
         }
@@ -573,7 +577,7 @@ pub const buffer = struct {
             pos[2] += @sin(o * 1 + t * 0.253) + @sin(pos[1] * 0.23);
 
             const offset: Vec3 = .{ 40, -970, 40 };
-            pos = pos * @as(Vec3, @splat(50.0)) + offset;
+            pos = pos * @as(Vec3, .{ 50, 20, 50 }) + offset;
             return .{
                 pos[0],
                 @max(pos[1], seafloor.y + scale(i)),
@@ -716,7 +720,7 @@ pub const storage_buffer = struct {
                 @as(f32, @floatFromInt(buffer.jellyfish_inst.n));
 
             const header: Header = .{
-                .ambient = color * @as(Vec3, @splat(ambient_factor * 0.1)),
+                .ambient = color * @as(Vec3, @splat(ambient_factor * 0.2)),
                 .count = num_lights,
             };
 
