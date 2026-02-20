@@ -61,6 +61,7 @@ pub fn build(b: *Build) void {
         .target = target,
         .optimize = optimize,
         .strip = release_build,
+        .sanitize_c = .off,
     });
 
     // Create a module for render.zig
@@ -69,6 +70,7 @@ pub fn build(b: *Build) void {
         .target = target,
         .optimize = optimize,
         .strip = false,
+        .sanitize_c = .off,
     });
 
     // Export build options defined earlier into modules

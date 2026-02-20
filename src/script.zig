@@ -119,12 +119,6 @@ pub const frame = struct {
                 .clip_remaining_time = state.clip_remaining_time,
             },
             .clip = state.clip,
-            .clear_color = .{
-                sky_color[0],
-                sky_color[1],
-                sky_color[2],
-                1,
-            },
         };
     }
 };
@@ -566,8 +560,13 @@ pub const buffer = struct {
             pos[1] += @cos(o * 2 + t * 0.143) + @sin(pos[0] * 0.1);
             pos[2] += @sin(o * 1 + t * 0.253) + @sin(pos[1] * 0.23);
 
-            const offset: Vec3 = .{ 0, -1000, 0 };
-            return pos * @as(Vec3, @splat(20.0)) + offset;
+            const offset: Vec3 = .{ 40, -970, 40 };
+            pos = pos * @as(Vec3, @splat(50.0)) + offset;
+            return .{
+                pos[0],
+                @max(pos[1], seafloor.y + scale(i)),
+                pos[2],
+            };
         }
 
         pub fn updateInfo() BufferInfo {
@@ -580,6 +579,7 @@ pub const buffer = struct {
 
     pub const seafloor = struct {
         pub const Layout = layout.VertexPosNormal;
+        pub const y = -1004;
 
         pub var mesh: *c.par_shapes_mesh = undefined;
         pub var nverts: u32 = undefined;
@@ -588,8 +588,30 @@ pub const buffer = struct {
         pub fn create() !u32 {
             mesh = c.par_shapes_create_plane(1, 1);
             c.par_shapes_rotate(mesh, -std.math.pi / 2.0, @ptrCast(&math.vec3.XUP));
-            c.par_shapes_scale(mesh, 1000, 1000, 1000);
-            c.par_shapes_translate(mesh, -500, -1004, 500);
+            c.par_shapes_scale(mesh, 10000, 1, 10000);
+            c.par_shapes_translate(mesh, -5000, y, 5000);
+
+            const nrocks = 32;
+            var rng: std.Random.Xoshiro256 = .init(3);
+            const r = rng.random();
+            for (0..nrocks) |i| {
+                const rock = c.par_shapes_create_rock(@intCast(i), 3);
+                const scale = std.math.pow(f32, std.Random.float(r, f32) * 4, 2);
+                c.par_shapes_scale(
+                    rock,
+                    scale + std.Random.float(r, f32),
+                    scale + std.Random.float(r, f32) * 10,
+                    scale + std.Random.float(r, f32),
+                );
+                c.par_shapes_translate(
+                    rock,
+                    std.Random.float(r, f32) * 200,
+                    y,
+                    std.Random.float(r, f32) * 200,
+                );
+                c.par_shapes_merge_and_free(mesh, rock);
+            }
+
             nverts = @intCast(mesh.npoints);
             ninds = @intCast(mesh.ntriangles * 3);
             return nverts;
@@ -672,7 +694,10 @@ pub const storage_buffer = struct {
         }
 
         pub fn updateData(dst: []u8) !void {
-            const num_lights: u32 = @intCast(buffer.jellyfish_inst.updateInfo().num_elements);
+            const num_lights: u32 = switch (frame.state.clip) {
+                .garden => @intCast(buffer.jellyfish_inst.updateInfo().num_elements),
+                else => 0,
+            };
             const base = 1.333;
             const color: Vec3 = .{ base, base * base, base * base * base };
             const ambient_factor = @as(f32, @floatFromInt(num_lights)) /

@@ -70,6 +70,7 @@
                 },
                 // Water volume below surface
                 .{
+                    .condition = .{ .surface, .descent },
                     .pipelines = .{.{
                         .frag = "water_volume.frag",
                         .depth_test = .{},
