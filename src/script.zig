@@ -31,6 +31,10 @@ pub fn init(init_gpa: Allocator) void {
 
 pub const anchor = struct {
     pub var origin: Vec3 = @splat(0);
+    pub var jellyfish0: Vec3 = @splat(0);
+    pub var jellyfish1: Vec3 = @splat(0);
+    pub var jellyfish2: Vec3 = @splat(0);
+    pub var jellyfish3: Vec3 = @splat(0);
 };
 
 pub const Anchor = std.meta.DeclEnum(anchor);
@@ -544,6 +548,14 @@ pub const buffer = struct {
                     .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.normalize(pos1 - pos0)),
                 };
             }
+            inline for (@typeInfo(anchor).@"struct".decls, 0..) |decl, i| {
+                comptime if (!std.mem.startsWith(u8, decl.name, "jellyfish")) continue;
+                @field(anchor, decl.name) = .{
+                    dst[i].pos_scale[0],
+                    dst[i].pos_scale[1],
+                    dst[i].pos_scale[2],
+                };
+            }
         }
 
         pub fn scale(i: usize) f32 {
@@ -605,9 +617,9 @@ pub const buffer = struct {
                 );
                 c.par_shapes_translate(
                     rock,
-                    std.Random.float(r, f32) * 200,
+                    std.Random.float(r, f32) * 200 - 100,
                     y,
-                    std.Random.float(r, f32) * 200,
+                    std.Random.float(r, f32) * 200 - 100,
                 );
                 c.par_shapes_merge_and_free(mesh, rock);
             }
