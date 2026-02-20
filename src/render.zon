@@ -1,13 +1,13 @@
 .{
     .color_targets = .{
-        .{ .format = .r11g11b10_ufloat, .sample_count = .@"4" },
-        .{ .format = .r11g11b10_ufloat }, // MSAA Resolve Texture
-        .{ .format = .r11g11b10_ufloat, .q = 2 }, // Kawase Bloom Result
-        .{ .format = .r11g11b10_ufloat, .q = 4 },
-        .{ .format = .r11g11b10_ufloat, .q = 8 },
-        .{ .format = .r11g11b10_ufloat, .q = 16 },
-        .{ .format = .r11g11b10_ufloat, .q = 32 },
-        .{ .format = .r11g11b10_ufloat, .q = 64 },
+        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
+        .{ .format = .r16g16b16a16_float }, // MSAA Resolve Texture
+        .{ .format = .r16g16b16a16_float, .q = 2 }, // Kawase Bloom Result
+        .{ .format = .r16g16b16a16_float, .q = 4 },
+        .{ .format = .r16g16b16a16_float, .q = 8 },
+        .{ .format = .r16g16b16a16_float, .q = 16 },
+        .{ .format = .r16g16b16a16_float, .q = 32 },
+        .{ .format = .r16g16b16a16_float, .q = 64 },
     },
     .depth_targets = .{
         .{ .format = .d16_unorm, .sample_count = .@"4" },
