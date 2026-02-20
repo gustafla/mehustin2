@@ -7,6 +7,7 @@
   - [ ] src/math.zig
   - [ ] src/script/camera.zig
   - [ ] src/script/timeline.zig
+- [ ] Replace BufferInfo return value with an optional pointer argument to it
 
 # Backlog
 
