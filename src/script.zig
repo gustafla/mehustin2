@@ -509,7 +509,7 @@ pub const buffer = struct {
     pub const jellyfish_inst = struct {
         pub const Layout = layout.InstanceTRS;
 
-        pub const n = 32;
+        pub const n = 16;
         var origins: [n]Vec3 = undefined;
 
         pub fn create() !u32 {

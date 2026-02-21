@@ -152,7 +152,9 @@ pub const BlendState = struct {
     src_alpha: BlendFactor = .one,
     dst_alpha: BlendFactor = .one_minus_src_alpha,
     alpha_op: BlendOp = .add,
+    color_write_mask: u8 = 0,
     enable: bool = false,
+    enable_color_write_mask: bool = false,
 
     pub fn toSDL(self: @This()) c.SDL_GPUColorTargetBlendState {
         return .{
@@ -162,8 +164,9 @@ pub const BlendState = struct {
             .src_alpha_blendfactor = @intFromEnum(self.src_alpha),
             .dst_alpha_blendfactor = @intFromEnum(self.dst_alpha),
             .alpha_blend_op = @intFromEnum(self.alpha_op),
+            .color_write_mask = self.color_write_mask,
             .enable_blend = self.enable,
-            .enable_color_write_mask = false,
+            .enable_color_write_mask = self.enable_color_write_mask,
         };
     }
 };

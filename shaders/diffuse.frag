@@ -11,18 +11,14 @@ struct PointLight {
     vec3 color;
 };
 
-layout(std430, set = 2, binding = 0) readonly buffer WaterData {
-    vec4 sky_color;
-    vec3 sun_dir;
-    float brightness;
-};
-
-layout(std430, set = 2, binding = 1) readonly buffer PointLightData {
+layout(std430, set = 2, binding = 0) readonly buffer PointLightData {
     vec3 ambient;
     uint n_lights;
     PointLight lights[];
 };
 
+#define SUN_COLOR vec3(0)
+#define SKY_COLOR vec3(0)
 #include <lib/water_common.glsl>
 
 void main() {
@@ -41,5 +37,5 @@ void main() {
         color += light.color * cos_theta * a;
     }
 
-    out_color = underwaterFog(color, dist, in_cam_pos, view_dir, sun_dir);
+    out_color = color * exp(-k_sigma_t * dist);
 }
