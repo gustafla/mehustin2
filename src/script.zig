@@ -607,23 +607,23 @@ pub const buffer = struct {
             c.par_shapes_scale(mesh, 10000, 1, 10000);
             c.par_shapes_translate(mesh, -5000, y, 5000);
 
-            const nrocks = 32;
-            var rng: std.Random.Xoshiro256 = .init(3);
+            const nrocks = 16;
+            var rng: std.Random.Xoshiro256 = .init(11);
             const r = rng.random();
             for (0..nrocks) |i| {
                 const rock = c.par_shapes_create_rock(@intCast(i), 3);
-                const scale = std.math.pow(f32, std.Random.float(r, f32) * 4, 2);
+                const scale = std.math.pow(f32, std.Random.float(r, f32) * 4 + 2, 2);
                 c.par_shapes_scale(
                     rock,
                     scale + std.Random.float(r, f32),
-                    scale + std.Random.float(r, f32) * 10,
+                    scale + std.Random.float(r, f32) * 2,
                     scale + std.Random.float(r, f32),
                 );
                 c.par_shapes_translate(
                     rock,
-                    std.Random.float(r, f32) * 200 - 100,
+                    std.Random.float(r, f32) * 400 - 200,
                     y,
-                    std.Random.float(r, f32) * 200 - 100,
+                    std.Random.float(r, f32) * 400 - 200,
                 );
                 c.par_shapes_merge_and_free(mesh, rock);
             }

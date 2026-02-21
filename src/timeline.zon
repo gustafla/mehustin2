@@ -4,7 +4,7 @@
         .{ .t = 0.0, .id = "surface" },
         .{ .t = 56.0, .id = "descent" },
         .{ .t = 96.0, .id = "garden" },
-        .{ .t = 260.0, .id = "currents" },
+        .{ .t = 208.0, .id = "currents" },
         .{ .t = 320.0, .id = "void" },
     },
     .text = .{
@@ -67,19 +67,25 @@
                 .fade_in = 5,
                 .fade_out = 2,
             },
-            // // Subtitle
-            // .{
-            //     .t = 5,
-            //     .duration = 145,
-            //     .text = .{ .str = "Written in Zig" },
-            //     .pos = .{ 0, -0.1 },
-            //     .scale = 0.1,
-            //     .origin = .center,
-            //     .anim = .typewriter,
-            //     .color = .{ 1, 1, 1, 0.6 },
-            //     .fade_in = 2,
-            //     .fade_out = 2,
-            // },
+            //
+            .{
+                .t = 320,
+                .duration = 32,
+                .text = .{
+                    .str =
+                    \\This was a demo for the Raspberry Pi 5, 1GB RAM model.
+                    \\Made with mehustin2, powered by SDL3 and Zig.
+                    \\https://mehu.tech
+                    ,
+                },
+                .pos = .{ -0.95, -0.95 },
+                .scale = 0.05,
+                .origin = .bottom_left,
+                .anim = .typewriter,
+                .color = .{ 1, 1, 1, 0.6 },
+                .fade_in = 16,
+                .fade_out = 2,
+            },
         },
     },
     .camera = .{
