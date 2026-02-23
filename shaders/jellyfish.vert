@@ -4,6 +4,7 @@ layout(location = 0) in vec3 in_position;
 
 layout(location = 8) in vec4 in_inst_pos_scale;
 layout(location = 9) in vec4 in_inst_rot_quat;
+layout(location = 10) in vec4 in_inst_color;
 
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
@@ -15,7 +16,8 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 
 layout(location = 0) out vec3 out_position;
 layout(location = 1) out vec3 out_local_position;
-layout(location = 2) flat out vec3 out_cam_pos;
+layout(location = 2) flat out vec3 out_color;
+layout(location = 3) flat out vec3 out_cam_pos;
 
 #include <lib/transform.glsl>
 
@@ -47,6 +49,7 @@ void main() {
 
     out_position = translated_pos - cam_pos; // Camera relative
     out_local_position = in_position;
+    out_color = in_inst_color.rgb;
     out_cam_pos = cam_pos;
     vec4 clip_pos = u_view_projection * vec4(translated_pos, 1.);
     gl_Position = clip_pos;

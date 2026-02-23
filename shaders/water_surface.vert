@@ -44,7 +44,7 @@ void main() {
     vec3 pos = in_position;
     vec3 normal = vec3(0, 1, 0);
 
-    gerstnerWave(vec2(1.0, -0.5), 0.12, 66.6, pos, normal);
+    gerstnerWave(vec2(1.0, -0.5), 0.22, 66.6, pos, normal);
     gerstnerWave(vec2(0.5, -0.8), 0.1, 44.4, pos, normal);
     gerstnerWave(vec2(0.5, 0.5), 0.2, 33.3, pos, normal);
     gerstnerWave(vec2(-0.7, 1.3), 0.15, 16.6, pos, normal);

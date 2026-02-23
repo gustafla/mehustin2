@@ -87,3 +87,24 @@ pub fn loadFile(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     defer gpa.free(path);
     return try resource.loadFileZ(gpa, path);
 }
+
+pub fn hslToRgb(hsl: math.Vec3) math.Vec3 {
+    const c = (1 - @abs(2 * hsl[2] - 1)) * hsl[1];
+    const h = hsl[0] / 60.0;
+    const x = c * (1 - @abs(@mod(h, 2) - 1));
+    const r, const g, const b =
+        if (0 <= h and h < 1)
+            .{ c, x, 0 }
+        else if (1 <= h and h < 2)
+            .{ x, c, 0 }
+        else if (2 <= h and h < 3)
+            .{ 0, c, x }
+        else if (3 <= h and h < 4)
+            .{ 0, x, c }
+        else if (4 <= h and h < 5)
+            .{ x, 0, c }
+        else
+            .{ c, 0, x };
+    const m = hsl[2] - c / 2;
+    return .{ r + m, g + m, b + m };
+}

@@ -259,6 +259,14 @@ pub const layout = struct {
         pub const locations = .{ 8, 9 };
     };
 
+    pub const InstanceTRSColor = extern struct {
+        pos_scale: [4]f32,
+        rot_quat: [4]f32,
+        color: [4]f32,
+
+        pub const locations = .{ 8, 9, 10 };
+    };
+
     // Assert that all layouts are extern structs
     comptime {
         for (@typeInfo(@This()).@"struct".decls) |decl| {
@@ -423,6 +431,9 @@ pub const buffer = struct {
                             math.smoothstep(
                                 frame.state.clip_time / frame.state.clip_length,
                             ))),
+                    .void => @as(u32, @intFromFloat(
+                        8192 * std.math.clamp(frame.state.clip_remaining_time / frame.state.clip_length - 0.5, 0, 1),
+                    )),
                     else => 8192,
                 },
             };
@@ -507,7 +518,7 @@ pub const buffer = struct {
     };
 
     pub const jellyfish_inst = struct {
-        pub const Layout = layout.InstanceTRS;
+        pub const Layout = layout.InstanceTRSColor;
 
         pub const n = 16;
         var origins: [n]Vec3 = undefined;
@@ -538,6 +549,7 @@ pub const buffer = struct {
                 const dt = 1.0 / 60.0;
                 const pos0 = position(i, frame.time);
                 const pos1 = position(i, frame.time + dt);
+                const col = color(i);
                 inst.* = .{
                     .pos_scale = .{
                         pos0[0],
@@ -546,6 +558,7 @@ pub const buffer = struct {
                         scale(i),
                     },
                     .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.normalize(pos1 - pos0)),
+                    .color = .{ col[0], col[1], col[2], 1 },
                 };
             }
 
@@ -583,6 +596,11 @@ pub const buffer = struct {
                 @max(pos[1], seafloor.y + scale(i)),
                 pos[2],
             };
+        }
+
+        pub fn color(i: usize) Vec3 {
+            const t = @as(f32, @floatFromInt(i)) / n;
+            return util.hslToRgb(.{ 30 + t * 100, 1, 10 });
         }
 
         pub fn updateInfo() BufferInfo {
@@ -714,18 +732,17 @@ pub const storage_buffer = struct {
                 .garden => @intCast(buffer.jellyfish_inst.updateInfo().num_elements),
                 else => 0,
             };
-            const base = 1.333;
-            const color: Vec3 = .{ base, base * base, base * base * base };
             const ambient_factor = @as(f32, @floatFromInt(num_lights)) /
                 @as(f32, @floatFromInt(buffer.jellyfish_inst.n));
 
             const header: Header = .{
-                .ambient = color * @as(Vec3, @splat(ambient_factor * 0.2)),
+                .ambient = @as(Vec3, @splat(ambient_factor * 0.3)),
                 .count = num_lights,
             };
 
             var lights: [max_lights]Element = undefined;
             for (lights[0..header.count], 0..) |*light, i| {
+                const color = buffer.jellyfish_inst.color(i);
                 light.* = .{
                     .position = buffer.jellyfish_inst.position(i, frame.time),
                     .color = color * @as(Vec3, @splat(buffer.jellyfish_inst.scale(i))),

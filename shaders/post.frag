@@ -11,12 +11,7 @@ layout(set = 2, binding = 2) uniform sampler2D u_noise_texture;
 #include <lib/color.glsl>
 
 void main() {
-    // Chromatic aberration
-    vec3 color = vec3(
-            texture(u_input_texture, in_uv + vec2(-1. / WIDTH, 0.)).r,
-            texture(u_input_texture, in_uv).g,
-            texture(u_input_texture, in_uv + vec2(1. / WIDTH, 0.)).b
-        );
+    vec3 color = texture(u_input_texture, in_uv).rgb;
 
     // Bloom
     color += texture(u_bloom_texture, in_uv).rgb * 2.;
@@ -32,4 +27,5 @@ void main() {
     // Output
     // https://64.github.io/tonemapping/
     out_color = vec4(acesApprox(max(color, 0.)), 1.);
+    // out_color = vec4(reinhard(max(color, 0.)), 1.);
 }

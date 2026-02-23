@@ -6,6 +6,7 @@
         .{ .t = 96.0, .id = "garden" },
         .{ .t = 208.0, .id = "currents" },
         .{ .t = 320.0, .id = "void" },
+        .{ .t = 352.0, .id = "end" },
     },
     .text = .{
         .atlas_size = 1024,
@@ -73,8 +74,12 @@
                 .duration = 32,
                 .text = .{
                     .str =
-                    \\This was a demo for the Raspberry Pi 5, 1GB RAM model.
-                    \\Made with mehustin2, powered by SDL3 and Zig.
+                    \\This demo runs on a Raspberry Pi 5 with just 1GB of system memory.
+                    \\
+                    \\Our latest 3D engine, mehustin2, has been in development
+                    \\since SDL3 was officially released one year ago.
+                    \\Written in Zig using the SDL3 GPU API.
+                    \\
                     \\https://mehu.tech
                     ,
                 },
