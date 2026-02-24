@@ -1,6 +1,7 @@
 #version 450
 
 layout(location = 0) in vec3 in_position;
+layout(location = 4) in vec2 in_uv;
 
 layout(location = 8) in vec4 in_inst_pos_scale;
 layout(location = 9) in vec4 in_inst_rot_quat;
@@ -15,7 +16,7 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 };
 
 layout(location = 0) out vec3 out_position;
-layout(location = 1) out vec3 out_local_position;
+layout(location = 1) out vec2 out_uv;
 layout(location = 2) flat out vec3 out_color;
 layout(location = 3) flat out vec3 out_cam_pos;
 
@@ -32,22 +33,21 @@ void main() {
     vec3 position = in_position;
 
     // Main swimming pulse
-    float v = 1.0 - position.y * 2.0;
     float t = u_time + sine(u_time + 1, freq) * 0.3;
-    position.xz *= sine(t, freq) * 0.6 * v + 0.5;
+    position.xz *= sine(t, freq) * 0.6 + 0.75;
     position.y -= sine(t, freq) * 0.1;
-
-    // Shape
-    float u = atan(position.x, position.z);
-    position.xz *= sine(u + t, 1.333) * 0.1 * pow(v, 3.0) + 0.95;
-    position.xz *= sine(u + 0.5 + u_time * 0.3, 1) * 0.3 * pow(v, 4.0) + 0.85;
 
     vec3 rotated_pos = rotateVector(position, in_inst_rot_quat);
     vec3 scaled_pos = rotated_pos * in_inst_pos_scale.w;
     vec3 translated_pos = scaled_pos + in_inst_pos_scale.xyz;
 
+    // Animate
+    float v = max(-position.y, 0.0);
+    translated_pos.x += sin((translated_pos.x + translated_pos.z * 0.5) * freq * 0.459 * 2.0 * 3.14159265 + u_time * 0.23) * 0.8 * v;
+    translated_pos.z += sin((translated_pos.z + translated_pos.x * 0.5) * freq * 0.657 * 2.0 * 3.14159265 + u_time * 0.1) * 0.8 * v;
+
     out_position = translated_pos - cam_pos; // Camera relative
-    out_local_position = in_position;
+    out_uv = in_uv;
     out_color = in_inst_color.rgb;
     out_cam_pos = cam_pos;
     vec4 clip_pos = u_view_projection * vec4(translated_pos, 1.);

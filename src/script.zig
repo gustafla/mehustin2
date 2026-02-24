@@ -517,6 +517,64 @@ pub const buffer = struct {
         }
     };
 
+    pub const tentacle = struct {
+        pub const Layout = layout.VertexPosUV0;
+
+        pub const subdiv = 12;
+        pub const y_per_segment = 0.2;
+        pub const len = subdiv * y_per_segment;
+
+        pub fn create() !u32 {
+            return 6 + 3 * 2 * 2 * subdiv;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            for (0..2) |i| {
+                const base = 3 * 2 * subdiv * i;
+                const r = i == 1;
+                var y: f32 = 0.2;
+
+                for (0..subdiv) |s| {
+                    const segment = s * 3 * 2;
+                    const v0 = @as(f32, @floatFromInt(s)) / subdiv;
+                    const v1 = v0 + @as(f32, 1.0) / subdiv;
+
+                    const y0 = y;
+                    const y1 = y - y_per_segment;
+
+                    const width = 0.25;
+                    dst[base + segment + 0] = .{ .position = rotate(r, .{ -width, y0, 0 }), .uv0 = .{ 0, v0 } };
+                    dst[base + segment + 1] = .{ .position = rotate(r, .{ -width, y1, 0 }), .uv0 = .{ 0, v1 } };
+                    dst[base + segment + 2] = .{ .position = rotate(r, .{ width, y0, 0 }), .uv0 = .{ 1, v0 } };
+                    dst[base + segment + 3] = .{ .position = rotate(r, .{ -width, y1, 0 }), .uv0 = .{ 0, v1 } };
+                    dst[base + segment + 4] = .{ .position = rotate(r, .{ width, y1, 0 }), .uv0 = .{ 1, v1 } };
+                    dst[base + segment + 5] = .{ .position = rotate(r, .{ width, y0, 0 }), .uv0 = .{ 1, v0 } };
+
+                    y = y1;
+                }
+            }
+
+            dst[dst.len - 6] = .{ .position = .{ 0, 0.5, 0 }, .uv0 = .{ 0.5, 0 } };
+            dst[dst.len - 5] = .{ .position = .{ -0.25, 0.2, 0 }, .uv0 = .{ 0, 0 } };
+            dst[dst.len - 4] = .{ .position = .{ 0.25, 0.2, 0 }, .uv0 = .{ 1, 0 } };
+
+            dst[dst.len - 3] = .{ .position = .{ 0, 0.5, 0 }, .uv0 = .{ 0.5, 0 } };
+            dst[dst.len - 2] = .{ .position = .{ 0, 0.2, -0.25 }, .uv0 = .{ 0, 0 } };
+            dst[dst.len - 1] = .{ .position = .{ 0, 0.2, 0.25 }, .uv0 = .{ 1, 0 } };
+
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+
+        pub fn rotate(flag: bool, v: Vec3) Vec3 {
+            if (flag) {
+                return .{ v[2], v[1], v[0] };
+            }
+            return v;
+        }
+    };
+
     pub const jellyfish_inst = struct {
         pub const Layout = layout.InstanceTRSColor;
 
