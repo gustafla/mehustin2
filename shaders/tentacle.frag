@@ -36,5 +36,6 @@ void main() {
         discard;
     }
 
+    fade = min(fade, 1.0);
     out_color = vec4(in_color * exp(-k_sigma_t * length(in_pos)), 1.0) * fade;
 }

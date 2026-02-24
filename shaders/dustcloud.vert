@@ -6,7 +6,7 @@ layout(location = 0) out vec3 out_pos;
 layout(location = 1) out vec2 out_uv;
 layout(location = 2) out vec3 out_cam_pos;
 
-const float base_dia = 200.0;
+const float base_dia = 1000.0;
 
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;

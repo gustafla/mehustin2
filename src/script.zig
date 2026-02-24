@@ -578,7 +578,7 @@ pub const buffer = struct {
     pub const jellyfish_inst = struct {
         pub const Layout = layout.InstanceTRSColor;
 
-        pub const n = 16;
+        pub const n = 10;
         var origins: [n]Vec3 = undefined;
 
         pub fn create() !u32 {
@@ -588,7 +588,7 @@ pub const buffer = struct {
         pub fn init(dst: []Layout) !BufferInfo {
             _ = dst;
 
-            var rng: std.Random.Xoshiro256 = .init(123);
+            var rng: std.Random.Xoshiro256 = .init(1236);
             const r = rng.random();
             for (&origins) |*pos| {
                 const cube: Vec3 = .{
@@ -635,7 +635,7 @@ pub const buffer = struct {
 
         pub fn scale(i: usize) f32 {
             const t = @as(f32, @floatFromInt(i)) / n;
-            return 5 + @sin(t);
+            return 5 + @sin(t * std.math.pi) * 5;
         }
 
         pub fn position(i: usize, time: f32) Vec3 {
@@ -748,21 +748,21 @@ pub const buffer = struct {
     pub const dustcloud_inst = struct {
         pub const Layout = layout.VertexPos;
 
-        pub const n = 64;
+        pub const n = 4;
 
         pub fn create() !u32 {
             return n;
         }
 
         pub fn init(dst: []Layout) !BufferInfo {
-            var rng: std.Random.Xoshiro256 = .init(11);
+            var rng: std.Random.Xoshiro256 = .init(4123);
             const r = rng.random();
             for (dst) |*inst| {
                 inst.* = .{
                     .position = .{
-                        std.Random.float(r, f32) * 400 - 200,
-                        -960 + std.Random.float(r, f32) * 50,
-                        std.Random.float(r, f32) * 400 - 200,
+                        std.Random.float(r, f32) * 200 - 100,
+                        -940 + std.Random.float(r, f32) * 50,
+                        std.Random.float(r, f32) * 200 - 100,
                     },
                 };
             }
