@@ -43,8 +43,9 @@ void main() {
 
     // Animate
     float v = max(-position.y, 0.0);
-    translated_pos.x += sin((translated_pos.x + translated_pos.z * 0.5) * freq * 0.459 * 2.0 * 3.14159265 + u_time * 0.23) * 0.8 * v;
-    translated_pos.z += sin((translated_pos.z + translated_pos.x * 0.5) * freq * 0.657 * 2.0 * 3.14159265 + u_time * 0.1) * 0.8 * v;
+    translated_pos.y += sin((translated_pos.z * 1.5 + translated_pos.x * 0.5) * freq * 0.412 * 2.0 * 3.14159265 + u_time * 0.01) * 1.2 * v;
+    translated_pos.x += cos((translated_pos.x + translated_pos.z * 0.5) * freq * 0.459 * 2.0 * 3.14159265 - u_time * 0.03) * 0.8 * v;
+    translated_pos.z += sin((translated_pos.y + translated_pos.x * 0.5) * freq * 0.657 * 2.0 * 3.14159265 + u_time * 0.01) * 0.8 * v;
 
     out_position = translated_pos - cam_pos; // Camera relative
     out_uv = in_uv;
