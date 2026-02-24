@@ -30,6 +30,11 @@ float tex(vec2 uv, float fade) {
 
 void main() {
     float fade = (1.0 - in_uv.y);
-    float t = clamp(tex(in_uv, fade), 0.0, 1.0);
-    out_color = vec4(in_color * exp(-k_sigma_t * length(in_pos)), 1.0) * fade * t;
+    fade *= tex(in_uv, fade);
+
+    if (fade < 0.01) {
+        discard;
+    }
+
+    out_color = vec4(in_color * exp(-k_sigma_t * length(in_pos)), 1.0) * fade;
 }

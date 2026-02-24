@@ -662,9 +662,18 @@ pub const buffer = struct {
         }
 
         pub fn updateInfo() BufferInfo {
-            const t = std.math.clamp((frame.state.clip_time * 16) / frame.state.clip_length, 0, 1);
             return .{
-                .num_elements = @intFromFloat(n * math.smoothstep(t)),
+                .num_elements = switch (frame.state.clip) {
+                    .surface, .descent => 0,
+                    .garden => @intFromFloat(n * math.smoothstep(
+                        std.math.clamp(
+                            (frame.state.clip_time * 16) / frame.state.clip_length,
+                            0,
+                            1,
+                        ),
+                    )),
+                    else => n,
+                },
             };
         }
     };
@@ -735,6 +744,33 @@ pub const buffer = struct {
             };
         }
     };
+
+    pub const dustcloud_inst = struct {
+        pub const Layout = layout.VertexPos;
+
+        pub const n = 64;
+
+        pub fn create() !u32 {
+            return n;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            var rng: std.Random.Xoshiro256 = .init(11);
+            const r = rng.random();
+            for (dst) |*inst| {
+                inst.* = .{
+                    .position = .{
+                        std.Random.float(r, f32) * 400 - 200,
+                        -960 + std.Random.float(r, f32) * 50,
+                        std.Random.float(r, f32) * 400 - 200,
+                    },
+                };
+            }
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
 };
 
 pub const Buffer = std.meta.DeclEnum(buffer);
@@ -786,10 +822,7 @@ pub const storage_buffer = struct {
         }
 
         pub fn updateData(dst: []u8) !void {
-            const num_lights: u32 = switch (frame.state.clip) {
-                .garden => @intCast(buffer.jellyfish_inst.updateInfo().num_elements),
-                else => 0,
-            };
+            const num_lights = buffer.jellyfish_inst.updateInfo().num_elements;
             const ambient_factor = @as(f32, @floatFromInt(num_lights)) /
                 @as(f32, @floatFromInt(buffer.jellyfish_inst.n));
 

@@ -113,11 +113,12 @@
                         "point_lights",
                     },
                 },
-                // Particles
+                // Dust
                 .{
+                    .condition = .{ .garden, .currents },
                     .pipelines = .{.{
-                        .vert = "particle.vert",
-                        .frag = "particle.frag",
+                        .vert = "dustcloud.vert",
+                        .frag = "dustcloud.frag",
                         .depth_test = .{ .enable = true, .write = false },
                         .blend_states = .{.{
                             .enable = true,
@@ -126,7 +127,10 @@
                         }},
                     }},
                     .num_vertices = 4,
-                    .instance_buffer = "particle_inst",
+                    .instance_buffer = "dustcloud_inst",
+                    .fragment_storage_buffers = .{
+                        "point_lights",
+                    },
                 },
                 // Tentacles
                 .{
@@ -145,6 +149,21 @@
                     }},
                     .vertex_buffer = "tentacle",
                     .instance_buffer = "jellyfish_inst",
+                },
+                // Particles
+                .{
+                    .pipelines = .{.{
+                        .vert = "particle.vert",
+                        .frag = "particle.frag",
+                        .depth_test = .{ .enable = true, .write = false },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .src_alpha,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .num_vertices = 4,
+                    .instance_buffer = "particle_inst",
                 },
             },
             .color_targets = .{.{

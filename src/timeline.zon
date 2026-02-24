@@ -4,7 +4,7 @@
         .{ .t = 0.0, .id = "surface" },
         .{ .t = 56.0, .id = "descent" },
         .{ .t = 96.0, .id = "garden" },
-        .{ .t = 208.0, .id = "currents" },
+        .{ .t = 192.0, .id = "currents" },
         .{ .t = 320.0, .id = "void" },
         .{ .t = 352.0, .id = "end" },
     },
@@ -23,7 +23,6 @@
                 .pos = .{ -1, 1 },
                 .scale = 0.03,
             },
-            // // Title card
             .{
                 .t = 0,
                 .duration = 32,
@@ -68,15 +67,14 @@
                 .fade_in = 5,
                 .fade_out = 2,
             },
-            //
             .{
                 .t = 320,
                 .duration = 32,
                 .text = .{
                     .str =
-                    \\This demo runs on a Raspberry Pi 5 with just 1GB of system memory.
+                    \\This demo runs on a Raspberry Pi 5 with 1GB of system memory.
                     \\
-                    \\Our latest 3D engine, mehustin2, has been in development
+                    \\The demoengine, mehustin2, has been in development
                     \\since SDL3 was officially released one year ago.
                     \\Written in Zig using the SDL3 GPU API.
                     \\
@@ -87,7 +85,7 @@
                 .scale = 0.05,
                 .origin = .bottom_left,
                 .anim = .typewriter,
-                .color = .{ 1, 1, 1, 0.6 },
+                .color = .{ 1, 1, 1, 0.8 },
                 .fade_in = 16,
                 .fade_out = 2,
             },
@@ -101,7 +99,7 @@
             .{ .t = 144, .i = 3, .position_lock = .jellyfish1, .target_lock = .jellyfish1 },
             .{ .t = 160, .i = 4, .position_lock = .jellyfish2, .target_lock = .jellyfish2 },
             .{ .t = 176, .i = 2, .position_lock = .jellyfish3, .target_lock = .jellyfish3 },
-            .{ .t = 192, .i = 5 },
+            .{ .t = 192, .i = 0 },
         },
         .tracks = .{
             .{ // TRACK 0
@@ -121,6 +119,11 @@
                 .{
                     .t = 96,
                     .entry = .{ .pos = .{ -7, -1000, -7 }, .target = .{ 0, -1000, 0 }, .fov = 90 },
+                },
+                .{
+                    .t = 192,
+                    .entry = .{ .pos = .{ -10, -990, 10 }, .target = .{ 40, -995, -40 }, .fov = 90 },
+                    .motion = .{.{ .circle = .{ .axis = .{ 0, 1, 0.3 }, .speed = -0.06 } }},
                 },
             },
             .{ // TRACK 1
@@ -155,13 +158,6 @@
                     .motion = .{.{
                         .circle = .{ .axis = .{ 0.1, 1.0, -0.1 }, .speed = 0.01 },
                     }},
-                },
-            },
-            .{ // TRACK 5
-                .{
-                    .t = 0,
-                    .entry = .{ .pos = .{ -32, -980, -32 }, .target = .{ 0, -1000, 0 }, .fov = 90 },
-                    .motion = .{.{ .circle = .{ .axis = .{ 0, 1, -0.3 }, .speed = -0.04 } }},
                 },
             },
         },
