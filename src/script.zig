@@ -771,6 +771,81 @@ pub const buffer = struct {
             };
         }
     };
+
+    pub const floating_rock = struct {
+        pub const Layout = layout.VertexPosNormal;
+
+        pub var mesh: *c.par_shapes_mesh = undefined;
+
+        pub fn create() !u32 {
+            mesh = c.par_shapes_create_rock(4356, 2);
+            return @intCast(mesh.npoints);
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            util.interleave(Layout, dst, .{
+                mesh.points[0 .. dst.len * 3],
+                mesh.normals[0 .. dst.len * 3],
+            });
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
+
+    pub const floating_rock_ind = struct {
+        pub const Layout = c.PAR_SHAPES_T;
+        pub const mesh = &floating_rock.mesh;
+
+        pub fn create() !u32 {
+            return @intCast(mesh.*.ntriangles * 3);
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            @memcpy(dst, mesh.*.triangles[0..dst.len]);
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
+
+    pub const floating_rock_inst = struct {
+        pub const Layout = layout.InstanceTRS;
+        pub const n = 8;
+
+        pub fn create() !u32 {
+            return n;
+        }
+
+        pub fn updateData(dst: []Layout) !void {
+            var rng: std.Random.Xoshiro256 = .init(41223);
+            const r = rng.random();
+            for (dst) |*inst| {
+                inst.* = .{
+                    .pos_scale = .{
+                        r.float(f32) * 200 - 100,
+                        -1000 + r.float(f32) * 100 + @sin(frame.time * 0.523 * r.float(f32)) * 2 * r.float(f32),
+                        r.float(f32) * 200 - 100,
+                        3.0 + r.float(f32) * 8.0,
+                    },
+                    .rot_quat = math.quat.fromAxisAngle(math.vec3.normalize(.{
+                        r.float(f32) * 2 - 1.0,
+                        r.float(f32) * 2 - 1.0,
+                        r.float(f32) * 2 - 1.0,
+                    }), frame.time * r.float(f32) * 0.2),
+                };
+            }
+        }
+
+        pub fn updateInfo() BufferInfo {
+            return .{
+                .num_elements = switch (frame.state.clip) {
+                    .currents => n,
+                    else => 0,
+                },
+            };
+        }
+    };
 };
 
 pub const Buffer = std.meta.DeclEnum(buffer);

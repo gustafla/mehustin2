@@ -80,9 +80,7 @@
                     }},
                     .index_buffer = "seafloor_ind",
                     .vertex_buffer = "seafloor",
-                    .fragment_storage_buffers = .{
-                        "point_lights",
-                    },
+                    .fragment_storage_buffers = .{"point_lights"},
                 },
                 // Jellyfish
                 .{
@@ -109,9 +107,21 @@
                     }},
                     .index_buffer = "seafloor_ind",
                     .vertex_buffer = "seafloor",
-                    .fragment_storage_buffers = .{
-                        "point_lights",
-                    },
+                    .fragment_storage_buffers = .{"point_lights"},
+                },
+                // Floating rocks
+                .{
+                    .condition = .{.currents},
+                    .pipelines = .{.{
+                        .vert = "3d.vert",
+                        .frag = "diffuse.frag",
+                        .primitive_type = .trianglelist,
+                        .depth_test = .{ .enable = true },
+                    }},
+                    .index_buffer = "floating_rock_ind",
+                    .vertex_buffer = "floating_rock",
+                    .instance_buffer = "floating_rock_inst",
+                    .fragment_storage_buffers = .{"point_lights"},
                 },
                 // Dust
                 .{
@@ -128,9 +138,7 @@
                     }},
                     .num_vertices = 4,
                     .instance_buffer = "dustcloud_inst",
-                    .fragment_storage_buffers = .{
-                        "point_lights",
-                    },
+                    .fragment_storage_buffers = .{"point_lights"},
                 },
                 // Tentacles
                 .{

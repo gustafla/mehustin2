@@ -77,16 +77,29 @@
                     \\The demoengine, mehustin2, has been in development
                     \\since SDL3 was officially released one year ago.
                     \\Written in Zig using the SDL3 GPU API.
-                    \\
-                    \\https://mehu.tech
                     ,
                 },
                 .pos = .{ -0.95, -0.95 },
-                .scale = 0.05,
+                .scale = 0.072,
                 .origin = .bottom_left,
                 .anim = .typewriter,
                 .color = .{ 1, 1, 1, 0.8 },
                 .fade_in = 16,
+                .fade_out = 2,
+            },
+            .{
+                .t = 336,
+                .duration = 16,
+                .text = .{
+                    .str = "https://mehu.tech",
+                },
+                .pos = .{ 0.95, -0.95 },
+                .scale = 0.05,
+                .origin = .bottom_right,
+                .anim = .typewriter,
+                .effect = .uv_ripple,
+                .color = .{ 1, 1, 1, 1 },
+                .fade_in = 4,
                 .fade_out = 2,
             },
         },

@@ -27,7 +27,7 @@ void main() {
     vec3 scaled_pos = rotated_pos * in_inst_pos_scale.w;
     vec3 translated_pos = scaled_pos + in_inst_pos_scale.xyz;
 
-    out_position = in_position - cam_pos; // Camera relative
+    out_position = translated_pos - cam_pos; // Camera relative
     out_normal = rotateVector(in_normal, in_inst_rot_quat);
     out_cam_pos = cam_pos;
     vec4 clip_pos = u_view_projection * vec4(translated_pos, 1.);
