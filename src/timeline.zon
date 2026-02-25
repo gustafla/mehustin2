@@ -17,10 +17,17 @@
             .dist_scale = 8,
         }},
         .track = .{
-            // FPS ;)
+            // FPS
             .{
                 .text = .{ .ref = .fps },
                 .pos = .{ -1, 1 },
+                .scale = 0.03,
+            },
+            // Time
+            .{
+                .text = .{ .ref = .time },
+                .pos = .{ -1, -1 },
+                .origin = .bottom_left,
                 .scale = 0.03,
             },
             .{
@@ -32,6 +39,17 @@
                 .origin = .center,
                 .effect = .uv_ripple,
                 .fade_in = 15,
+                .fade_out = 2,
+            },
+            .{
+                .t = 24,
+                .duration = 8,
+                .text = .{ .str = "Presents" },
+                .pos = .{ -0.1, -0.4 },
+                .scale = 0.1,
+                .origin = .center,
+                .effect = .uv_ripple,
+                .fade_in = 4,
                 .fade_out = 2,
             },
             .{
@@ -72,11 +90,9 @@
                 .duration = 32,
                 .text = .{
                     .str =
-                    \\This demo runs on a Raspberry Pi 5 with 1GB of system memory.
+                    \\Written in Zig and using the SDL3 GPU API,
+                    \\this demo runs on a Raspberry Pi 5 with 1GB of memory.
                     \\
-                    \\The demoengine, mehustin2, has been in development
-                    \\since SDL3 was officially released one year ago.
-                    \\Written in Zig using the SDL3 GPU API.
                     ,
                 },
                 .pos = .{ -0.95, -0.95 },
@@ -93,12 +109,11 @@
                 .text = .{
                     .str = "https://mehu.tech",
                 },
-                .pos = .{ 0.95, -0.95 },
-                .scale = 0.05,
-                .origin = .bottom_right,
+                .pos = .{ -0.95, -0.95 },
+                .scale = 0.072,
+                .origin = .bottom_left,
                 .anim = .typewriter,
-                .effect = .uv_ripple,
-                .color = .{ 1, 1, 1, 1 },
+                .color = .{ 1, 1, 1, 0.8 },
                 .fade_in = 4,
                 .fade_out = 2,
             },
@@ -135,8 +150,43 @@
                 },
                 .{
                     .t = 192,
-                    .entry = .{ .pos = .{ -10, -990, 10 }, .target = .{ 40, -995, -40 }, .fov = 90 },
-                    .motion = .{.{ .circle = .{ .axis = .{ 0, 1, 0.3 }, .speed = -0.06 } }},
+                    .entry = .{ .pos = .{ -80, -990, 80 }, .target = .{ 200, -920, -100 }, .fov = 90 },
+                    .motion = .{.{ .dolly = .{ .speed = 6.6 } }},
+                    .blend = 0,
+                },
+                .{
+                    .t = 208,
+                    .entry = .{ .pos = .{ 100, -920, 100 }, .target = .{ -100, -990, -100 }, .fov = 90 },
+                    .motion = .{.{ .dolly = .{ .speed = 4.6 } }},
+                    .blend = 0,
+                },
+                .{
+                    .t = 224,
+                    .entry = .{ .pos = .{ 100, -980, -100 }, .target = .{ -100, -920, 100 }, .fov = 90 },
+                    .motion = .{.{ .dolly = .{ .speed = 5.6 } }},
+                    .blend = 12,
+                },
+                .{
+                    .t = 240,
+                    .entry = .{ .pos = .{ 50, -980, -50 }, .target = .{ 35, -970, 20 }, .fov = 90 },
+                    .motion = .{.{ .circle = .{ .axis = .{ 0.8, 1, 0 }, .speed = 0.05 } }},
+                    .blend = 0,
+                },
+                .{
+                    .t = 256,
+                    .entry = .{ .pos = .{ -20, -970, 0 }, .target = .{ 40, -990, 20 }, .fov = 90 },
+                    .motion = .{
+                        .{ .dolly = .{ .speed = 3.00 } },
+                        .{ .swivel = .{ .local = .lateral, .speed = 0.04 } },
+                    },
+                    .blend = 0,
+                },
+                .{
+                    .t = 272,
+                    .entry = .{ .pos = .{ -20, -950, -60 }, .target = .{ 0, -970, 20 }, .fov = 90 },
+                    .motion = .{
+                        .{ .orbit = .{ .axis = .{ -0.7, 1, -0.3 }, .speed = -0.04 } },
+                    },
                 },
             },
             .{ // TRACK 1
@@ -149,7 +199,7 @@
             .{ // TRACK 2
                 .{
                     .t = 0,
-                    .entry = .{ .pos = .{ 14, 16, 12 }, .target = .{ 0, 0, 0 }, .fov = 90 },
+                    .entry = .{ .pos = .{ 14, 13, 12 }, .target = .{ 0, 0, 0 }, .fov = 90 },
                     .motion = .{.{
                         .orbit = .{ .axis = .{ 0.1, 0.6, 0.4 }, .speed = 0.12 },
                     }},

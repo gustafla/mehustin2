@@ -125,7 +125,7 @@
                 },
                 // Dust
                 .{
-                    .condition = .{ .garden, .currents },
+                    .condition = .{.garden},
                     .pipelines = .{.{
                         .vert = "dustcloud.vert",
                         .frag = "dustcloud.frag",

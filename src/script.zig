@@ -44,9 +44,11 @@ pub const Anchor = std.meta.DeclEnum(anchor);
 var frames: u32 = 0;
 var fps_ticks: u64 = 0;
 var fps_buf: [32]u8 = undefined;
+var time_buf: [32]u8 = undefined;
 
 pub const string = struct {
     pub var fps: []const u8 = "";
+    pub var time: []const u8 = "";
 };
 
 pub const String = std.meta.DeclEnum(string);
@@ -87,6 +89,9 @@ pub const frame = struct {
                 fps_ticks = ticks;
                 frames = 0;
             }
+        }
+        if (builtin.mode == .Debug) {
+            string.time = std.fmt.bufPrint(&time_buf, "t={:.1}", .{frame_time}) catch unreachable;
         }
 
         time = frame_time;
@@ -824,7 +829,7 @@ pub const buffer = struct {
                 inst.* = .{
                     .pos_scale = .{
                         r.float(f32) * 200 - 100,
-                        -1000 + r.float(f32) * 100 + @sin(frame.time * 0.523 * r.float(f32)) * 2 * r.float(f32),
+                        -1000 + r.float(f32) * 200 + @sin(frame.time * 0.523 * r.float(f32)) * 2 * r.float(f32),
                         r.float(f32) * 200 - 100,
                         3.0 + r.float(f32) * 8.0,
                     },
@@ -900,9 +905,13 @@ pub const storage_buffer = struct {
             const num_lights = buffer.jellyfish_inst.updateInfo().num_elements;
             const ambient_factor = @as(f32, @floatFromInt(num_lights)) /
                 @as(f32, @floatFromInt(buffer.jellyfish_inst.n));
+            const ambient_clip: f32 = switch (frame.state.clip) {
+                .currents => 0.5,
+                else => 0.3,
+            };
 
             const header: Header = .{
-                .ambient = @as(Vec3, @splat(ambient_factor * 0.3)),
+                .ambient = @as(Vec3, @splat(ambient_factor * ambient_clip)),
                 .count = num_lights,
             };
 
