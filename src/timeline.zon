@@ -20,13 +20,13 @@
             // FPS
             .{
                 .text = .{ .ref = .fps },
-                .pos = .{ -1, 1 },
+                .pos = .{ -0.99, 1.02 },
                 .scale = 0.03,
             },
             // Time
             .{
                 .text = .{ .ref = .time },
-                .pos = .{ -1, -1 },
+                .pos = .{ -0.99, -0.99 },
                 .origin = .bottom_left,
                 .scale = 0.03,
             },

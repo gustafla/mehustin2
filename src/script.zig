@@ -43,8 +43,7 @@ pub const Anchor = std.meta.DeclEnum(anchor);
 
 var frames: u32 = 0;
 var fps_ticks: u64 = 0;
-var fps_buf: [32]u8 = undefined;
-var time_buf: [32]u8 = undefined;
+var str_buf: [128]u8 = undefined;
 
 pub const string = struct {
     pub var fps: []const u8 = "";
@@ -81,22 +80,26 @@ pub const frame = struct {
     pub var state: timeline.State = undefined;
 
     pub fn update(frame_time: f32) State {
+        var buf: []u8 = &str_buf;
         if (options.show_fps) {
             frames += 1;
             const ticks = c.SDL_GetTicksNS();
             if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
-                string.fps = std.fmt.bufPrint(&fps_buf, "FPS: {}", .{frames}) catch unreachable;
+                string.fps = std.fmt.bufPrint(buf, "FPS: {}", .{frames}) catch unreachable;
                 fps_ticks = ticks;
                 frames = 0;
             }
-        }
-        if (builtin.mode == .Debug) {
-            string.time = std.fmt.bufPrint(&time_buf, "t={:.1}", .{frame_time}) catch unreachable;
+            buf = buf[string.fps.len..];
         }
 
         time = frame_time;
 
         state = timeline.resolve(time);
+
+        if (builtin.mode == .Debug) {
+            string.time = std.fmt.bufPrint(buf, "{t} {:.1}", .{ state.clip, time }) catch unreachable;
+            buf = buf[string.time.len..];
+        }
 
         const view = math.Mat4.lookAt(
             state.camera.pos,
@@ -233,6 +236,51 @@ const surf_plane = .{ .w = 768, .d = 768 };
 const surf_grid = .{ .w = 127, .d = 127 };
 const surf_num_verts_x = surf_grid.w + 1;
 const surf_num_verts_z = surf_grid.d + 1;
+
+fn rotate(flag: bool, v: Vec3) Vec3 {
+    if (flag) {
+        return .{ v[2], v[1], v[0] };
+    }
+    return v;
+}
+
+const beam_mesh = struct {
+    fn size(subdiv: u32) u32 {
+        return 3 * 2 * 2 * subdiv;
+    }
+
+    fn init(
+        dst: []layout.VertexPosUV0,
+        segment_length: f32,
+    ) void {
+        const subdiv = dst.len / size(1);
+
+        for (0..2) |i| {
+            const base = 3 * 2 * subdiv * i;
+            const r = i == 1;
+            var y: f32 = segment_length;
+
+            for (0..subdiv) |s| {
+                const segment = s * 3 * 2;
+                const v0 = @as(f32, @floatFromInt(s)) / @as(f32, @floatFromInt(subdiv));
+                const v1 = v0 + 1.0 / @as(f32, @floatFromInt(subdiv));
+
+                const y0 = y;
+                const y1 = y - segment_length;
+
+                const width = 0.25;
+                dst[base + segment + 0] = .{ .position = rotate(r, .{ -width, y0, 0 }), .uv0 = .{ 0, v0 } };
+                dst[base + segment + 1] = .{ .position = rotate(r, .{ -width, y1, 0 }), .uv0 = .{ 0, v1 } };
+                dst[base + segment + 2] = .{ .position = rotate(r, .{ width, y0, 0 }), .uv0 = .{ 1, v0 } };
+                dst[base + segment + 3] = .{ .position = rotate(r, .{ -width, y1, 0 }), .uv0 = .{ 0, v1 } };
+                dst[base + segment + 4] = .{ .position = rotate(r, .{ width, y1, 0 }), .uv0 = .{ 1, v1 } };
+                dst[base + segment + 5] = .{ .position = rotate(r, .{ width, y0, 0 }), .uv0 = .{ 1, v0 } };
+
+                y = y1;
+            }
+        }
+    }
+};
 
 pub const layout = struct {
     pub const InstanceText = timeline.InstanceText;
@@ -525,39 +573,16 @@ pub const buffer = struct {
     pub const tentacle = struct {
         pub const Layout = layout.VertexPosUV0;
 
-        pub const subdiv = 12;
-        pub const y_per_segment = 0.2;
-        pub const len = subdiv * y_per_segment;
+        const subdiv = 12;
+        pub const segment_length = 0.2;
+        pub const len = subdiv * segment_length;
 
         pub fn create() !u32 {
-            return 6 + 3 * 2 * 2 * subdiv;
+            return 6 + beam_mesh.size(subdiv);
         }
 
         pub fn init(dst: []Layout) !BufferInfo {
-            for (0..2) |i| {
-                const base = 3 * 2 * subdiv * i;
-                const r = i == 1;
-                var y: f32 = 0.2;
-
-                for (0..subdiv) |s| {
-                    const segment = s * 3 * 2;
-                    const v0 = @as(f32, @floatFromInt(s)) / subdiv;
-                    const v1 = v0 + @as(f32, 1.0) / subdiv;
-
-                    const y0 = y;
-                    const y1 = y - y_per_segment;
-
-                    const width = 0.25;
-                    dst[base + segment + 0] = .{ .position = rotate(r, .{ -width, y0, 0 }), .uv0 = .{ 0, v0 } };
-                    dst[base + segment + 1] = .{ .position = rotate(r, .{ -width, y1, 0 }), .uv0 = .{ 0, v1 } };
-                    dst[base + segment + 2] = .{ .position = rotate(r, .{ width, y0, 0 }), .uv0 = .{ 1, v0 } };
-                    dst[base + segment + 3] = .{ .position = rotate(r, .{ -width, y1, 0 }), .uv0 = .{ 0, v1 } };
-                    dst[base + segment + 4] = .{ .position = rotate(r, .{ width, y1, 0 }), .uv0 = .{ 1, v1 } };
-                    dst[base + segment + 5] = .{ .position = rotate(r, .{ width, y0, 0 }), .uv0 = .{ 1, v0 } };
-
-                    y = y1;
-                }
-            }
+            beam_mesh.init(dst[0 .. dst.len - 6], segment_length);
 
             dst[dst.len - 6] = .{ .position = .{ 0, 0.5, 0 }, .uv0 = .{ 0.5, 0 } };
             dst[dst.len - 5] = .{ .position = .{ -0.25, 0.2, 0 }, .uv0 = .{ 0, 0 } };
@@ -570,13 +595,6 @@ pub const buffer = struct {
             return .{
                 .num_elements = @intCast(dst.len),
             };
-        }
-
-        pub fn rotate(flag: bool, v: Vec3) Vec3 {
-            if (flag) {
-                return .{ v[2], v[1], v[0] };
-            }
-            return v;
         }
     };
 
@@ -848,6 +866,45 @@ pub const buffer = struct {
                     .currents => n,
                     else => 0,
                 },
+            };
+        }
+    };
+
+    pub const ribbon = struct {
+        pub const Layout = layout.VertexPosUV0;
+
+        pub const subdiv = 200;
+        pub const segment_length = 0.5;
+
+        pub fn create() !u32 {
+            return beam_mesh.size(subdiv);
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            beam_mesh.init(dst, segment_length);
+
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
+
+    pub const ribbon_inst = struct {
+        pub const Layout = layout.InstanceTRS;
+
+        const n = 1;
+
+        pub fn create() !u32 {
+            return n;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            dst[0] = .{
+                .pos_scale = .{ 0, -990, 0, 1 },
+                .rot_quat = math.quat.fromAxisAngle(.{ 1, 0, 0 }, std.math.pi),
+            };
+            return .{
+                .num_elements = @intCast(dst.len),
             };
         }
     };

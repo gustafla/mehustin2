@@ -158,6 +158,24 @@
                     .vertex_buffer = "tentacle",
                     .instance_buffer = "jellyfish_inst",
                 },
+                // Ribbons
+                .{
+                    .condition = .{.currents},
+                    .pipelines = .{.{
+                        .vert = "tentacle.vert",
+                        .frag = "tentacle.frag",
+                        .primitive_type = .trianglelist,
+                        .rasterizer_state = .{ .cull_mode = .none },
+                        .depth_test = .{ .enable = true, .write = false },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .src_alpha,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .vertex_buffer = "ribbon",
+                    .instance_buffer = "ribbon_inst",
+                },
                 // Particles
                 .{
                     .pipelines = .{.{
