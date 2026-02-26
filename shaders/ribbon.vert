@@ -15,7 +15,7 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 };
 
 layout(location = 0) out vec3 out_position;
-layout(location = 1) out vec2 out_uv;
+layout(location = 1) sample out vec2 out_uv;
 layout(location = 2) out float out_fade;
 layout(location = 3) flat out vec3 out_cam_pos;
 layout(location = 4) flat out vec2 out_phase_dir;
@@ -25,7 +25,7 @@ layout(location = 4) flat out vec2 out_phase_dir;
 void main() {
     vec3 cam_pos = u_cam_pos.xyz;
     float fade = 1.0 - (abs(0.5 - in_uv.y) * 2);
-    float phase = in_inst_pos_scale.y * 0.42 * 3.14;
+    float phase = 334. + in_inst_pos_scale.y * 0.42 * 3.14;
     float dir = 1.0;
     if (sin(phase * 12581) < 0.0) {
         dir = -1.0;

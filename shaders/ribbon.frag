@@ -1,7 +1,7 @@
 #version 450
 
 layout(location = 0) in vec3 in_pos;
-layout(location = 1) in vec2 in_uv;
+layout(location = 1) sample in vec2 in_uv;
 layout(location = 2) in float in_fade;
 layout(location = 3) flat in vec3 in_cam_pos;
 layout(location = 4) flat in vec2 in_phase_dir;
@@ -25,16 +25,16 @@ float tex(vec2 uv) {
     float t = (u_time_g / n) * 0.2 * in_phase_dir.y + in_phase_dir.x;
     float a = fract((uv.y - t / n) * n - 0.5 / n) - 0.5;
     float sinc = max(1 - a * a * f, 0.0);
-    sinc *= 4;
+    sinc *= 6;
     sinc *= sinc;
 
     float z0 = uv.x - 0.5;
-    z0 += sin(uv.y * 330.) * 0.35;
+    z0 += sin(uv.y * 430.) * 0.35;
     float snake = smoothstep(0.0, 0.1, z0);
     snake -= smoothstep(-0.1, -0.2, -z0);
 
     float z1 = uv.x - 0.5;
-    z1 += sin(uv.y * 221.) * 0.3;
+    z1 += sin(uv.y * 321.) * 0.3;
     snake += smoothstep(0.0, 0.1, z1);
     snake -= smoothstep(-0.1, -0.2, -z1);
 

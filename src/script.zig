@@ -233,7 +233,7 @@ pub const Texture = std.meta.DeclEnum(texture);
 // ---- BUFFERS (3rd) ----
 
 const surf_plane = .{ .w = 768, .d = 768 };
-const surf_grid = .{ .w = 255, .d = 255 };
+const surf_grid = .{ .w = 179, .d = 179 };
 const surf_num_verts_x = surf_grid.w + 1;
 const surf_num_verts_z = surf_grid.d + 1;
 

@@ -2,11 +2,7 @@
 
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
-  - [ ] Lighting (point light sources)
-- [ ] Remove LLM-generated code
-  - [ ] src/math.zig
-  - [ ] src/script/camera.zig
-  - [ ] src/script/timeline.zig
+  - [X] Lighting (point light sources)
 - [ ] Replace BufferInfo return value with an optional pointer argument to it
 
 # Backlog
