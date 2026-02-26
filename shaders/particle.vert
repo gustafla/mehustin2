@@ -5,7 +5,7 @@ layout(location = 1) flat out float out_alpha;
 
 const float cube_size = 512.0;
 const float cube_size_rcp = 1.0 / cube_size;
-const float base_dia = 0.4;
+const float base_dia = 0.32;
 const float pixels = 3.0;
 
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {

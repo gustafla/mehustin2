@@ -233,7 +233,7 @@ pub const Texture = std.meta.DeclEnum(texture);
 // ---- BUFFERS (3rd) ----
 
 const surf_plane = .{ .w = 768, .d = 768 };
-const surf_grid = .{ .w = 127, .d = 127 };
+const surf_grid = .{ .w = 255, .d = 255 };
 const surf_num_verts_x = surf_grid.w + 1;
 const surf_num_verts_z = surf_grid.d + 1;
 
@@ -874,7 +874,7 @@ pub const buffer = struct {
         pub const Layout = layout.VertexPosUV0;
 
         pub const subdiv = 200;
-        pub const segment_length = 0.5;
+        pub const segment_length = 0.2;
 
         pub fn create() !u32 {
             return beam_mesh.size(subdiv);
@@ -892,7 +892,7 @@ pub const buffer = struct {
     pub const ribbon_inst = struct {
         pub const Layout = layout.InstanceTRS;
 
-        const n = 1;
+        const n = 3;
 
         pub fn create() !u32 {
             return n;
@@ -900,8 +900,16 @@ pub const buffer = struct {
 
         pub fn init(dst: []Layout) !BufferInfo {
             dst[0] = .{
-                .pos_scale = .{ 0, -990, 0, 1 },
-                .rot_quat = math.quat.fromAxisAngle(.{ 1, 0, 0 }, std.math.pi),
+                .pos_scale = .{ 100, -995, -10, 5 },
+                .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.XUP),
+            };
+            dst[1] = .{
+                .pos_scale = .{ -10, -940, 100, 5 },
+                .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.ZUP),
+            };
+            dst[2] = .{
+                .pos_scale = .{ 10, -930, 100, 5 },
+                .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.ZUP),
             };
             return .{
                 .num_elements = @intCast(dst.len),
@@ -934,7 +942,7 @@ pub const storage_buffer = struct {
             util.writeSSBO(Header, Element, dst, .{
                 .sky_color = sky_color,
                 .sun_dir = sun_dir,
-                .brightness = 5,
+                .brightness = 6,
             }, &.{});
         }
     };

@@ -162,8 +162,8 @@
                 .{
                     .condition = .{.currents},
                     .pipelines = .{.{
-                        .vert = "tentacle.vert",
-                        .frag = "tentacle.frag",
+                        .vert = "ribbon.vert",
+                        .frag = "ribbon.frag",
                         .primitive_type = .trianglelist,
                         .rasterizer_state = .{ .cull_mode = .none },
                         .depth_test = .{ .enable = true, .write = false },
