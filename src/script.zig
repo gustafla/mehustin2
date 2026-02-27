@@ -67,6 +67,7 @@ pub const frame = struct {
         global_time: f32,
         clip_time: f32,
         clip_remaining_time: f32,
+        clip_length: f32,
     };
 
     pub const State = struct {
@@ -129,6 +130,7 @@ pub const frame = struct {
                 .global_time = time,
                 .clip_time = state.clip_time,
                 .clip_remaining_time = state.clip_remaining_time,
+                .clip_length = state.clip_length,
             },
             .clip = state.clip,
         };
