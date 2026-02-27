@@ -918,6 +918,35 @@ pub const buffer = struct {
             };
         }
     };
+
+    pub const bubble_inst = struct {
+        pub const Layout = layout.VertexPos;
+
+        const n = 10;
+        const radius = 30;
+
+        pub fn create() !u32 {
+            return n;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            var rng: std.Random.Xoshiro256 = .init(41223);
+            const r = rng.random();
+
+            for (dst) |*inst| {
+                inst.* = .{
+                    .position = .{
+                        0 + r.float(f32) * radius,
+                        -900 + r.float(f32) * radius,
+                        0 + r.float(f32) * radius,
+                    },
+                };
+            }
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
 };
 
 pub const Buffer = std.meta.DeclEnum(buffer);

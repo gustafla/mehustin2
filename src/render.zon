@@ -66,6 +66,24 @@
                     .instance_buffer = "light_shaft_inst",
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
+                // Bubbles
+                .{
+                    .condition = .{ .surface, .descent },
+                    .pipelines = .{.{
+                        .vert = "bubble.vert",
+                        .frag = "bubble.frag",
+                        .rasterizer_state = .{ .cull_mode = .none },
+                        // .depth_test = .{ .enable = true, .write = false },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .src_alpha,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .num_vertices = 4,
+                    .instance_buffer = "bubble_inst",
+                    .fragment_storage_buffers = .{"water_parameters"},
+                },
                 // Seafloor (descent version, depth-only)
                 .{
                     .condition = .{.descent},
@@ -396,14 +414,23 @@
                     .pipelines = .{
                         .{
                             .vert = "text.vert",
+                            .frag = "text_shadow.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
+                    .instance_buffer = "text_instances",
+                    .num_vertices = 4,
+                },
+                .{
+                    .pipelines = .{
+                        .{
+                            .vert = "text.vert",
                             .frag = "text.frag",
                             .blend_states = .{.{
                                 .enable = true,
-                                // .src_color = .one,
-                                // .dst_color = .one_minus_dst_color,
-                                // .color_op = .add,
-                                // .src_alpha = .one_minus_src_alpha,
-                                // .dst_alpha = .one_minus_dst_alpha,
                             }},
                         },
                     },
