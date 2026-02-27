@@ -27,7 +27,7 @@ pub var gpa: Allocator = undefined;
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
     if (options.udp_client) {
-        udp.init("valot.instanssi.org") catch std.log.err("Name resolution failed", .{});
+        udp.init("valot.instanssi") catch std.log.err("Name resolution failed", .{});
     }
 }
 
@@ -114,7 +114,23 @@ pub const frame = struct {
 
         // Update partyhall lights
         if (options.udp_client) {
-            udp.updateLights(0, 0, 0) catch std.log.err("UDP send failed", .{});
+            const base: Vec3 = .{ 50, 100, 255 };
+            const t: Vec3 = @splat(switch (state.clip) {
+                .surface => 1.0,
+                .descent => std.math.clamp(
+                    1.0 - (math.smoothstep(state.clip_time / state.clip_length) * 4),
+                    0.0,
+                    1.0,
+                ),
+                else => 0.0,
+            });
+            const co = base * t;
+            const color: [3]u8 = .{
+                @intFromFloat(co[0]),
+                @intFromFloat(co[1]),
+                @intFromFloat(co[2]),
+            };
+            udp.updateLights(.{color} ** 24) catch std.log.err("UDP send failed", .{});
         }
 
         return .{

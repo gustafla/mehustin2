@@ -1168,11 +1168,11 @@ fn myLogFn(
     var buf: [1024]u8 = undefined;
 
     const prefix = "[DYN] " ++ @tagName(level) ++
-        if (scope == std.log.default_log_scope)
+        (if (scope == std.log.default_log_scope)
             ""
         else
-            ("(" ++ @tagName(scope) ++ ")") ++
-                ": ";
+            ("(" ++ @tagName(scope) ++ ")")) ++
+        ": ";
 
     const msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch blk: {
         break :blk "Log message too long";
