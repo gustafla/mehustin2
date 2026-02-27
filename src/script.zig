@@ -14,6 +14,7 @@ const c = @import("render/c.zig").c;
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
 const camera = @import("script/camera.zig");
+const udp = @import("udp.zig");
 const noise_zig = @import("script/noise.zig");
 const timeline = @import("script/timeline.zig");
 pub const Clip = timeline.Clip;
@@ -25,6 +26,9 @@ pub var gpa: Allocator = undefined;
 
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
+    if (options.udp_client) {
+        udp.init("valot.instanssi.org") catch std.log.err("Name resolution failed", .{});
+    }
 }
 
 // ---- ANCHORS ----
@@ -107,6 +111,11 @@ pub const frame = struct {
             state.camera.target,
             math.radians(state.camera.roll),
         );
+
+        // Update partyhall lights
+        if (options.udp_client) {
+            udp.updateLights(0, 0, 0) catch std.log.err("UDP send failed", .{});
+        }
 
         return .{
             .vertex = .{

@@ -38,11 +38,17 @@ pub fn build(b: *Build) void {
         "present-mode",
         "Presentation mode",
     ) orelse .vsync;
+    const udp_client = b.option(
+        bool,
+        "udp-client",
+        "Send UDP packets to valot.instanssi.org",
+    ) orelse false;
     const options = b.addOptions();
     options.addOption(bool, "system_sdl", system_sdl);
     options.addOption(bool, "render_dynlib", render_dynlib);
     options.addOption(bool, "show_fps", show_fps);
     options.addOption(PresentationMode, "present_mode", present_mode);
+    options.addOption(bool, "udp_client", udp_client);
     options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, config.data_dir));
 
     // Get SDL3 dependency from build.zig.zon
