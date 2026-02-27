@@ -1,21 +1,24 @@
 const std = @import("std");
-const c = std.c;
 const net = std.net;
 const posix = std.posix;
+const c = @import("render/c.zig").c;
 
+const rate = c.SDL_NS_PER_SECOND / 20;
+var lastsend: u64 = 0;
 var sock: posix.socket_t = undefined;
 var addr: ?*posix.sockaddr = undefined;
 var addrlen: posix.socklen_t = undefined;
 
 pub fn init(name: [:0]const u8) !void {
     addr = null;
-    var hints = std.mem.zeroes(c.addrinfo);
-    hints.family = c.AF.UNSPEC;
-    hints.socktype = c.SOCK.DGRAM;
+    lastsend = 0;
+    var hints = std.mem.zeroes(std.c.addrinfo);
+    hints.family = std.c.AF.UNSPEC;
+    hints.socktype = std.c.SOCK.DGRAM;
     hints.flags = .{ .NUMERICSERV = true };
 
-    var res: ?*c.addrinfo = null;
-    const result = c.getaddrinfo(name, "9909", &hints, &res);
+    var res: ?*std.c.addrinfo = null;
+    const result = std.c.getaddrinfo(name, "9909", &hints, &res);
     if (@intFromEnum(result) != 0) return error.GetAddrInfo;
     addr = res.?.addr;
     addrlen = res.?.addrlen;
@@ -24,10 +27,20 @@ pub fn init(name: [:0]const u8) !void {
         posix.SOCK.DGRAM,
         posix.IPPROTO.UDP,
     );
+    const flags: u32 = @intCast(try posix.fcntl(sock, posix.F.GETFL, 0));
+    var flags_mut: posix.O = @bitCast(flags);
+    flags_mut.NONBLOCK = true;
+    const flags_int: u32 = @bitCast(flags_mut);
+    _ = try posix.fcntl(sock, posix.F.SETFL, @intCast(flags_int));
 }
 
 pub fn updateLights(colors: [24][3]u8) !void {
     if (addr == null) return;
+    const ticks = c.SDL_GetTicksNS();
+    if (ticks < lastsend + rate) {
+        return;
+    }
+    lastsend = ticks;
 
     const nlights = 24;
     const nick_tag: [7]u8 = .{ 1, 0, 'M', 'e', 'h', 'u', 0 };
@@ -47,7 +60,7 @@ pub fn updateLights(colors: [24][3]u8) !void {
     const n = try posix.sendto(
         sock,
         &buf,
-        0,
+        posix.MSG.DONTWAIT,
         addr,
         addrlen,
     );
