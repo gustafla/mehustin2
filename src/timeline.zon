@@ -90,18 +90,28 @@
                 .duration = 32,
                 .text = .{
                     .str =
-                    \\Written in Zig and using the SDL3 GPU API,
-                    \\this demo runs on a Raspberry Pi 5 with 1GB of memory.
+                    \\
+                    \\    Magnetismin syvaenmeren tutkimuskerho      sooda
+                    \\  
+                    \\  
+                    \\   badfelix                 maza            jml
+                    \\  
+                    \\  
+                    \\       Marmot            cr!sp           AFWD
+                    \\  
+                    \\  
+                    \\      ZyL            deram             qma
                     \\
                     ,
                 },
-                .pos = .{ -0.95, -0.95 },
+                .pos = .{ -0.95, 0.95 },
                 .scale = 0.072,
-                .origin = .bottom_left,
+                .origin = .top_left,
+                .effect = .uv_ripple,
                 .anim = .typewriter,
                 .color = .{ 1, 1, 1, 0.8 },
-                .fade_in = 16,
-                .fade_out = 2,
+                .fade_in = 8,
+                .fade_out = 8,
             },
             .{
                 .t = 336,
@@ -186,6 +196,15 @@
                     .entry = .{ .pos = .{ -20, -950, -60 }, .target = .{ 0, -970, 20 }, .fov = 90 },
                     .motion = .{
                         .{ .orbit = .{ .axis = .{ -0.7, 1, -0.3 }, .speed = -0.04 } },
+                    },
+                    .blend = 0,
+                },
+                .{
+                    .t = 320,
+                    .entry = .{ .pos = .{ 20, -990, 20 }, .target = .{ -20, -990, -20 }, .fov = 90 },
+                    .motion = .{
+                        .{ .dolly = .{ .speed = 3 } },
+                        .{ .swivel = .{ .local = .vertical, .speed = 0.06 } },
                     },
                 },
             },

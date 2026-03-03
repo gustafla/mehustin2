@@ -14,6 +14,7 @@ const c = @import("render/c.zig").c;
 const types = @import("render/types.zig");
 const resource = @import("resource.zig");
 const camera = @import("script/camera.zig");
+const udp = @import("udp.zig");
 const noise_zig = @import("script/noise.zig");
 const timeline = @import("script/timeline.zig");
 pub const Clip = timeline.Clip;
@@ -25,6 +26,9 @@ pub var gpa: Allocator = undefined;
 
 pub fn init(init_gpa: Allocator) void {
     gpa = init_gpa;
+    if (options.udp_client) {
+        udp.init("valot.instanssi") catch std.log.err("Name resolution failed", .{});
+    }
 }
 
 // ---- ANCHORS ----
@@ -67,6 +71,7 @@ pub const frame = struct {
         global_time: f32,
         clip_time: f32,
         clip_remaining_time: f32,
+        clip_length: f32,
     };
 
     pub const State = struct {
@@ -107,6 +112,27 @@ pub const frame = struct {
             math.radians(state.camera.roll),
         );
 
+        // Update partyhall lights
+        if (options.udp_client) {
+            const base: Vec3 = .{ 50, 100, 255 };
+            const t: Vec3 = @splat(switch (state.clip) {
+                .surface => 1.0,
+                .descent => std.math.clamp(
+                    1.0 - (math.smoothstep(state.clip_time / state.clip_length) * 4),
+                    0.0,
+                    1.0,
+                ),
+                else => 0.0,
+            });
+            const co = base * t;
+            const color: [3]u8 = .{
+                @intFromFloat(co[0]),
+                @intFromFloat(co[1]),
+                @intFromFloat(co[2]),
+            };
+            udp.updateLights(.{color} ** 24) catch std.log.err("UDP send failed", .{});
+        }
+
         return .{
             .vertex = .{
                 .view_projection = math.Mat4.perspective(
@@ -129,6 +155,7 @@ pub const frame = struct {
                 .global_time = time,
                 .clip_time = state.clip_time,
                 .clip_remaining_time = state.clip_remaining_time,
+                .clip_length = state.clip_length,
             },
             .clip = state.clip,
         };
@@ -911,6 +938,35 @@ pub const buffer = struct {
                 .pos_scale = .{ 10, -930, 100, 5 },
                 .rot_quat = math.quat.rotationBetween(vec3.YUP, vec3.ZUP),
             };
+            return .{
+                .num_elements = @intCast(dst.len),
+            };
+        }
+    };
+
+    pub const bubble_inst = struct {
+        pub const Layout = layout.VertexPos;
+
+        const n = 10;
+        const radius = 30;
+
+        pub fn create() !u32 {
+            return n;
+        }
+
+        pub fn init(dst: []Layout) !BufferInfo {
+            var rng: std.Random.Xoshiro256 = .init(41223);
+            const r = rng.random();
+
+            for (dst) |*inst| {
+                inst.* = .{
+                    .position = .{
+                        0 + r.float(f32) * radius,
+                        -900 + r.float(f32) * radius,
+                        0 + r.float(f32) * radius,
+                    },
+                };
+            }
             return .{
                 .num_elements = @intCast(dst.len),
             };

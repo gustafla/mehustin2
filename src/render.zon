@@ -66,6 +66,24 @@
                     .instance_buffer = "light_shaft_inst",
                     .fragment_storage_buffers = .{"water_parameters"},
                 },
+                // Bubbles
+                .{
+                    .condition = .{ .surface, .descent },
+                    .pipelines = .{.{
+                        .vert = "bubble.vert",
+                        .frag = "bubble.frag",
+                        .rasterizer_state = .{ .cull_mode = .none },
+                        // .depth_test = .{ .enable = true, .write = false },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .src_alpha,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .num_vertices = 4,
+                    .instance_buffer = "bubble_inst",
+                    .fragment_storage_buffers = .{"water_parameters"},
+                },
                 // Seafloor (descent version, depth-only)
                 .{
                     .condition = .{.descent},
@@ -84,7 +102,7 @@
                 },
                 // Jellyfish
                 .{
-                    .condition = .{ .garden, .currents },
+                    .condition = .{ .garden, .currents, .void },
                     .pipelines = .{.{
                         .vert = "jellyfish.vert",
                         .frag = "jellyfish.frag",
@@ -98,7 +116,7 @@
                 },
                 // Seafloor
                 .{
-                    .condition = .{ .garden, .currents },
+                    .condition = .{ .garden, .currents, .void },
                     .pipelines = .{.{
                         .vert = "static_tris.vert",
                         .frag = "diffuse.frag",
@@ -142,7 +160,7 @@
                 },
                 // Tentacles
                 .{
-                    .condition = .{ .garden, .currents },
+                    .condition = .{ .garden, .currents, .void },
                     .pipelines = .{.{
                         .vert = "tentacle.vert",
                         .frag = "tentacle.frag",
@@ -379,7 +397,33 @@
                         .{ .texture = "noise", .sampler = "nearest" },
                     },
                 },
+                // Fade to black
+                .{
+                    .condition = .{.void},
+                    .pipelines = .{.{
+                        .frag = "fade.frag",
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .src_alpha,
+                            .dst_color = .one_minus_src_alpha,
+                        }},
+                    }},
+                },
                 // Text in front of everything
+                .{
+                    .pipelines = .{
+                        .{
+                            .vert = "text.vert",
+                            .frag = "text_shadow.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
+                    .instance_buffer = "text_instances",
+                    .num_vertices = 4,
+                },
                 .{
                     .pipelines = .{
                         .{
@@ -387,11 +431,6 @@
                             .frag = "text.frag",
                             .blend_states = .{.{
                                 .enable = true,
-                                // .src_color = .one,
-                                // .dst_color = .one_minus_dst_color,
-                                // .color_op = .add,
-                                // .src_alpha = .one_minus_src_alpha,
-                                // .dst_alpha = .one_minus_dst_alpha,
                             }},
                         },
                     },
