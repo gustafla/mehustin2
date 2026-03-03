@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] More robust exit handling (by script not audio)
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [X] Lighting (point light sources)
