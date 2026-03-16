@@ -58,6 +58,7 @@ pub fn build(b: *Build) void {
         .preferred_linkage = .static,
         .strip = release_build,
         .lto = lto,
+        .sanitize_c = .off,
     });
     const sdl_lib = sdl_dep.artifact("SDL3");
 
