@@ -63,7 +63,7 @@ pub fn build(b: *Build) void {
     const sdl_lib = sdl_dep.artifact("SDL3");
 
     // Create a module for main.zig
-    const exe_mod = b.createModule(.{
+    const exe_mod = b.addModule("exe", .{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -72,8 +72,17 @@ pub fn build(b: *Build) void {
     });
 
     // Create a module for render.zig
-    const render_mod = b.createModule(.{
+    const render_mod = b.addModule("render", .{
         .root_source_file = b.path("src/render.zig"),
+        .target = target,
+        .optimize = optimize,
+        .strip = false,
+        .sanitize_c = .off,
+    });
+
+    // Create a module for script.zig
+    _ = b.addModule("script", .{
+        .root_source_file = b.path("src/script.zig"),
         .target = target,
         .optimize = optimize,
         .strip = false,
@@ -150,6 +159,7 @@ pub fn build(b: *Build) void {
     }
 
     // Add target triple to executable name if target isn't native
+    // TODO: Make this configurable
     const exe_name_base = "demo";
     const exe_name = if (!target.query.isNative()) blk: {
         const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");

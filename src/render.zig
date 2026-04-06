@@ -15,7 +15,7 @@ const types = @import("render/types.zig");
 const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
-const script = @import("script.zig");
+const script = @import("script");
 const sdlerr = @import("err.zig").sdlerr;
 
 const log = std.log.scoped(.render);

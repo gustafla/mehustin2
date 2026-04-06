@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const script = @import("../script.zig");
+const script = @import("script");
 const Clip = script.Clip;
 const types = @import("types.zig");
 const TextureFormat = types.TextureFormat;
