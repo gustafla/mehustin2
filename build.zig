@@ -1,11 +1,6 @@
 const std = @import("std");
-const Build = std.Build;
 
-const config = @import("src/config.zon");
-
-const log = std.log.scoped(.build);
-
-pub fn build(b: *Build) void {
+pub fn build(b: *std.Build) void {
     // Use standard target options
     const target = b.standardTargetOptions(.{});
 
@@ -80,14 +75,15 @@ pub fn build(b: *Build) void {
         .sanitize_c = .off,
     });
 
-    // Create a module for script.zig
-    _ = b.addModule("script", .{
-        .root_source_file = b.path("src/script.zig"),
+    // Create a module for engine.zig
+    const engine_mod = b.addModule("engine", .{
+        .root_source_file = b.path("src/engine.zig"),
         .target = target,
         .optimize = optimize,
         .strip = false,
         .sanitize_c = .off,
     });
+    render_mod.addImport("engine", engine_mod);
 
     // Export build options defined earlier into modules
     exe_mod.addOptions("options", options);
