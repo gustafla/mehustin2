@@ -1,7 +1,7 @@
 #ifndef WATER_COMMON_GLSL
 #define WATER_COMMON_GLSL
 
-#include <lib/pbr.glsl>
+#include <pbr.glsl>
 
 #ifndef SUN_COLOR
 #define SUN_COLOR (vec3(1, 0.9, 0.8) * brightness)
