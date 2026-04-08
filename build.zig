@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// Sets up glslc steps for all files in the caller project's "shaders" directory.
 pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
     // Create glsl compiler run step for each shader
     var shader_source_dir = b.build_root.handle.openDir(
