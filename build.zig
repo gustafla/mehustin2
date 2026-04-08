@@ -1,5 +1,48 @@
 const std = @import("std");
 
+pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
+    // Create glsl compiler run step for each shader
+    var shader_source_dir = b.build_root.handle.openDir(
+        "shaders",
+        .{ .iterate = true },
+    ) catch @panic("Can't open shader dir");
+    var iter = shader_source_dir.iterate();
+    while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
+        if (entry.kind != .file) continue;
+
+        // Init input and output paths
+        const input_path = std.fs.path.join(
+            b.allocator,
+            &.{ "shaders", entry.name },
+        ) catch @panic("OOM");
+        const output_path = std.mem.concat(
+            b.allocator,
+            u8,
+            &.{ "data", "/", entry.name, ".spv" },
+        ) catch @panic("OOM");
+
+        // Create run step
+        const shaderc_run = b.addSystemCommand(&.{
+            "glslc",
+            "-O",
+            "-MD",
+            "-MF",
+        });
+        _ = shaderc_run.addDepFileOutputArg("shader.d");
+        shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
+        const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
+        shaderc_run.addFileArg(b.path(input_path));
+
+        // Create install step
+        const shader_install = b.addInstallBinFile(
+            shaderc_output,
+            output_path,
+        );
+        shader_install.step.dependOn(&shaderc_run.step);
+        b.getInstallStep().dependOn(&shader_install.step);
+    }
+}
+
 pub fn build(b: *std.Build) void {
     // Use standard target options
     const target = b.standardTargetOptions(.{});
@@ -44,7 +87,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "show_fps", show_fps);
     options.addOption(PresentationMode, "present_mode", present_mode);
     options.addOption(bool, "udp_client", udp_client);
-    options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, config.data_dir));
+    options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, "data"));
 
     // Get SDL3 dependency from build.zig.zon
     const sdl_dep = b.dependency("sdl", .{
@@ -176,50 +219,6 @@ pub fn build(b: *std.Build) void {
     exe.lto = lto;
     b.installArtifact(exe);
 
-    // Create glsl compiler run step for each shader
-    var shader_source_dir = b.build_root.handle.openDir(
-        config.shader_dir,
-        .{ .iterate = true },
-    ) catch @panic("Can't open shader dir");
-    var iter = shader_source_dir.iterate();
-    while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
-        if (entry.kind != .file) continue;
-
-        // Init input and output paths
-        const input_path = std.fs.path.join(
-            b.allocator,
-            &.{ config.shader_dir, entry.name },
-        ) catch @panic("OOM");
-        const output_path = std.mem.concat(
-            b.allocator,
-            u8,
-            &.{ config.data_dir, "/", entry.name, ".spv" },
-        ) catch @panic("OOM");
-
-        // Create run step
-        const shaderc_run = b.addSystemCommand(&.{
-            "glslc",
-            "-O",
-            std.fmt.comptimePrint("-DWIDTH={}", .{config.width}),
-            std.fmt.comptimePrint("-DHEIGHT={}", .{config.height}),
-            std.fmt.comptimePrint("-DMAX_LIGHTS={}", .{config.max_lights}),
-            "-MD",
-            "-MF",
-        });
-        _ = shaderc_run.addDepFileOutputArg("shader.d");
-        shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
-        const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
-        shaderc_run.addFileArg(b.path(input_path));
-
-        // Create install step
-        const shader_install = b.addInstallBinFile(
-            shaderc_output,
-            output_path,
-        );
-        shader_install.step.dependOn(&shaderc_run.step);
-        b.getInstallStep().dependOn(&shader_install.step);
-    }
-
     // Setup docs generation
     const install_docs = b.addInstallDirectory(.{
         .install_dir = .prefix,
@@ -231,9 +230,9 @@ pub fn build(b: *std.Build) void {
 
     // Add data files to bin
     b.getInstallStep().dependOn(&b.addInstallDirectory(.{
-        .source_dir = b.path(config.data_dir),
+        .source_dir = b.path("data"),
         .install_dir = .bin,
-        .install_subdir = config.data_dir,
+        .install_subdir = "data",
     }).step);
 
     // Add README to bin
