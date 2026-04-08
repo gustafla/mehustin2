@@ -29,6 +29,7 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
             "-MF",
         });
         _ = shaderc_run.addDepFileOutputArg("shader.d");
+        shaderc_run.addPrefixedDirectoryArg("-I", b.path("shader_lib"));
         shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
         const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
         shaderc_run.addFileArg(b.path(input_path));
