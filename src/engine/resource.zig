@@ -9,11 +9,25 @@ const log = std.log.scoped(.resource);
 
 pub fn dataFilePath(gpa: Allocator, name: []const u8) ![:0]const u8 {
     log.info("Loading {s}", .{name});
-    return std.fs.path.joinZ(gpa, &.{
-        if (builtin.mode == .Debug)
-            "zig-out/bin/data" // TODO: un-hardcode this
-        else
+
+    if (builtin.mode == .Debug) {
+        const exe_path = try std.fs.selfExeDirPathAlloc(gpa);
+        defer gpa.free(exe_path);
+
+        const data_path = try std.fs.path.join(gpa, &.{
+            exe_path,
             script.config.main.data_dir,
+        });
+        defer gpa.free(data_path);
+
+        return std.fs.path.joinZ(gpa, &.{
+            data_path,
+            name,
+        });
+    }
+
+    return std.fs.path.joinZ(gpa, &.{
+        script.config.main.data_dir,
         name,
     });
 }
