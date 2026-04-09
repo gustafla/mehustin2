@@ -9,7 +9,7 @@ Build dependencies:
 - Zig 0.15.2
 - glslc
 
-Example project: TODO: add example project here.
+Example project: See [Abyss](https://github.com/gustafla/abyss).
 
 ## Dynamic Reloading
 
