@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const math = @import("math.zig");
 const vec3 = math.vec3;
 const Vec3 = math.Vec3;

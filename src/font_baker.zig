@@ -5,8 +5,8 @@ const c = @cImport({
 });
 
 pub fn main() !void {
-    var dba: std.heap.DebugAllocator(.{}) = .init;
-    var gpa = dba.allocator();
+    // var dba: std.heap.DebugAllocator(.{}) = .init;
+    // var gpa = dba.allocator();
 
     var font_info: struct {
         name: []const u8,

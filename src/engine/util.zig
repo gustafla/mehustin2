@@ -108,3 +108,7 @@ pub fn hslToRgb(hsl: math.Vec3) math.Vec3 {
     const m = hsl[2] - c / 2;
     return .{ r + m, g + m, b + m };
 }
+
+pub fn aspectRatio(comptime config: anytype) comptime_float {
+    return @as(comptime_float, config.width) / @as(comptime_float, config.height);
+}

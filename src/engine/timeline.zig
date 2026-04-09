@@ -268,7 +268,7 @@ fn genText(
     effect: u8,
 ) u32 {
     const ndc_per_pixel_y = (height_scale * 2.0) / font_sizes[font_idx];
-    const ndc_per_pixel_x = ndc_per_pixel_y / (script.config.main.width / script.config.main.height);
+    const ndc_per_pixel_x = ndc_per_pixel_y / util.aspectRatio(script.config.main);
     const line_height = font_sizes[font_idx] * ndc_per_pixel_y;
 
     // Measure bounding box

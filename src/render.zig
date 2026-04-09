@@ -1085,7 +1085,7 @@ fn viewport(target_width: u32, target_height: u32) c.SDL_GPUViewport {
     const width_f32: f32 = @floatFromInt(target_width);
     const height_f32: f32 = @floatFromInt(target_height);
     const aspect_ratio = width_f32 / height_f32;
-    const aspect = script.config.main.width / script.config.main.height;
+    const aspect = engine.util.aspectRatio(script.config.main);
 
     var w = width_f32;
     var h = height_f32;
