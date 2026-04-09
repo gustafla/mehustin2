@@ -53,9 +53,8 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "shaders",
-        "data",
+        "shader_lib",
         "README.md",
-        //"LICENSE",
+        "LICENSE",
     },
 }
