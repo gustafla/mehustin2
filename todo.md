@@ -5,7 +5,6 @@
   - [ ] Lighting (directional)
   - [X] Lighting (point light sources)
 - [ ] Replace BufferInfo return value with an optional pointer argument to it
-- [ ] Project repo: load script.zig (but not script utils), data and shaders (but not shader lib) from outside the repo
 
 # Backlog
 
@@ -47,6 +46,7 @@
 
 # Done
 
+- [X] Project repo: load script.zig (but not script utils), data and shaders (but not shader lib) from outside the repo
 - [X] Index buffers
 - [X] MSAA with resolve texture
 - [X] Particle rendering
