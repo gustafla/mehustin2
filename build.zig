@@ -77,7 +77,7 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) 
 
 pub const PresentationMode = enum { vsync, mailbox };
 
-pub fn initOptions(b: *std.Build) struct {
+pub const Options = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     exe_name: []const u8,
@@ -96,7 +96,9 @@ pub fn initOptions(b: *std.Build) struct {
         options_mod.addOption(bool, "udp_client", self.udp_client);
         return options_mod;
     }
-} {
+};
+
+pub fn initOptions(b: *std.Build) Options {
     // Use standard target options
     const target = b.standardTargetOptions(.{});
 
@@ -145,6 +147,42 @@ pub fn initOptions(b: *std.Build) struct {
             "Send UDP packets to valot.instanssi.org",
         ) orelse false,
     };
+}
+
+pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
+    // Add data files to bin
+    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path("data"),
+        .install_dir = .bin,
+        .install_subdir = "data",
+    }).step);
+
+    // Add README to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
+        b.path("README.md"),
+        "README.md",
+    ).step);
+
+    // Set exe rpath
+    const exe_mod = d.module("exe");
+    const lib_path = b.getInstallPath(.lib, ".");
+    exe_mod.addRPath(.{ .cwd_relative = lib_path });
+
+    // Add exe to bin
+    const exe = d.artifact(options.exe_name);
+    b.installArtifact(exe);
+
+    // Add lib to lib
+    if (options.render_dynlib) {
+        const render_lib = d.artifact("render");
+        b.installArtifact(render_lib);
+    }
+
+    // Add run step
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    const run_step = b.step("run", "Run the demo");
+    run_step.dependOn(&run_cmd.step);
 }
 
 pub fn build(b: *std.Build) void {
@@ -243,9 +281,6 @@ pub fn build(b: *std.Build) void {
 
     // Set up render shared library
     if (options.render_dynlib) {
-        const lib_path = b.getInstallPath(.lib, ".");
-        exe_mod.addRPath(.{ .cwd_relative = lib_path });
-
         engine_mod.addCSourceFile(.{ .file = stb_image_c });
         engine_mod.addCSourceFile(.{ .file = stb_truetype_c });
         engine_mod.addCSourceFile(.{ .file = par_shapes_c });
@@ -282,32 +317,4 @@ pub fn build(b: *std.Build) void {
     });
     const docs_step = b.step("docs", "Generate documentation");
     docs_step.dependOn(&install_docs.step);
-
-    // Add data files to bin
-    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
-        .source_dir = b.path("data"),
-        .install_dir = .bin,
-        .install_subdir = "data",
-    }).step);
-
-    // Add README to bin
-    b.getInstallStep().dependOn(&b.addInstallBinFile(
-        b.path("README-RELEASE.md"),
-        "README.md",
-    ).step);
-
-    // Create a Run step in the build graph
-    const run_cmd = b.addRunArtifact(exe);
-    // Install the build artifacts when `zig build run`
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    // Allow the user to pass arguments to the application
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    // This creates a build step (`zig build run`).
-    // It will be visible in the `zig build --help` menu.
-    const run_step = b.step("run", "Run the demo");
-    run_step.dependOn(&run_cmd.step);
 }
