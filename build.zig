@@ -87,6 +87,57 @@ pub const Options = struct {
     present_mode: PresentationMode,
     udp_client: bool,
 
+    pub fn init(b: *std.Build) @This() {
+        // Use standard target options
+        const target = b.standardTargetOptions(.{});
+
+        // Use standard optimize options
+        const optimize = b.standardOptimizeOption(.{});
+
+        // Define build options
+        return .{
+            .target = target,
+            .optimize = optimize,
+            .exe_name = b.option(
+                []const u8,
+                "exe_name",
+                "Executable file name",
+            ) orelse if (!target.query.isNative()) blk: {
+                const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
+                break :blk std.mem.concat(b.allocator, u8, &.{
+                    "demo",
+                    "-",
+                    triple,
+                }) catch @panic("OOM");
+            } else "demo",
+            .system_sdl = b.option(
+                bool,
+                "system_sdl",
+                "Link with system SDL library",
+            ) orelse (optimize == .Debug),
+            .render_dynlib = b.option(
+                bool,
+                "render_dynlib",
+                "Load (and enable reloading) render logic from librender.so",
+            ) orelse (optimize == .Debug),
+            .show_fps = b.option(
+                bool,
+                "show_fps",
+                "Show FPS on the HUD",
+            ) orelse (optimize == .Debug),
+            .present_mode = b.option(
+                PresentationMode,
+                "present_mode",
+                "Presentation mode",
+            ) orelse .vsync,
+            .udp_client = b.option(
+                bool,
+                "udp_client",
+                "Send UDP packets to valot.instanssi.org",
+            ) orelse false,
+        };
+    }
+
     pub fn optionsMod(self: *const @This(), bb: *std.Build) *std.Build.Step.Options {
         const options_mod = bb.addOptions();
         options_mod.addOption(bool, "system_sdl", self.system_sdl);
@@ -97,57 +148,6 @@ pub const Options = struct {
         return options_mod;
     }
 };
-
-pub fn initOptions(b: *std.Build) Options {
-    // Use standard target options
-    const target = b.standardTargetOptions(.{});
-
-    // Use standard optimize options
-    const optimize = b.standardOptimizeOption(.{});
-
-    // Define build options
-    return .{
-        .target = target,
-        .optimize = optimize,
-        .exe_name = b.option(
-            []const u8,
-            "exe_name",
-            "Executable file name",
-        ) orelse if (!target.query.isNative()) blk: {
-            const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
-            break :blk std.mem.concat(b.allocator, u8, &.{
-                "demo",
-                "-",
-                triple,
-            }) catch @panic("OOM");
-        } else "demo",
-        .system_sdl = b.option(
-            bool,
-            "system_sdl",
-            "Link with system SDL library",
-        ) orelse (optimize == .Debug),
-        .render_dynlib = b.option(
-            bool,
-            "render_dynlib",
-            "Load (and enable reloading) render logic from librender.so",
-        ) orelse (optimize == .Debug),
-        .show_fps = b.option(
-            bool,
-            "show_fps",
-            "Show FPS on the HUD",
-        ) orelse (optimize == .Debug),
-        .present_mode = b.option(
-            PresentationMode,
-            "present_mode",
-            "Presentation mode",
-        ) orelse .vsync,
-        .udp_client = b.option(
-            bool,
-            "udp_client",
-            "Send UDP packets to valot.instanssi.org",
-        ) orelse false,
-    };
-}
 
 pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     // Add data files to bin
@@ -186,7 +186,7 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
 }
 
 pub fn build(b: *std.Build) void {
-    const options = initOptions(b);
+    const options = Options.init(b);
     const options_mod = options.optionsMod(b);
 
     // Define variable for release setting
