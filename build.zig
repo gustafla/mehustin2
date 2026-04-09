@@ -1,11 +1,11 @@
 const std = @import("std");
 
-fn toUpper(comptime str: []const u8) []const u8 {
+fn toUpper(comptime str: []const u8) [str.len]u8 {
     var buf: [str.len]u8 = undefined;
     for (&buf, str) |*u, c| {
         u.* = std.ascii.toUpper(c);
     }
-    return &buf;
+    return buf;
 }
 
 /// Sets up glslc steps for all files in the caller project's "shaders" directory.
@@ -48,13 +48,13 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) 
             switch (@typeInfo(field.type)) {
                 .comptime_float, .comptime_int, .float, .int => {
                     shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={}", .{
-                        upper, @field(config, field.name),
+                        &upper, @field(config, field.name),
                     }));
                 },
                 .pointer => |ptr| {
                     if (ptr.size == .slice and ptr.child == u8) {
                         shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={s}", .{
-                            upper, @field(config, field.name),
+                            &upper, @field(config, field.name),
                         }));
                     }
                 },
