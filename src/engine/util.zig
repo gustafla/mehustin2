@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const math = @import("../math.zig");
-const resource = @import("../resource.zig");
+const math = @import("math.zig");
+const resource = @import("resource.zig");
 
 pub fn interleave(
     comptime E: type,

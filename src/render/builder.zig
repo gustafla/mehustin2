@@ -1,110 +1,15 @@
 const std = @import("std");
 
-const script = @import("script");
-const Clip = script.Clip;
-const types = @import("types.zig");
-const TextureFormat = types.TextureFormat;
+const engine = @import("engine");
+const Config = engine.schema.Render;
+const types = engine.types;
 const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
-const PrimitiveType = types.PrimitiveType;
-const RasterizerState = types.RasterizerState;
-const CompareOp = types.CompareOp;
-const BlendState = types.BlendState;
-const Filter = types.Filter;
-const SamplerMipmapMode = types.SamplerMipmapMode;
-const SamplerAddressMode = types.SamplerAddressMode;
-const LoadOp = types.LoadOp;
-const StoreOp = types.StoreOp;
-const SampleCount = types.SampleCount;
 const MultisampleState = types.MultisampleState;
+const script = @import("script");
 
 pub const num_vertex_uniform_buffers = 1;
 pub const num_fragment_uniform_buffers = 2;
-
-pub const Pipeline = struct {
-    vert: []const u8 = "tri.vert",
-    frag: []const u8,
-    primitive_type: PrimitiveType = .trianglestrip,
-    rasterizer_state: RasterizerState = .{},
-    enable_alpha_to_coverage: bool = false,
-    depth_test: ?struct { // TODO: Consider implementing full DepthStencilState
-        compare_op: CompareOp = .less_or_equal,
-        enable: bool = true,
-        write: bool = true,
-    } = null,
-    blend_states: []const BlendState = &.{},
-};
-
-pub const ColorTarget = union(enum) {
-    index: usize,
-    swapchain,
-};
-
-pub fn RenderTarget(T: type) type {
-    return struct {
-        target: T,
-        resolve_target: ?T = null,
-        load_op: LoadOp = .clear,
-        store_op: StoreOp = .store,
-    };
-}
-
-pub const Sampler = struct {
-    name: []const u8,
-    min_filter: Filter = .nearest,
-    mag_filter: Filter = .nearest,
-    mipmap_mode: SamplerMipmapMode = .nearest,
-    address_mode_u: SamplerAddressMode = .mirrored_repeat,
-    address_mode_v: SamplerAddressMode = .mirrored_repeat,
-    address_mode_w: SamplerAddressMode = .clamp_to_edge,
-    mip_lod_bias: f32 = 0,
-    max_anisotropy: f32 = 0,
-    compare_op: CompareOp = .less_or_equal,
-    min_lod: f32 = 0,
-    max_lod: f32 = 1024,
-    enable_anisotropy: bool = false,
-    enable_compare: bool = false,
-};
-
-pub const TextureSamplerBinding = struct {
-    texture: []const u8,
-    sampler: []const u8,
-};
-
-pub const Drawcall = struct {
-    condition: ?[]const Clip = null,
-    pipelines: []const Pipeline,
-    index_buffer: ?[]const u8 = null,
-    vertex_buffer: ?[]const u8 = null,
-    instance_buffer: ?[]const u8 = null,
-    vertex_samplers: []const TextureSamplerBinding = &.{},
-    fragment_samplers: []const TextureSamplerBinding = &.{},
-    vertex_storage_buffers: []const []const u8 = &.{},
-    fragment_storage_buffers: []const []const u8 = &.{},
-    num_vertices: ?u32 = null,
-    num_instances: ?u32 = null,
-};
-
-pub const Pass = struct {
-    condition: ?[]const Clip = null,
-    drawcalls: []const Drawcall,
-    color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
-    depth_target: ?RenderTarget(usize) = null,
-};
-
-pub const TargetTexture = struct {
-    format: TextureFormat,
-    p: u32 = 1,
-    q: u32 = 1,
-    sample_count: SampleCount = .@"1",
-};
-
-pub const Config = struct {
-    color_targets: []const TargetTexture = &.{},
-    depth_targets: []const TargetTexture = &.{},
-    samplers: []const Sampler,
-    passes: []const Pass,
-};
 
 pub fn parseIndex(
     comptime name: []const u8,
@@ -188,15 +93,15 @@ const ShaderInfo = struct {
 
 pub fn PipelineKey(comptime config: Config) type {
     return struct {
-        pipeline: Pipeline,
+        pipeline: Config.Pipeline,
         vert_info: ShaderInfo,
         frag_info: ShaderInfo,
         vertex_layout: ?type,
         instance_layout: ?type,
-        color_targets_buf: [max_color_targets]TextureFormat,
+        color_targets_buf: [max_color_targets]types.TextureFormat,
         num_color_targets: u32,
-        depth_target: ?TextureFormat,
-        sample_count: SampleCount,
+        depth_target: ?types.TextureFormat,
+        sample_count: types.SampleCount,
 
         pub const max_color_targets = fold(config.passes, &.{
             "color_targets",
@@ -242,11 +147,11 @@ pub fn PipelineKey(comptime config: Config) type {
         };
 
         pub fn init(
-            comptime pass: Pass,
-            comptime drawcall: Drawcall,
-            comptime pipeline: Pipeline,
+            comptime pass: Config.Pass,
+            comptime drawcall: Config.Drawcall,
+            comptime pipeline: Config.Pipeline,
         ) @This() {
-            var color_targets = std.mem.zeroes([max_color_targets]TextureFormat);
+            var color_targets = std.mem.zeroes([max_color_targets]types.TextureFormat);
             for (pass.color_targets, 0..) |target, i| {
                 color_targets[i] = switch (target.target) {
                     .index => |idx| config.color_targets[idx].format,
@@ -254,7 +159,7 @@ pub fn PipelineKey(comptime config: Config) type {
                 };
             }
 
-            const sample_count: SampleCount = blk: {
+            const sample_count: types.SampleCount = blk: {
                 if (pass.color_targets.len == 0) break :blk .@"1";
                 break :blk switch (pass.color_targets[0].target) {
                     .index => |idx| config.color_targets[idx].sample_count,

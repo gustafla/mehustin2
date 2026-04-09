@@ -2,7 +2,7 @@
 const std = @import("std");
 const c = @import("root").c;
 
-const sdlerr = @import("err.zig").sdlerr;
+const sdlerr = @import("../err.zig").sdlerr;
 
 const filename = "librender.so";
 const log = std.log.scoped(.dynlib);

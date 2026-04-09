@@ -2,15 +2,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
-const config = @import("config.zon");
-const options = @import("options");
+const script = @import("script");
+const config = script.config.main;
 
 const log = std.log.scoped(.resource);
-const data_dir = if (builtin.mode == .Debug) options.data_dir else config.data_dir;
 
 pub fn dataFilePath(gpa: Allocator, name: []const u8) ![:0]const u8 {
     log.info("Loading {s}", .{name});
-    return std.fs.path.joinZ(gpa, &.{ data_dir, name });
+    return std.fs.path.joinZ(gpa, &.{ script.config.main.data_dir, name });
 }
 
 pub fn loadFileZ(gpa: Allocator, path: []const u8) ![:0]u8 {

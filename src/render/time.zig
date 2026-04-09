@@ -1,4 +1,4 @@
-const c = @import("c.zig").c;
+const c = @import("engine").c;
 
 var start: u64 = 0;
 var offset: u64 = 0;

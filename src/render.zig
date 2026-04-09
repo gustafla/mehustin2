@@ -2,20 +2,19 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
-const config: Config = @import("render.zon");
-const main_config = @import("config.zon");
-const options = @import("options");
-
-const c = @import("render/c.zig").c;
-const schema = @import("render/schema.zig");
-const Config = schema.Config;
-const shader = @import("render/shader.zig");
-const time = @import("render/time.zig");
-const types = @import("render/types.zig");
+const engine = @import("engine");
+const c = engine.c;
+const types = engine.types;
 const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
+const options = engine.options;
 const script = @import("script");
+const config = script.config.render;
+
+const builder = @import("render/builder.zig");
+const shader = @import("render/shader.zig");
+const time = @import("render/time.zig");
 const sdlerr = @import("err.zig").sdlerr;
 
 const log = std.log.scoped(.render);
@@ -24,19 +23,14 @@ const log = std.log.scoped(.render);
 const buffer_ids = @typeInfo(script.Buffer).@"enum".fields;
 const texture_ids = @typeInfo(script.Texture).@"enum".fields;
 const storage_buffer_ids = @typeInfo(script.StorageBuffer).@"enum".fields;
-const SamplerEnum = schema.SamplerEnum(config);
-const PipelineKey = schema.PipelineKey(config);
-const pipeline_set = schema.ComptimeSet(PipelineKey);
+const SamplerEnum = builder.SamplerEnum(config);
+const PipelineKey = builder.PipelineKey(config);
+const pipeline_set = builder.ComptimeSet(PipelineKey);
 
-pub const bps = if (@hasField(@TypeOf(main_config), "bpm"))
-    @as(comptime_float, main_config.bpm) / 60.0
+pub const bps = if (@hasField(@TypeOf(script.config.main), "bpm"))
+    @as(comptime_float, script.config.main.bpm) / 60.0
 else
     1.0;
-pub const width: f32 = @floatFromInt(main_config.width);
-pub const height: f32 = @floatFromInt(main_config.height);
-pub const aspect = width / height;
-pub const near: f32 = 1;
-pub const far: f32 = 1024;
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
     var max = 0;
@@ -591,8 +585,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             .type = c.SDL_GPU_TEXTURETYPE_2D,
             .format = resolveTextureFormat(.swapchain),
             .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-            .width = width,
-            .height = height,
+            .width = script.config.main.width,
+            .height = script.config.main.height,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
@@ -606,8 +600,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
                 .format = resolveTextureFormat(tex.format),
                 .usage = c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
                     if (tex.sample_count == .@"1") c.SDL_GPU_TEXTUREUSAGE_SAMPLER else 0,
-                .width = main_config.width * tex.p / tex.q,
-                .height = main_config.height * tex.p / tex.q,
+                .width = script.config.main.width * tex.p / tex.q,
+                .height = script.config.main.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,
                 .num_levels = 1,
                 .sample_count = @intFromEnum(tex.sample_count),
@@ -622,8 +616,8 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
                 .format = resolveTextureFormat(tex.format),
                 .usage = c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET |
                     if (tex.sample_count == .@"1") c.SDL_GPU_TEXTUREUSAGE_SAMPLER else 0,
-                .width = main_config.width * tex.p / tex.q,
-                .height = main_config.height * tex.p / tex.q,
+                .width = script.config.main.width * tex.p / tex.q,
+                .height = script.config.main.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,
                 .num_levels = 1,
                 .sample_count = @intFromEnum(tex.sample_count),
@@ -920,7 +914,7 @@ fn renderGraph(
                 },
             }) |stage| {
                 inline for (stage.tex, 0..) |tex, slot| {
-                    const reference = comptime schema.parseIndex(tex.texture) catch |e|
+                    const reference = comptime builder.parseIndex(tex.texture) catch |e|
                         @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
                     stage.bind(render_pass, @intCast(slot), &.{
                         .texture = if (reference) |result|
@@ -1004,8 +998,8 @@ pub fn render() !void {
         };
     };
     const resolution_match =
-        (swapchain_width == main_config.width and swapchain_height >= main_config.height) or
-        (swapchain_height == main_config.height and swapchain_width >= main_config.width);
+        (swapchain_width == script.config.main.width and swapchain_height >= script.config.main.height) or
+        (swapchain_height == script.config.main.height and swapchain_width >= script.config.main.width);
 
     // Compute viewport preserving aspect ratio rendering to swapchain
     const swapchain_viewport = viewport(swapchain_width, swapchain_height);
@@ -1048,8 +1042,7 @@ pub fn render() !void {
         @sizeOf(@TypeOf(frame_data.fragment)),
     );
     // Reminder, per shader uniform counts are hardcoded at shader creation:
-    comptime std.debug.assert(schema.num_vertex_uniform_buffers == 1);
-    comptime std.debug.assert(schema.num_fragment_uniform_buffers == 2);
+    comptime std.debug.assert(builder.num_fragment_uniform_buffers == 2);
 
     // Render passes (specializes the renderer for each clip configuration)
     switch (frame_data.clip) {
@@ -1067,8 +1060,8 @@ pub fn render() !void {
         c.SDL_BlitGPUTexture(cmdbuf, &.{
             .source = .{
                 .texture = output_buffer,
-                .w = main_config.width,
-                .h = main_config.height,
+                .w = script.config.main.width,
+                .h = script.config.main.height,
             },
             .destination = .{
                 .texture = swapchain_texture,
@@ -1092,6 +1085,7 @@ fn viewport(target_width: u32, target_height: u32) c.SDL_GPUViewport {
     const width_f32: f32 = @floatFromInt(target_width);
     const height_f32: f32 = @floatFromInt(target_height);
     const aspect_ratio = width_f32 / height_f32;
+    const aspect = script.config.main.width / script.config.main.height;
 
     var w = width_f32;
     var h = height_f32;

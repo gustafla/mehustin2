@@ -1,78 +1,14 @@
 const std = @import("std");
 
-const timeline: Timeline = @import("../timeline.zon");
-
-const math = @import("../math.zig");
-const vec3 = math.vec3;
-const Vec2 = math.Vec2;
-const Vec3 = math.Vec3;
-const Vec4 = math.Vec4;
-const vec4 = math.vec4;
-const render = @import("../render.zig");
 const script = @import("script");
 const Anchor = script.Anchor;
+const timeline = script.config.timeline;
+
 const camera = @import("camera.zig");
 const font = @import("font.zig");
+const math = @import("math.zig");
+const schema = @import("schema.zig");
 const util = @import("util.zig");
-
-pub const ClipSegment = struct {
-    t: f32,
-    id: []const u8,
-};
-
-pub const CameraControl = struct {
-    t: f32,
-    i: u32,
-    position_lock: ?script.Anchor = null,
-    target_lock: ?script.Anchor = null,
-    blend: f32 = 0,
-};
-
-pub const Font = struct {
-    name: []const u8,
-    size: f32,
-    padding: u32,
-    dist_scale: f32 = 4,
-};
-
-pub const TextSegment = struct {
-    t: f32 = 0,
-    duration: f32 = std.math.inf(f32),
-    text: union(enum) {
-        str: []const u8, // Inline string
-        ref: script.String, // script.zig reflection
-    },
-    font: usize = 0,
-    pos: Vec2, // NDC position
-    scale: f32 = 0.1, // Fraction of screen height
-    origin: TextOrigin = .top_left,
-    color: Vec4 = @splat(1),
-    effect: enum(u8) {
-        none,
-        uv_ripple,
-    } = .none,
-    anim: ?union(enum) {
-        fade: Vec4, // Fade from a color value
-        slide: Vec2, // Slide from an NDC position
-        typewriter, // Reveal text letter by letter
-    } = null,
-    fade_in: f32 = 0,
-    fade_out: f32 = 0,
-};
-
-pub const Timeline = struct {
-    clip_track: []const ClipSegment,
-    camera: struct {
-        control: []const CameraControl,
-        tracks: []const []const camera.Segment,
-        effects: []const camera.Effect,
-    },
-    text: struct {
-        atlas_size: u32 = 1024,
-        fonts: []const Font,
-        track: []const TextSegment,
-    },
-};
 
 pub const State = struct {
     clip: script.Clip,
@@ -163,7 +99,7 @@ const cam_entry_table = blk: {
     };
 };
 
-inline fn getAnchor(a: Anchor) Vec3 {
+inline fn getAnchor(a: Anchor) math.Vec3 {
     return switch (a) {
         inline else => |tag| @field(script.anchor, @tagName(tag)),
     };
@@ -225,15 +161,15 @@ pub fn resolve(time: f32) State {
     var pos_offset = if (cam_control.position_lock) |to|
         getAnchor(to)
     else
-        @as(Vec3, @splat(0));
+        @as(math.Vec3, @splat(0));
 
     if (blend_alpha > 0) {
         const next_ctrl = timeline.camera.control[next_control_idx];
         const next_offset = if (next_ctrl.position_lock) |to|
             getAnchor(to)
         else
-            @as(Vec3, @splat(0));
-        pos_offset = vec3.lerp(pos_offset, next_offset, blend_alpha);
+            @as(math.Vec3, @splat(0));
+        pos_offset = math.vec3.lerp(pos_offset, next_offset, blend_alpha);
     }
 
     // Apply rig offset to state
@@ -252,7 +188,7 @@ pub fn resolve(time: f32) State {
             getAnchor(to)
         else
             track_target_world;
-        look_target = vec3.lerp(look_target, next_look, blend_alpha);
+        look_target = math.vec3.lerp(look_target, next_look, blend_alpha);
     }
 
     cam_state.target = look_target;
@@ -268,18 +204,6 @@ pub fn resolve(time: f32) State {
         .camera = cam,
     };
 }
-
-pub const TextOrigin = enum {
-    left,
-    right,
-    top,
-    bottom,
-    top_left,
-    top_right,
-    bottom_left,
-    bottom_right,
-    center,
-};
 
 pub const InstanceText = extern struct {
     uv: [4]f32,
@@ -337,14 +261,14 @@ fn genText(
     dst: []InstanceText,
     str: []const u8,
     height_scale: f32,
-    origin: TextOrigin,
+    origin: schema.Timeline.TextOrigin,
     pos_ndc: [2]f32,
     color: [4]f32,
     font_idx: usize,
     effect: u8,
 ) u32 {
     const ndc_per_pixel_y = (height_scale * 2.0) / font_sizes[font_idx];
-    const ndc_per_pixel_x = ndc_per_pixel_y / render.aspect;
+    const ndc_per_pixel_x = ndc_per_pixel_y / (script.config.main.width / script.config.main.height);
     const line_height = font_sizes[font_idx] * ndc_per_pixel_y;
 
     // Measure bounding box
@@ -506,10 +430,10 @@ pub const text_instances = struct {
                     },
                     .slide => |offset| {
                         const factor = 1.0 - in_progress;
-                        pos += offset * @as(Vec2, @splat(factor));
+                        pos += offset * @as(math.Vec2, @splat(factor));
                     },
                     .fade => |start_color| {
-                        color = vec4.lerp(start_color, track.color, in_progress);
+                        color = math.vec4.lerp(start_color, track.color, in_progress);
                     },
                 }
             }

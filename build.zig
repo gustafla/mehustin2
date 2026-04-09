@@ -1,10 +1,18 @@
 const std = @import("std");
 
+fn toUpper(comptime str: []const u8) []const u8 {
+    var buf: [str.len]u8 = undefined;
+    for (&buf, str) |*u, c| {
+        u.* = std.ascii.toUpper(c);
+    }
+    return &buf;
+}
+
 /// Sets up glslc steps for all files in the caller project's "shaders" directory.
-pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
+pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) void {
     // Create glsl compiler run step for each shader
     var shader_source_dir = b.build_root.handle.openDir(
-        "shaders",
+        config.shader_dir,
         .{ .iterate = true },
     ) catch @panic("Can't open shader dir");
     var iter = shader_source_dir.iterate();
@@ -14,12 +22,12 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
         // Init input and output paths
         const input_path = std.fs.path.join(
             b.allocator,
-            &.{ "shaders", entry.name },
+            &.{ config.shader_dir, entry.name },
         ) catch @panic("OOM");
         const output_path = std.mem.concat(
             b.allocator,
             u8,
-            &.{ "data", "/", entry.name, ".spv" },
+            &.{ config.data_dir, "/", entry.name, ".spv" },
         ) catch @panic("OOM");
 
         // Create run step
@@ -29,9 +37,31 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
             "-MD",
             "-MF",
         });
+
         _ = shaderc_run.addDepFileOutputArg("shader.d");
         shaderc_run.addPrefixedDirectoryArg("-I", b.path("shader_lib"));
         shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
+
+        // Add args from conf
+        inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
+            const upper = comptime toUpper(field.name);
+            switch (@typeInfo(field.type)) {
+                .comptime_float, .comptime_int, .float, .int => {
+                    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={}", .{
+                        upper, @field(config, field.name),
+                    }));
+                },
+                .pointer => |ptr| {
+                    if (ptr.size == .slice and ptr.child == u8) {
+                        shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={s}", .{
+                            upper, @field(config, field.name),
+                        }));
+                    }
+                },
+                else => {},
+            }
+        }
+
         const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
         shaderc_run.addFileArg(b.path(input_path));
 
@@ -45,58 +75,91 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency) void {
     }
 }
 
-pub fn build(b: *std.Build) void {
+pub const PresentationMode = enum { vsync, mailbox };
+
+pub fn initOptions(b: *std.Build) struct {
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    exe_name: []const u8,
+    system_sdl: bool,
+    render_dynlib: bool,
+    show_fps: bool,
+    present_mode: PresentationMode,
+    udp_client: bool,
+
+    pub fn optionsMod(self: *const @This(), bb: *std.Build) *std.Build.Step.Options {
+        const options_mod = bb.addOptions();
+        options_mod.addOption(bool, "system_sdl", self.system_sdl);
+        options_mod.addOption(bool, "render_dynlib", self.render_dynlib);
+        options_mod.addOption(bool, "show_fps", self.show_fps);
+        options_mod.addOption(PresentationMode, "present_mode", self.present_mode);
+        options_mod.addOption(bool, "udp_client", self.udp_client);
+        return options_mod;
+    }
+} {
     // Use standard target options
     const target = b.standardTargetOptions(.{});
 
     // Use standard optimize options
     const optimize = b.standardOptimizeOption(.{});
 
-    // Define variable for release setting
-    const release_build = optimize != .Debug;
-    const lto: std.zig.LtoMode = if (release_build) .full else .none;
-
     // Define build options
-    const system_sdl = b.option(
-        bool,
-        "system-sdl",
-        "Link with system SDL library",
-    ) orelse !release_build;
-    const render_dynlib = b.option(
-        bool,
-        "render-dynlib",
-        "Load (and enable reloading) render logic from librender.so",
-    ) orelse !release_build;
-    const show_fps = b.option(
-        bool,
-        "show-fps",
-        "Show FPS on the HUD",
-    ) orelse !release_build;
-    const PresentationMode = enum { vsync, mailbox };
-    const present_mode: PresentationMode = b.option(
-        PresentationMode,
-        "present-mode",
-        "Presentation mode",
-    ) orelse .vsync;
-    const udp_client = b.option(
-        bool,
-        "udp-client",
-        "Send UDP packets to valot.instanssi.org",
-    ) orelse false;
-    const options = b.addOptions();
-    options.addOption(bool, "system_sdl", system_sdl);
-    options.addOption(bool, "render_dynlib", render_dynlib);
-    options.addOption(bool, "show_fps", show_fps);
-    options.addOption(PresentationMode, "present_mode", present_mode);
-    options.addOption(bool, "udp_client", udp_client);
-    options.addOption([]const u8, "data_dir", b.getInstallPath(.bin, "data"));
+    return .{
+        .target = target,
+        .optimize = optimize,
+        .exe_name = b.option(
+            []const u8,
+            "exe_name",
+            "Executable file name",
+        ) orelse if (!target.query.isNative()) blk: {
+            const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
+            break :blk std.mem.concat(b.allocator, u8, &.{
+                "demo",
+                "-",
+                triple,
+            }) catch @panic("OOM");
+        } else "demo",
+        .system_sdl = b.option(
+            bool,
+            "system_sdl",
+            "Link with system SDL library",
+        ) orelse (optimize == .Debug),
+        .render_dynlib = b.option(
+            bool,
+            "render_dynlib",
+            "Load (and enable reloading) render logic from librender.so",
+        ) orelse (optimize == .Debug),
+        .show_fps = b.option(
+            bool,
+            "show_fps",
+            "Show FPS on the HUD",
+        ) orelse (optimize == .Debug),
+        .present_mode = b.option(
+            PresentationMode,
+            "present_mode",
+            "Presentation mode",
+        ) orelse .vsync,
+        .udp_client = b.option(
+            bool,
+            "udp_client",
+            "Send UDP packets to valot.instanssi.org",
+        ) orelse false,
+    };
+}
+
+pub fn build(b: *std.Build) void {
+    const options = initOptions(b);
+    const options_mod = options.optionsMod(b);
+
+    // Define variable for release setting
+    const lto: std.zig.LtoMode = if (options.optimize != .Debug) .full else .none;
 
     // Get SDL3 dependency from build.zig.zon
     const sdl_dep = b.dependency("sdl", .{
-        .target = target,
-        .optimize = optimize,
+        .target = options.target,
+        .optimize = options.optimize,
         .preferred_linkage = .static,
-        .strip = release_build,
+        .strip = options.optimize != .Debug,
         .lto = lto,
         .sanitize_c = .off,
     });
@@ -105,17 +168,17 @@ pub fn build(b: *std.Build) void {
     // Create a module for main.zig
     const exe_mod = b.addModule("exe", .{
         .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .strip = release_build,
+        .target = options.target,
+        .optimize = options.optimize,
+        .strip = options.optimize != .Debug,
         .sanitize_c = .off,
     });
 
     // Create a module for render.zig
     const render_mod = b.addModule("render", .{
         .root_source_file = b.path("src/render.zig"),
-        .target = target,
-        .optimize = optimize,
+        .target = options.target,
+        .optimize = options.optimize,
         .strip = false,
         .sanitize_c = .off,
     });
@@ -123,18 +186,21 @@ pub fn build(b: *std.Build) void {
     // Create a module for engine.zig
     const engine_mod = b.addModule("engine", .{
         .root_source_file = b.path("src/engine.zig"),
-        .target = target,
-        .optimize = optimize,
+        .target = options.target,
+        .optimize = options.optimize,
         .strip = false,
         .sanitize_c = .off,
     });
+
+    // Setup internal deps
+    exe_mod.addImport("engine", engine_mod);
     render_mod.addImport("engine", engine_mod);
 
-    // Export build options defined earlier into modules
-    exe_mod.addOptions("options", options);
+    // Import build options into engine module
+    engine_mod.addOptions("options", options_mod);
 
     // Link SDL
-    if (system_sdl) {
+    if (options.system_sdl) {
         exe_mod.linkSystemLibrary("SDL3", .{});
         render_mod.linkSystemLibrary("SDL3", .{});
     } else {
@@ -145,12 +211,12 @@ pub fn build(b: *std.Build) void {
     // Get the stb dependency from build.zig.zon
     const stb_dep = b.dependency("stb", .{});
     exe_mod.addIncludePath(stb_dep.path("."));
-    render_mod.addIncludePath(stb_dep.path("."));
+    engine_mod.addIncludePath(stb_dep.path("."));
 
     // Get the par dependency
     const par_dep = b.dependency("par", .{});
     exe_mod.addIncludePath(par_dep.path("."));
-    render_mod.addIncludePath(par_dep.path("."));
+    engine_mod.addIncludePath(par_dep.path("."));
 
     // Add stb_vorbis to exe
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
@@ -176,14 +242,13 @@ pub fn build(b: *std.Build) void {
     );
 
     // Set up render shared library
-    if (render_dynlib) {
+    if (options.render_dynlib) {
         const lib_path = b.getInstallPath(.lib, ".");
         exe_mod.addRPath(.{ .cwd_relative = lib_path });
 
-        render_mod.addOptions("options", options);
-        render_mod.addCSourceFile(.{ .file = stb_image_c });
-        render_mod.addCSourceFile(.{ .file = stb_truetype_c });
-        render_mod.addCSourceFile(.{ .file = par_shapes_c });
+        engine_mod.addCSourceFile(.{ .file = stb_image_c });
+        engine_mod.addCSourceFile(.{ .file = stb_truetype_c });
+        engine_mod.addCSourceFile(.{ .file = par_shapes_c });
 
         const render = b.addLibrary(.{
             .name = "render",
@@ -199,21 +264,9 @@ pub fn build(b: *std.Build) void {
         exe_mod.addCSourceFile(.{ .file = par_shapes_c });
     }
 
-    // Add target triple to executable name if target isn't native
-    // TODO: Make this configurable
-    const exe_name_base = "demo";
-    const exe_name = if (!target.query.isNative()) blk: {
-        const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
-        break :blk std.mem.concat(b.allocator, u8, &.{
-            exe_name_base,
-            "-",
-            triple,
-        }) catch @panic("OOM");
-    } else exe_name_base;
-
     // Add the main exe
     const exe = b.addExecutable(.{
-        .name = exe_name,
+        .name = options.exe_name,
         .root_module = exe_mod,
         .use_llvm = true, // TODO: Remove this in upcoming release if fixed
     });

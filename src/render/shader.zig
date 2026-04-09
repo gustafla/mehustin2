@@ -1,9 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const engine = @import("engine");
+const resource = engine.resource;
+const c = engine.c;
+
 const sdlerr = @import("../err.zig").sdlerr;
-const resource = @import("../resource.zig");
-const c = @import("c.zig").c;
 
 const log = std.log.scoped(.shader);
 

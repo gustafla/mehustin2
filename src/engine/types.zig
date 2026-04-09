@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const c = @import("c.zig").c;
+const c = @import("../engine.zig").c;
 
 fn enumFieldNameFromC(
     comptime name: []const u8,

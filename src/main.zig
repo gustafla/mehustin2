@@ -1,10 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const config = @import("config.zon");
-const options = @import("options");
+const config = @import("script").config.main;
+const engine = @import("engine");
+const options = engine.options;
 
-const audio = @import("audio.zig");
+const audio = @import("main/audio.zig");
 const sdlerr = @import("err.zig").sdlerr;
 
 pub const c = @cImport({
@@ -18,7 +19,7 @@ pub const c = @cImport({
 });
 // Render is defined as dynlib.zig or render.zig depending on build configuration
 const render = if (options.render_dynlib)
-    @import("dynlib.zig")
+    @import("main/dynlib.zig")
 else
     @import("render.zig");
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const c = @import("../render/c.zig").c;
+const c = @import("../engine.zig").c;
 
 const Error = error{
     FontInitFailed,
