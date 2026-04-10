@@ -1,11 +1,12 @@
 const std = @import("std");
 
-fn toUpper(comptime str: []const u8) [str.len]u8 {
-    var buf: [str.len]u8 = undefined;
-    for (&buf, str) |*u, c| {
-        u.* = std.ascii.toUpper(c);
-    }
-    return buf;
+// Hooks up module dependencies in the caller project's build graph.
+pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) void {
+    const engine_mod = d.module("engine");
+    script_mod.addImport("engine", engine_mod);
+    engine_mod.addImport("script", script_mod);
+    d.module("render").addImport("script", script_mod);
+    d.module("exe").addImport("script", script_mod);
 }
 
 /// Sets up glslc steps for all files in the caller project's "shaders" directory.
@@ -316,4 +317,12 @@ pub fn build(b: *std.Build) void {
     });
     const docs_step = b.step("docs", "Generate documentation");
     docs_step.dependOn(&install_docs.step);
+}
+
+fn toUpper(comptime str: []const u8) [str.len]u8 {
+    var buf: [str.len]u8 = undefined;
+    for (&buf, str) |*u, c| {
+        u.* = std.ascii.toUpper(c);
+    }
+    return buf;
 }
