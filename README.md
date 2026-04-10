@@ -8,6 +8,7 @@ Currently, the engine cannot be built from this repository, as it requires a
 Build dependencies:
 - Zig 0.15.2
 - glslc
+- SDL3 (optional, use `-Dsystem_sdl=false` to build a static library)
 
 Example project: See [Abyss](https://github.com/gustafla/abyss).
 
