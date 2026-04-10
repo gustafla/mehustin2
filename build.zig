@@ -192,17 +192,6 @@ pub fn build(b: *std.Build) void {
     // Define variable for release setting
     const lto: std.zig.LtoMode = if (options.optimize != .Debug) .full else .none;
 
-    // Get SDL3 dependency from build.zig.zon
-    const sdl_dep = b.dependency("sdl", .{
-        .target = options.target,
-        .optimize = options.optimize,
-        .preferred_linkage = .static,
-        .strip = options.optimize != .Debug,
-        .lto = lto,
-        .sanitize_c = .off,
-    });
-    const sdl_lib = sdl_dep.artifact("SDL3");
-
     // Create a module for main.zig
     const exe_mod = b.addModule("exe", .{
         .root_source_file = b.path("src/main.zig"),
@@ -237,13 +226,29 @@ pub fn build(b: *std.Build) void {
     // Import build options into engine module
     engine_mod.addOptions("options", options_mod);
 
+    // Get SDL3 dependency from build.zig.zon
+    const sdl_dep = b.dependency("sdl", .{
+        .target = options.target,
+        .optimize = options.optimize,
+        .preferred_linkage = .static,
+        .strip = options.optimize != .Debug,
+        .lto = lto,
+        .sanitize_c = .off,
+    });
+    exe_mod.addIncludePath(sdl_dep.path("include"));
+    render_mod.addIncludePath(sdl_dep.path("include"));
+    engine_mod.addIncludePath(sdl_dep.path("include"));
+
     // Link SDL
     if (options.system_sdl) {
         exe_mod.linkSystemLibrary("SDL3", .{});
         render_mod.linkSystemLibrary("SDL3", .{});
+        engine_mod.linkSystemLibrary("SDL3", .{});
     } else {
+        const sdl_lib = sdl_dep.artifact("SDL3");
         exe_mod.linkLibrary(sdl_lib);
         render_mod.linkLibrary(sdl_lib);
+        engine_mod.linkLibrary(sdl_lib);
     }
 
     // Get the stb dependency from build.zig.zon
@@ -253,8 +258,7 @@ pub fn build(b: *std.Build) void {
 
     // Get the par dependency
     const par_dep = b.dependency("par", .{});
-    exe_mod.addIncludePath(par_dep.path("."));
-    engine_mod.addIncludePath(par_dep.path("."));
+    engine_mod.addIncludePath(par_dep.path(".")); // par_shapes
 
     // Add stb_vorbis to exe
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
@@ -268,23 +272,22 @@ pub fn build(b: *std.Build) void {
         \\#include <stb_image.h>
         \\
     );
+    engine_mod.addCSourceFile(.{ .file = stb_image_c });
     const stb_truetype_c = c_write.add("stb_truetype.c",
         \\#define STB_TRUETYPE_IMPLEMENTATION
         \\#include <stb_truetype.h>
         \\
     );
+    engine_mod.addCSourceFile(.{ .file = stb_truetype_c });
     const par_shapes_c = c_write.add("par_shapes.c",
         \\#define PAR_SHAPES_IMPLEMENTATION
         \\#include <par_shapes.h>
         \\
     );
+    engine_mod.addCSourceFile(.{ .file = par_shapes_c });
 
     // Set up render shared library
     if (options.render_dynlib) {
-        engine_mod.addCSourceFile(.{ .file = stb_image_c });
-        engine_mod.addCSourceFile(.{ .file = stb_truetype_c });
-        engine_mod.addCSourceFile(.{ .file = par_shapes_c });
-
         const render = b.addLibrary(.{
             .name = "render",
             .linkage = .dynamic,
@@ -293,10 +296,6 @@ pub fn build(b: *std.Build) void {
         });
         render.linkLibC();
         b.installArtifact(render);
-    } else {
-        exe_mod.addCSourceFile(.{ .file = stb_image_c });
-        exe_mod.addCSourceFile(.{ .file = stb_truetype_c });
-        exe_mod.addCSourceFile(.{ .file = par_shapes_c });
     }
 
     // Add the main exe
