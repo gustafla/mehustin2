@@ -40,7 +40,7 @@ pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) 
         });
 
         _ = shaderc_run.addDepFileOutputArg("shader.d");
-        shaderc_run.addPrefixedDirectoryArg("-I", b.path("shader_lib"));
+        shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir).path(b, "lib"));
         shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
 
         // Add args from conf

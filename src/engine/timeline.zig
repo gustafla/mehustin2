@@ -16,11 +16,46 @@ const TextureInfo = types.TextureInfo;
 const util = @import("util.zig");
 
 pub const State = struct {
+    time: f32,
     clip: Clip,
     clip_time: f32,
     clip_remaining_time: f32,
     clip_length: f32,
     camera: camera.State,
+
+    pub fn uniforms(self: *const @This()) types.FrameUniforms {
+        const view = math.Mat4.lookAt(
+            self.camera.pos,
+            self.camera.target,
+            math.radians(self.camera.roll),
+        );
+
+        return .{
+            .vertex = .{
+                .view_projection = math.Mat4.perspective(
+                    math.radians(self.camera.fov),
+                    util.aspectRatio(script.config.main),
+                    script.config.main.near,
+                    script.config.main.far,
+                ).mmul(view),
+                .camera_position = .{
+                    self.camera.pos[0],
+                    self.camera.pos[1],
+                    self.camera.pos[2],
+                    1,
+                },
+                .camera_right = .{ view.col[0][0], view.col[1][0], view.col[2][0], 0 },
+                .camera_up = .{ view.col[0][1], view.col[1][1], view.col[2][1], 0 },
+                .global_time = self.time,
+            },
+            .fragment = .{
+                .global_time = self.time,
+                .clip_time = self.clip_time,
+                .clip_remaining_time = self.clip_remaining_time,
+                .clip_length = self.clip_length,
+            },
+        };
+    }
 };
 
 pub const Clip = blk: {
@@ -105,6 +140,7 @@ const cam_entry_table = blk: {
 };
 
 inline fn getAnchor(a: Anchor) Vec3 {
+    if (@typeInfo(Anchor).@"enum".fields.len == 0) unreachable;
     return switch (a) {
         inline else => |tag| @field(script.anchor, @tagName(tag)),
     };
@@ -202,6 +238,7 @@ pub fn resolve(time: f32) State {
     const cam = camera.applyEffects(timeline.camera.effects, cam_state, time);
 
     return .{
+        .time = time,
         .clip = clip,
         .clip_time = clip_time,
         .clip_remaining_time = clip_remaining_time,
@@ -388,7 +425,7 @@ pub const text_instances = struct {
 
     pub fn updateData(dst: []Layout) !void {
         num_elements = 0;
-        const time = script.frame.time;
+        const time = script.frame.state.time;
 
         for (timeline.text.track) |track| {
             if (time < track.t or time >= track.t + track.duration) continue;

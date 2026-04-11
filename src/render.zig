@@ -734,7 +734,6 @@ fn updateStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u
 
 const RenderParameters = struct {
     cmdbuf: *c.SDL_GPUCommandBuffer,
-    frame_state: script.frame.State,
     swapchain_texture: *c.SDL_GPUTexture,
     swapchain_viewport: *const c.SDL_GPUViewport,
     resolution_match: bool,
@@ -763,15 +762,7 @@ fn renderGraph(
                         else
                             output_buffer,
                     },
-                    .clear_color = switch (target.target) {
-                        .index => .{
-                            .r = parm.frame_state.clear_color[0],
-                            .g = parm.frame_state.clear_color[1],
-                            .b = parm.frame_state.clear_color[2],
-                            .a = parm.frame_state.clear_color[3],
-                        },
-                        .swapchain => .{ .r = 0, .g = 0, .b = 0, .a = 1 },
-                    },
+                    .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
                     .load_op = @intFromEnum(target.load_op),
                     .store_op = @intFromEnum(target.store_op),
                     .resolve_texture = if (target.resolve_target) |resolve|
@@ -1011,7 +1002,7 @@ pub fn render() !void {
     const timestamp = time.getTime() * bps;
 
     // Update script frame
-    const frame_data = script.frame.update(timestamp);
+    const frame_state = script.frame.update(timestamp);
 
     // Update dynamic buffers
     if (update_transfer_buffer) |transfer_buffer| {
@@ -1032,26 +1023,26 @@ pub fn render() !void {
     }
 
     // Update frame uniforms
+    const frame_uniforms = frame_state.uniforms();
     c.SDL_PushGPUVertexUniformData(
         cmdbuf,
         0,
-        @ptrCast(&frame_data.vertex),
-        @sizeOf(@TypeOf(frame_data.vertex)),
+        @ptrCast(&frame_uniforms.vertex),
+        @sizeOf(@TypeOf(frame_uniforms.vertex)),
     );
     c.SDL_PushGPUFragmentUniformData(
         cmdbuf,
         0,
-        @ptrCast(&frame_data.fragment),
-        @sizeOf(@TypeOf(frame_data.fragment)),
+        @ptrCast(&frame_uniforms.fragment),
+        @sizeOf(@TypeOf(frame_uniforms.fragment)),
     );
     // Reminder, per shader uniform counts are hardcoded at shader creation:
     comptime std.debug.assert(builder.num_fragment_uniform_buffers == 2);
 
     // Render passes (specializes the renderer for each clip configuration)
-    switch (frame_data.clip) {
+    switch (frame_state.clip) {
         inline else => |clip| try renderGraph(clip, .{
             .cmdbuf = cmdbuf,
-            .frame_state = frame_data,
             .swapchain_texture = swapchain_texture,
             .swapchain_viewport = &swapchain_viewport,
             .resolution_match = resolution_match,

@@ -19,3 +19,30 @@ pub const c = @cImport({
     @cInclude("stb_truetype.h");
     @cInclude("par_shapes.h");
 });
+
+// Compile-time script API assertions
+comptime {
+    const std = @import("std");
+    const script = @import("script");
+
+    // Assert that layouts are extern structs
+    for (@typeInfo(script.layout).@"struct".decls) |decl| {
+        if (@typeInfo(@field(script.layout, decl.name)).@"struct".layout != .@"extern") {
+            @compileError(std.fmt.comptimePrint("Layout {s} is not extern", .{decl.name}));
+        }
+    }
+
+    // Assert that SSBO layouts are extern structs
+    for (@typeInfo(script.storage_buffer).@"struct".decls) |decl| {
+        const ssbo = @field(script.storage_buffer, decl.name);
+        if (@typeInfo(ssbo.Header).@"struct".layout != .@"extern") {
+            @compileError(std.fmt.comptimePrint("{s}.Header is not extern", .{decl.name}));
+        }
+        if (ssbo.Element != void and @typeInfo(ssbo.Element).@"struct".layout != .@"extern") {
+            @compileError(std.fmt.comptimePrint("{s}.Element is not extern", .{decl.name}));
+        }
+        if (@sizeOf(ssbo.Header) % 16 != 0) {
+            @compileError(std.fmt.comptimePrint("{s}.Header size is not a multiple of 16", .{decl.name}));
+        }
+    }
+}

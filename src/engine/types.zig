@@ -1,6 +1,8 @@
 const std = @import("std");
 
 const c = @import("../engine.zig").c;
+const math = @import("math.zig");
+const timeline = @import("timeline.zig");
 
 fn enumFieldNameFromC(
     comptime name: []const u8,
@@ -124,6 +126,26 @@ pub const TextureInfo = struct {
 pub const BufferInfo = struct {
     num_elements: u32,
     first_element: u32 = 0,
+};
+
+pub const VertexUniforms = extern struct {
+    view_projection: math.Mat4,
+    camera_position: [4]f32,
+    camera_right: [4]f32,
+    camera_up: [4]f32,
+    global_time: f32,
+};
+
+pub const FragmentUniforms = extern struct {
+    global_time: f32,
+    clip_time: f32,
+    clip_remaining_time: f32,
+    clip_length: f32,
+};
+
+pub const FrameUniforms = struct {
+    vertex: VertexUniforms,
+    fragment: FragmentUniforms,
 };
 
 pub const PrimitiveType = EnumFromC("PrimitiveType", .{});
