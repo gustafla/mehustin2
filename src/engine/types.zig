@@ -112,6 +112,20 @@ pub const TextureFormat = EnumFromC(
 );
 pub const TextureType = EnumFromC("TextureType", .{});
 
+pub const TextureInfo = struct {
+    tex_type: TextureType = .@"2d",
+    format: TextureFormat,
+    width: u32,
+    height: u32,
+    depth: u32 = 1,
+    mip_levels: u32 = 1,
+};
+
+pub const BufferInfo = struct {
+    num_elements: u32,
+    first_element: u32 = 0,
+};
+
 pub const PrimitiveType = EnumFromC("PrimitiveType", .{});
 pub const FillMode = EnumFromC("FillMode", .{});
 pub const CullMode = EnumFromC("CullMode", .{});

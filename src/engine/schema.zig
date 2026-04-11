@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const script = @import("script");
-const Clip = script.Clip;
 
 const camera = @import("camera.zig");
 const math = @import("math.zig");
+const timeline = @import("timeline.zig");
 const types = @import("types.zig");
 const PrimitiveType = types.PrimitiveType;
 const RasterizerState = types.RasterizerState;
@@ -75,7 +75,7 @@ pub const Render = struct {
     };
 
     pub const Drawcall = struct {
-        condition: ?[]const Clip = null,
+        condition: ?[]const timeline.Clip = null,
         pipelines: []const Pipeline,
         index_buffer: ?[]const u8 = null,
         vertex_buffer: ?[]const u8 = null,
@@ -89,7 +89,7 @@ pub const Render = struct {
     };
 
     pub const Pass = struct {
-        condition: ?[]const Clip = null,
+        condition: ?[]const timeline.Clip = null,
         drawcalls: []const Drawcall,
         color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
         depth_target: ?RenderTarget(usize) = null,

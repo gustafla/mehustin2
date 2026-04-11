@@ -7,11 +7,16 @@ const timeline = script.config.timeline;
 const camera = @import("camera.zig");
 const font = @import("font.zig");
 const math = @import("math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
 const schema = @import("schema.zig");
+const types = @import("types.zig");
+const BufferInfo = types.BufferInfo;
+const TextureInfo = types.TextureInfo;
 const util = @import("util.zig");
 
 pub const State = struct {
-    clip: script.Clip,
+    clip: Clip,
     clip_time: f32,
     clip_remaining_time: f32,
     clip_length: f32,
@@ -99,7 +104,7 @@ const cam_entry_table = blk: {
     };
 };
 
-inline fn getAnchor(a: Anchor) math.Vec3 {
+inline fn getAnchor(a: Anchor) Vec3 {
     return switch (a) {
         inline else => |tag| @field(script.anchor, @tagName(tag)),
     };
@@ -161,14 +166,14 @@ pub fn resolve(time: f32) State {
     var pos_offset = if (cam_control.position_lock) |to|
         getAnchor(to)
     else
-        @as(math.Vec3, @splat(0));
+        @as(Vec3, @splat(0));
 
     if (blend_alpha > 0) {
         const next_ctrl = timeline.camera.control[next_control_idx];
         const next_offset = if (next_ctrl.position_lock) |to|
             getAnchor(to)
         else
-            @as(math.Vec3, @splat(0));
+            @as(Vec3, @splat(0));
         pos_offset = math.vec3.lerp(pos_offset, next_offset, blend_alpha);
     }
 
@@ -217,45 +222,47 @@ pub const InstanceText = extern struct {
 var font_sizes: [timeline.text.fonts.len]f32 = undefined;
 var font_glyphs: [timeline.text.fonts.len][128]font.GlyphInfo = undefined;
 
-pub const font_atlas = struct {
-    pub fn create() !script.TextureInfo {
-        return .{
-            .tex_type = .@"2d_array",
-            .format = .r8_unorm,
-            .width = timeline.text.atlas_size,
-            .height = timeline.text.atlas_size,
-            .depth = @intCast(timeline.text.fonts.len),
-        };
-    }
-
-    pub fn init(dst: []u8) !void {
-        const layer_size =
-            timeline.text.atlas_size *
-            timeline.text.atlas_size;
-
-        for (
-            timeline.text.fonts,
-            &font_sizes,
-            &font_glyphs,
-            0..,
-        ) |def, *size, *glyph_info, i| {
-            size.* = def.size;
-            const ttf = try util.loadFile(script.gpa, def.name);
-            defer script.gpa.free(ttf);
-
-            try font.bakeSDFAtlas(
-                ttf.ptr,
-                def.size,
-                def.padding,
-                def.dist_scale,
-                timeline.text.atlas_size,
-                timeline.text.atlas_size,
-                glyph_info,
-                dst.ptr + layer_size * i,
-            );
+pub fn FontAtlas(gpa: *std.mem.Allocator) type {
+    return struct {
+        pub fn create() !TextureInfo {
+            return .{
+                .tex_type = .@"2d_array",
+                .format = .r8_unorm,
+                .width = timeline.text.atlas_size,
+                .height = timeline.text.atlas_size,
+                .depth = @intCast(timeline.text.fonts.len),
+            };
         }
-    }
-};
+
+        pub fn init(dst: []u8) !void {
+            const layer_size =
+                timeline.text.atlas_size *
+                timeline.text.atlas_size;
+
+            for (
+                timeline.text.fonts,
+                &font_sizes,
+                &font_glyphs,
+                0..,
+            ) |def, *size, *glyph_info, i| {
+                size.* = def.size;
+                const ttf = try util.loadFile(gpa.*, def.name);
+                defer gpa.free(ttf);
+
+                try font.bakeSDFAtlas(
+                    ttf.ptr,
+                    def.size,
+                    def.padding,
+                    def.dist_scale,
+                    timeline.text.atlas_size,
+                    timeline.text.atlas_size,
+                    glyph_info,
+                    dst.ptr + layer_size * i,
+                );
+            }
+        }
+    };
+}
 
 fn genText(
     dst: []InstanceText,
@@ -430,7 +437,7 @@ pub const text_instances = struct {
                     },
                     .slide => |offset| {
                         const factor = 1.0 - in_progress;
-                        pos += offset * @as(math.Vec2, @splat(factor));
+                        pos += offset * @as(Vec2, @splat(factor));
                     },
                     .fade => |start_color| {
                         color = math.vec4.lerp(start_color, track.color, in_progress);
@@ -455,7 +462,7 @@ pub const text_instances = struct {
         }
     }
 
-    pub fn updateInfo() script.BufferInfo {
+    pub fn updateInfo() BufferInfo {
         return .{ .num_elements = num_elements };
     }
 };

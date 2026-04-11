@@ -4,7 +4,10 @@ const builtin = @import("builtin");
 
 const engine = @import("engine");
 const c = engine.c;
+const timeline = engine.timeline;
 const types = engine.types;
+const BufferInfo = types.BufferInfo;
+const TextureInfo = types.TextureInfo;
 const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
@@ -56,11 +59,11 @@ var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
 var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
 
 var textures: [texture_ids.len]*c.SDL_GPUTexture = undefined;
-var texture_infos: [texture_ids.len]script.TextureInfo = undefined;
+var texture_infos: [texture_ids.len]TextureInfo = undefined;
 var texture_sizes: [texture_ids.len]u32 = undefined;
 
 var buffers: [buffer_ids.len]*c.SDL_GPUBuffer = undefined;
-var buffer_infos: [buffer_ids.len]script.BufferInfo = undefined;
+var buffer_infos: [buffer_ids.len]BufferInfo = undefined;
 var buffer_sizes: [buffer_ids.len]u32 = undefined;
 
 var storage_buffers: [storage_buffer_ids.len]*c.SDL_GPUBuffer = undefined;
@@ -738,13 +741,13 @@ const RenderParameters = struct {
 };
 
 fn renderGraph(
-    comptime clip: script.Clip,
+    comptime clip: timeline.Clip,
     parm: RenderParameters,
 ) !void {
     inline for (config.passes) |pass| {
         // Filter pass by clip id list
         comptime if (pass.condition) |clip_ids| {
-            const idx = std.mem.indexOfScalar(script.Clip, clip_ids, clip);
+            const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
             if (idx == null) continue;
         };
 
@@ -836,7 +839,7 @@ fn renderGraph(
         inline for (pass.drawcalls) |drawcall| {
             // Filter drawcall by clip id list
             comptime if (drawcall.condition) |clip_ids| {
-                const idx = std.mem.indexOfScalar(script.Clip, clip_ids, clip);
+                const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
                 if (idx == null) continue;
             };
 
