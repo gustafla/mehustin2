@@ -1129,6 +1129,11 @@ pub fn getTime() callconv(.c) f32 {
     return time.getTime();
 }
 
+pub fn getDuration() callconv(.c) f32 {
+    const clip_track = script.config.timeline.clip_track;
+    return clip_track[clip_track.len - 1].t / bps;
+}
+
 var host_print: ?*const fn ([*]const u8, usize) callconv(.c) void = null;
 
 // Export symbols if build configuration requires
@@ -1141,6 +1146,7 @@ comptime {
         @export(&isPaused, .{ .name = "isPaused" });
         @export(&seek, .{ .name = "seek" });
         @export(&getTime, .{ .name = "getTime" });
+        @export(&getDuration, .{ .name = "getDuration" });
         @export(&host_print, .{ .name = "host_print" });
     }
 }

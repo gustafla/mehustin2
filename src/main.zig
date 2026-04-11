@@ -24,7 +24,6 @@ else
     @import("render.zig");
 
 const sdl_log = std.log.scoped(.sdl);
-const fps_log = std.log.scoped(.fps);
 // Track deinitialization with a stack
 const InitStep = enum {
     window,
@@ -45,9 +44,6 @@ const InitStep = enum {
 
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
-var frames: u32 = 0;
-var fps_ticks: u64 = 0;
-var fps_enabled: bool = false;
 var step_frame: bool = false;
 
 // Private SDL symbols for hacking wayland mode emulation
@@ -199,21 +195,8 @@ fn sdlAppIterate() !c.SDL_AppResult {
 
     // Quit if done
     if (builtin.mode != .Debug) {
-        const clip_track = config.timeline.clip_track;
-        const duration = clip_track[clip_track.len - 1].t;
-        if (render.getTime() >= duration) {
+        if (render.getTime() >= render.getDuration()) {
             return c.SDL_APP_SUCCESS;
-        }
-    }
-
-    // Measure FPS
-    if (builtin.mode == .Debug and fps_enabled) {
-        frames += 1;
-        const ticks = c.SDL_GetTicksNS();
-        if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
-            fps_log.info("{} FPS", .{frames});
-            fps_ticks = ticks;
-            frames = 0;
         }
     }
 
@@ -258,9 +241,6 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
 
                     // Show update if paused
                     step_frame = true;
-                },
-                c.SDL_SCANCODE_GRAVE => if (builtin.mode == .Debug) {
-                    fps_enabled = !fps_enabled;
                 },
                 else => |k| {
                     std.log.debug("Unhandled scancode 0x{X}", .{k});

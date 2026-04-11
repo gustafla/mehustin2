@@ -19,6 +19,7 @@ var api: struct {
     isPaused: *const fn () callconv(.c) bool,
     seek: *const fn (f32) callconv(.c) void,
     getTime: *const fn () callconv(.c) f32,
+    getDuration: *const fn () callconv(.c) f32,
     host_print: *?*const fn ([*]const u8, usize) callconv(.c) void,
 } = undefined;
 
@@ -95,6 +96,11 @@ pub fn seek(to: f32) void {
 pub fn getTime() f32 {
     if (!init_ok) return 0;
     return api.getTime();
+}
+
+pub fn getDuration() f32 {
+    if (!init_ok) return 0;
+    return api.getDuration();
 }
 
 fn load() !void {
