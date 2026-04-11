@@ -25,6 +25,21 @@ comptime {
     const std = @import("std");
     const script = @import("script");
 
+    // Assert that timeline has a correct format
+    if (script.config.timeline.clip_track.len < 2) {
+        @compileError("clip_track must contain at least a start and an end");
+    }
+    if (script.config.timeline.clip_track[0].t != 0) {
+        @compileError("clip_track must start at 0");
+    }
+    var last = 0;
+    for (script.config.timeline.clip_track) |clip| {
+        if (clip.t < last) {
+            @compileError("clip_track time can't run backwards");
+        }
+        last = clip.t;
+    }
+
     // Assert that layouts are extern structs
     for (@typeInfo(script.layout).@"struct".decls) |decl| {
         if (@typeInfo(@field(script.layout, decl.name)).@"struct".layout != .@"extern") {

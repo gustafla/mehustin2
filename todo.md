@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] More robust exit handling (by script not audio)
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [X] Lighting (point light sources)
@@ -46,6 +45,7 @@
 
 # Done
 
+- [X] More robust exit handling (by script not audio)
 - [X] Project repo: load script.zig (but not script utils), data and shaders (but not shader lib) from outside the repo
 - [X] Index buffers
 - [X] MSAA with resolve texture

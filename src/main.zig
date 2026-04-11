@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const config = @import("script").config.main;
+const config = @import("script").config;
 const engine = @import("engine");
 const options = engine.options;
 
@@ -89,13 +89,13 @@ fn fullscreen() !void {
             const display_width: f32 = @floatFromInt(mode.*.w);
             const display_height: f32 = @floatFromInt(mode.*.h);
             const display_aspect = display_width / display_height;
-            var width: u32 = config.width;
-            var height: u32 = config.height;
+            var width: u32 = config.main.width;
+            var height: u32 = config.main.height;
 
-            if (display_aspect > (@as(f32, config.width) / @as(f32, config.height))) {
-                width = @intFromFloat(@as(f32, config.height) * display_aspect + 0.5);
+            if (display_aspect > (@as(f32, config.main.width) / @as(f32, config.main.height))) {
+                width = @intFromFloat(@as(f32, config.main.height) * display_aspect + 0.5);
             } else {
-                height = @intFromFloat(@as(f32, config.width) / display_aspect + 0.5);
+                height = @intFromFloat(@as(f32, config.main.width) / display_aspect + 0.5);
             }
 
             var hack_mode: c.SDL_DisplayMode = mode.*;
@@ -126,7 +126,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     try sdlerr(c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO));
 
     // Init window
-    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.width, config.height, c.SDL_WINDOW_RESIZABLE));
+    window = try sdlerr(c.SDL_CreateWindow("Mehu Demo", config.main.width, config.main.height, c.SDL_WINDOW_RESIZABLE));
     InitStep.push(.window);
 
     // Configure GPU initialization properties
@@ -161,11 +161,11 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     ));
 
     // Init audio
-    if (@hasField(@TypeOf(config), "audio")) {
-        if (audio.init(std.heap.c_allocator, config.audio)) {
+    if (@hasField(@TypeOf(config.main), "audio")) {
+        if (audio.init(std.heap.c_allocator, config.main.audio)) {
             InitStep.push(.audio);
         } else |err| {
-            audio.log.warn("Can't play {s}: {}", .{ config.audio, err });
+            audio.log.warn("Can't play {s}: {}", .{ config.main.audio, err });
         }
     }
 
@@ -198,8 +198,12 @@ fn sdlAppIterate() !c.SDL_AppResult {
     try render.render();
 
     // Quit if done
-    if (builtin.mode != .Debug and audio.at_end) {
-        return c.SDL_APP_SUCCESS;
+    if (builtin.mode != .Debug) {
+        const clip_track = config.timeline.clip_track;
+        const duration = clip_track[clip_track.len - 1].t;
+        if (render.getTime() >= duration) {
+            return c.SDL_APP_SUCCESS;
+        }
     }
 
     // Measure FPS
