@@ -88,11 +88,33 @@ pub const Render = struct {
         num_instances: ?u32 = null,
     };
 
-    pub const Pass = struct {
+    pub const Dispatch = struct {
+        condition: ?[]const timeline.Clip = null,
+        comp: []const u8,
+        threads: [3]u32,
+        groups: [3]u32,
+        samplers: []const TextureSamplerBinding = &.{},
+        readonly_storage_textures: []const []const u8 = &.{},
+        readonly_storage_buffers: []const []const u8 = &.{},
+        readwrite_storage_textures: []const []const u8 = &.{},
+        readwrite_storage_buffers: []const []const u8 = &.{},
+    };
+
+    pub const Pass = union(enum) {
+        render: RenderPass,
+        compute: ComputePass,
+    };
+
+    pub const RenderPass = struct {
         condition: ?[]const timeline.Clip = null,
         drawcalls: []const Drawcall,
         color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
         depth_target: ?RenderTarget(usize) = null,
+    };
+
+    pub const ComputePass = struct {
+        condition: ?[]const timeline.Clip = null,
+        dispatches: []const Dispatch,
     };
 
     pub const TargetTexture = struct {

@@ -33,6 +33,7 @@ pub fn fold(
     const is_slice = info == .pointer and info.pointer.size == .slice;
     const is_string = is_slice and info.pointer.child == u8;
     const is_iterable = (is_slice or info == .array) and !is_string;
+    const is_tagged_union = info == .@"union" and info.@"union".tag_type != null;
 
     // Base case, at leaf, yield it's value, optionally transformed via `map`.
     if (fields.len == 0 and !is_iterable) {
@@ -44,6 +45,13 @@ pub fn fold(
 
     // Then, if current field access works, always descent (e.g. `[]T.len`)
     if (fields.len > 0 and @hasField(Parent, fields[0])) {
+        // Guard against inaccessible tagged unions, skip over such cases
+        if (is_tagged_union) switch (parent) {
+            inline else => |_, tag| if (!std.mem.eql(u8, @tagName(tag), fields[0])) {
+                return opt.init;
+            },
+        };
+
         const child = @field(parent, fields[0]);
         return fold(child, fields[1..], opt);
     }
@@ -104,6 +112,7 @@ pub fn PipelineKey(comptime config: Config) type {
         sample_count: types.SampleCount,
 
         pub const max_color_targets = fold(config.passes, &.{
+            "render",
             "color_targets",
             "len",
         }, max_field);
@@ -115,7 +124,13 @@ pub fn PipelineKey(comptime config: Config) type {
 
             pub fn next(self: *@This()) ?PipelineKey(config) {
                 while (self.pass_idx < config.passes.len) {
-                    const pass = config.passes[self.pass_idx];
+                    const pass = switch (config.passes[self.pass_idx]) {
+                        .render => |render_pass| render_pass,
+                        .compute => {
+                            self.pass_idx += 1;
+                            continue;
+                        },
+                    };
 
                     if (self.draw_idx >= pass.drawcalls.len) {
                         self.pass_idx += 1;
@@ -147,12 +162,12 @@ pub fn PipelineKey(comptime config: Config) type {
         };
 
         pub fn init(
-            comptime pass: Config.Pass,
+            comptime render_pass: Config.RenderPass,
             comptime drawcall: Config.Drawcall,
             comptime pipeline: Config.Pipeline,
         ) @This() {
             var color_targets = std.mem.zeroes([max_color_targets]types.TextureFormat);
-            for (pass.color_targets, 0..) |target, i| {
+            for (render_pass.color_targets, 0..) |target, i| {
                 color_targets[i] = switch (target.target) {
                     .index => |idx| config.color_targets[idx].format,
                     .swapchain => .swapchain,
@@ -160,8 +175,8 @@ pub fn PipelineKey(comptime config: Config) type {
             }
 
             const sample_count: types.SampleCount = blk: {
-                if (pass.color_targets.len == 0) break :blk .@"1";
-                break :blk switch (pass.color_targets[0].target) {
+                if (render_pass.color_targets.len == 0) break :blk .@"1";
+                break :blk switch (render_pass.color_targets[0].target) {
                     .index => |idx| config.color_targets[idx].sample_count,
                     .swapchain => .@"1",
                 };
@@ -190,8 +205,8 @@ pub fn PipelineKey(comptime config: Config) type {
                 else
                     null,
                 .color_targets_buf = color_targets,
-                .num_color_targets = pass.color_targets.len,
-                .depth_target = if (pass.depth_target) |t| config.depth_targets[t.target].format else null,
+                .num_color_targets = render_pass.color_targets.len,
+                .depth_target = if (render_pass.depth_target) |t| config.depth_targets[t.target].format else null,
                 .sample_count = sample_count,
             };
         }
