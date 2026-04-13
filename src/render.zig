@@ -30,10 +30,6 @@ const SamplerEnum = builder.SamplerEnum(config);
 const PipelineKey = builder.PipelineKey(config);
 const pipeline_set = builder.ComptimeSet(PipelineKey);
 
-pub const bps = if (@hasField(@TypeOf(script.config.main), "bpm"))
-    @as(comptime_float, script.config.main.bpm) / 60.0
-else
-    1.0;
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
     var max = 0;
@@ -999,7 +995,7 @@ pub fn render() !void {
     const swapchain_viewport = viewport(swapchain_width, swapchain_height);
 
     // Measure this frame's timestamp after the swapchain acquisition blocked
-    const timestamp = time.getTime() * bps;
+    const timestamp = time.getTime() * timeline.bps;
 
     // Update script frame
     const frame_state = script.frame.update(timestamp);
@@ -1041,6 +1037,7 @@ pub fn render() !void {
 
     // Render passes (specializes the renderer for each clip configuration)
     switch (frame_state.clip) {
+        .end => {},
         inline else => |clip| try renderGraph(clip, .{
             .cmdbuf = cmdbuf,
             .swapchain_texture = swapchain_texture,
@@ -1129,11 +1126,6 @@ pub fn getTime() callconv(.c) f32 {
     return time.getTime();
 }
 
-pub fn getDuration() callconv(.c) f32 {
-    const clip_track = script.config.timeline.clip_track;
-    return clip_track[clip_track.len - 1].t / bps;
-}
-
 var host_print: ?*const fn ([*]const u8, usize) callconv(.c) void = null;
 
 // Export symbols if build configuration requires
@@ -1146,7 +1138,6 @@ comptime {
         @export(&isPaused, .{ .name = "isPaused" });
         @export(&seek, .{ .name = "seek" });
         @export(&getTime, .{ .name = "getTime" });
-        @export(&getDuration, .{ .name = "getDuration" });
         @export(&host_print, .{ .name = "host_print" });
     }
 }

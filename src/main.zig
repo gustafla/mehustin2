@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const config = @import("script").config;
 const engine = @import("engine");
 const options = engine.options;
+const timeline = engine.timeline;
 
 const audio = @import("main/audio.zig");
 const sdlerr = @import("err.zig").sdlerr;
@@ -195,7 +196,7 @@ fn sdlAppIterate() !c.SDL_AppResult {
 
     // Quit if done
     if (builtin.mode != .Debug) {
-        if (render.getTime() >= render.getDuration()) {
+        if (render.getTime() >= timeline.duration) {
             return c.SDL_APP_SUCCESS;
         }
     }
@@ -221,10 +222,10 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                     }
                 },
                 c.SDL_SCANCODE_SPACE => pause(),
-                c.SDL_SCANCODE_LEFT => seek(render.getTime() - 1),
-                c.SDL_SCANCODE_RIGHT => seek(render.getTime() + 1),
-                c.SDL_SCANCODE_PAGEUP => seek(render.getTime() - 8),
-                c.SDL_SCANCODE_PAGEDOWN => seek(render.getTime() + 8),
+                c.SDL_SCANCODE_LEFT => seek(render.getTime() - timeline.spb),
+                c.SDL_SCANCODE_RIGHT => seek(render.getTime() + timeline.spb),
+                c.SDL_SCANCODE_PAGEUP => seek(render.getTime() - 8 * timeline.spb),
+                c.SDL_SCANCODE_PAGEDOWN => seek(render.getTime() + 8 * timeline.spb),
                 c.SDL_SCANCODE_HOME => seek(0),
                 c.SDL_SCANCODE_R => if (builtin.mode == .Debug) {
                     // Save runtime state
@@ -247,7 +248,7 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 },
             }
         },
-        c.SDL_EVENT_MOUSE_WHEEL => seek(render.getTime() - event.wheel.y),
+        c.SDL_EVENT_MOUSE_WHEEL => seek(render.getTime() - event.wheel.y * timeline.spb),
         c.SDL_EVENT_WINDOW_FIRST...c.SDL_EVENT_WINDOW_LAST,
         => if (builtin.mode == .Debug) {
             step_frame = true;

@@ -15,6 +15,17 @@ const BufferInfo = types.BufferInfo;
 const TextureInfo = types.TextureInfo;
 const util = @import("util.zig");
 
+pub const bps = if (@hasField(@TypeOf(script.config.main), "bpm"))
+    @as(comptime_float, script.config.main.bpm) / 60.0
+else
+    1.0;
+pub const spb = 1.0 / bps;
+
+pub const duration = blk: {
+    const clip_track = script.config.timeline.clip_track;
+    break :blk clip_track[clip_track.len - 1].t * spb;
+};
+
 pub const State = struct {
     time: f32,
     clip: Clip,

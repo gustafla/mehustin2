@@ -12,7 +12,6 @@ pub const log = std.log.scoped(.audio);
 var vorbis: *c.stb_vorbis = undefined;
 var audio: ?*c.SDL_AudioStream = null;
 var info: c.stb_vorbis_info = undefined;
-pub var at_end = false;
 
 const bufsize = 1024 * 1024;
 var buffer = [_]c_short{0} ** bufsize;
@@ -29,7 +28,6 @@ pub fn audioCallback(_: ?*anyopaque, _: ?*c.SDL_AudioStream, need_bytes: c_int, 
             @min(bufsize, need_shorts),
         );
         if (got_samples == 0) {
-            at_end = true;
             return;
         }
         const len = got_samples * @sizeOf(c_short) * info.channels;

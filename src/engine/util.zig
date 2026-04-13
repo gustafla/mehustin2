@@ -1,7 +1,35 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
+const options = @import("options");
+
+const c = @import("../engine.zig").c;
 const math = @import("math.zig");
 const resource = @import("resource.zig");
+const timeline = @import("timeline.zig");
+
+var frames: u32 = 0;
+var fps_ticks: u64 = 0;
+var debug_str_buf: [128]u8 = undefined;
+
+pub fn updateDebugStrings(state: timeline.State, fps_str: *[]const u8, time_str: *[]const u8) void {
+    var buf: []u8 = &debug_str_buf;
+    if (options.show_fps) {
+        frames += 1;
+        const ticks = c.SDL_GetTicksNS();
+        if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
+            fps_str.* = std.fmt.bufPrint(buf, "FPS: {}", .{frames}) catch unreachable;
+            fps_ticks = ticks;
+            frames = 0;
+        }
+        buf = buf[fps_str.len..];
+    }
+
+    if (builtin.mode == .Debug) {
+        time_str.* = std.fmt.bufPrint(buf, "{t} {:.1}", .{ state.clip, state.time }) catch unreachable;
+        buf = buf[time_str.len..];
+    }
+}
 
 pub fn interleave(
     comptime E: type,
@@ -89,9 +117,9 @@ pub fn loadFile(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
 }
 
 pub fn hslToRgb(hsl: math.Vec3) math.Vec3 {
-    const c = (1 - @abs(2 * hsl[2] - 1)) * hsl[1];
+    const cc = (1 - @abs(2 * hsl[2] - 1)) * hsl[1];
     const h = hsl[0] / 60.0;
-    const x = c * (1 - @abs(@mod(h, 2) - 1));
+    const x = cc * (1 - @abs(@mod(h, 2) - 1));
     const r, const g, const b =
         if (0 <= h and h < 1)
             .{ c, x, 0 }
