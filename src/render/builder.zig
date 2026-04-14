@@ -99,7 +99,7 @@ const ShaderInfo = struct {
     num_uniform_buffers: u32,
 };
 
-pub fn PipelineKey(comptime config: Config) type {
+pub fn GraphicsPipelineKey(comptime config: Config) type {
     return struct {
         pipeline: Config.Pipeline,
         vert_info: ShaderInfo,
@@ -122,7 +122,7 @@ pub fn PipelineKey(comptime config: Config) type {
             draw_idx: usize = 0,
             pipe_idx: usize = 0,
 
-            pub fn next(self: *@This()) ?PipelineKey(config) {
+            pub fn next(self: *@This()) ?GraphicsPipelineKey(config) {
                 while (self.pass_idx < config.passes.len) {
                     const pass = switch (config.passes[self.pass_idx]) {
                         .render => |render_pass| render_pass,

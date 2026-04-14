@@ -28,8 +28,8 @@ const buffer_ids = @typeInfo(script.Buffer).@"enum".fields;
 const texture_ids = @typeInfo(script.Texture).@"enum".fields;
 const storage_buffer_ids = @typeInfo(script.StorageBuffer).@"enum".fields;
 const SamplerEnum = builder.SamplerEnum(config);
-const PipelineKey = builder.PipelineKey(config);
-const pipeline_set = builder.ComptimeSet(PipelineKey);
+const GraphicsPipelineKey = builder.GraphicsPipelineKey(config);
+const graphics_pipeline_set = builder.ComptimeSet(GraphicsPipelineKey);
 
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
@@ -51,7 +51,7 @@ var device: *c.SDL_GPUDevice = undefined;
 var update_transfer_buffer: ?*c.SDL_GPUTransferBuffer = undefined;
 var samplers: [config.samplers.len]*c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
-var pipelines: [pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
+var graphics_pipelines: [graphics_pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
 var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
 var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
 
@@ -119,7 +119,7 @@ pub fn deinit() void {
     for (textures) |texture| {
         c.SDL_ReleaseGPUTexture(device, texture);
     }
-    for (pipelines) |pipeline| {
+    for (graphics_pipelines) |pipeline| {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
     c.SDL_ReleaseGPUTexture(device, output_buffer);
@@ -139,14 +139,14 @@ pub fn deinit() void {
     // }
 }
 
-fn initPipeline(comptime key: PipelineKey) !*c.SDL_GPUGraphicsPipeline {
+fn initPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
     const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
     const frag = try shader.loadShader(gpa, device, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
-    var color_target_descs: [PipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
+    var color_target_descs: [GraphicsPipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
     for (
         key.color_targets_buf[0..key.num_color_targets],
         color_target_descs[0..key.num_color_targets],
@@ -625,7 +625,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
-    inline for (pipeline_set.keys, &pipelines) |key, *pipeline| {
+    inline for (graphics_pipeline_set.keys, &graphics_pipelines) |key, *pipeline| {
         pipeline.* = try initPipeline(key);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
@@ -947,9 +947,9 @@ fn renderPass(
 
         inline for (drawcall.pipelines) |pipeline| {
             // Find matching pipeline index from pipeline_keys at compile time
-            const pipeline_key = comptime PipelineKey.init(pass, drawcall, pipeline);
-            const pipeline_index = comptime pipeline_set.getIndex(pipeline_key);
-            c.SDL_BindGPUGraphicsPipeline(render_pass, pipelines[pipeline_index]);
+            const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline);
+            const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
+            c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
             if (drawcall.index_buffer == null) {
                 c.SDL_DrawGPUPrimitives(
                     render_pass,
