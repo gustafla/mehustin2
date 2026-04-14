@@ -2,7 +2,8 @@
 const std = @import("std");
 const c = @import("root").c;
 
-const sdlerr = @import("../err.zig").sdlerr;
+const engine = @import("engine");
+const sdlerr = engine.err.sdlerr;
 
 const filename = "librender.so";
 const log = std.log.scoped(.dynlib);

@@ -5,9 +5,9 @@ const config = @import("script").config;
 const engine = @import("engine");
 const options = engine.options;
 const timeline = engine.timeline;
+const sdlerr = engine.err.sdlerr;
 
 const audio = @import("main/audio.zig");
-const sdlerr = @import("err.zig").sdlerr;
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});

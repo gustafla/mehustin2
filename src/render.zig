@@ -13,13 +13,13 @@ const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
 const schema = engine.schema;
 const options = engine.options;
+const sdlerr = engine.err.sdlerr;
 const script = @import("script");
 const config = script.config.render;
 
 const builder = @import("render/builder.zig");
 const shader = @import("render/shader.zig");
 const time = @import("render/time.zig");
-const sdlerr = @import("err.zig").sdlerr;
 
 const log = std.log.scoped(.render);
 

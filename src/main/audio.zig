@@ -3,9 +3,9 @@ const Allocator = std.mem.Allocator;
 const root = @import("root");
 const c = root.c;
 
-const resource = @import("engine").resource;
-
-const sdlerr = @import("../err.zig").sdlerr;
+const engine = @import("engine");
+const resource = engine.resource;
+const sdlerr = engine.err.sdlerr;
 
 pub const log = std.log.scoped(.audio);
 

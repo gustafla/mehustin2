@@ -10,6 +10,7 @@ pub const timeline = @import("engine/timeline.zig");
 pub const types = @import("engine/types.zig");
 pub const udp = @import("engine/udp.zig");
 pub const util = @import("engine/util.zig");
+pub const err = @import("engine/err.zig");
 
 pub const c = @cImport({
     @cDefine("SDL_DISABLE_OLD_NAMES", {});
