@@ -277,7 +277,9 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = @intFromEnum(info.tex_type),
                 .format = @intFromEnum(info.format),
-                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER |
+                    c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
+                    c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
                 .width = info.width,
                 .height = info.height,
                 .layer_count_or_depth = info.depth,
@@ -774,9 +776,20 @@ fn computePass(
         if (idx == null) return;
     };
 
-    // TODO: storage textures
-    // var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
-    const storage_texture_bindings: [0]c.SDL_GPUStorageTextureReadWriteBinding = .{};
+    var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
+    for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
+        const reference = comptime builder.parseIndex(name) catch |e|
+            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+        texture.* = .{
+            .texture = if (reference) |result|
+                @field(@This(), result.ref)[result.idx]
+            else
+                textures[@intFromEnum(@field(script.Texture, name))],
+            .layer = 0, // TODO: allow configuration
+            .mip_level = 0, // TODO: allow configuration
+            .cycle = true,
+        };
+    }
 
     var storage_buffer_bindings: [pass.readwrite_storage_buffers.len]c.SDL_GPUStorageBufferReadWriteBinding = undefined;
     for (pass.readwrite_storage_buffers, &storage_buffer_bindings) |name, *buffer| {
@@ -814,16 +827,19 @@ fn computePass(
             }, 1);
         }
 
-        // TODO: storage textures
-        // for (dispatch.readonly_storage_textures, 0..) |name, slot| {
-        //     const idx = @intFromEnum(@field(script.StorageTexture, name));
-        //     c.SDL_BindGPUComputeStorageTextures(
-        //         compute_pass,
-        //         @intCast(slot),
-        //         &storage_textures[idx],
-        //         1,
-        //     );
-        // }
+        for (dispatch.readonly_storage_textures, 0..) |name, slot| {
+            const reference = comptime builder.parseIndex(name) catch |e|
+                @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+            c.SDL_BindGPUComputeStorageTextures(
+                compute_pass,
+                @intCast(slot),
+                if (reference) |result|
+                    &@field(@This(), result.ref)[result.idx]
+                else
+                    &textures[@intFromEnum(@field(script.Texture, name))],
+                1,
+            );
+        }
 
         for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
             const idx = @intFromEnum(@field(script.StorageBuffer, name));
