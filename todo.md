@@ -1,27 +1,29 @@
 # High priority
 
-- [ ] 3D instance render & shaders
-  - [ ] Lighting (directional)
-  - [X] Lighting (point light sources)
+- [ ] Allow custom shader entry points in render.zon schema
+- [ ] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
+- [ ] Compute passes
+- [ ] Build-time font generation
+  - [X] Build msdf-atlas-gen
+  - [ ] Call msdf-atlas-gen at build-time
+  - [ ] Parse msdf-atlas-gen JSON at comptime
+  - [ ] Implement MSDF rendering
 - [ ] Replace BufferInfo return value with an optional pointer argument to it
+- [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
+  - [ ] Refactor text layer system into a single component
+  - [ ] Render.zon schema changes:
+    - [ ] Support dot path separator syntax for all binds
+    - [ ] Accommodate a generic "bind all stuff in resource X"
 
 # Backlog
 
 - [ ] Reorganize uniforms
   - 128 bytes per uniform slot per shader stage (4 slots per stage)
   - [ ] Use the corner rays method in tri.vert, no inverse matrices on the GPU
-- [ ] Make clips able to overlap (rename to conditions or logics)
-  - [ ] Clips currently active as a bit mask (Are 32 clips enough? Can extend with more)
+- [ ] Make clips able to overlap (rename to e.g. logics)
+  - [ ] Logics currently active as a bit mask (Are 64 clips enough? Can extend with more)
   - [ ] Render.zon condition can be reduced to single logic tag
   - [ ] Clip times & time left should be an SSBO array
-- [ ] Refactor script.zig resources again. Main unit: resource. Subunits: buffers, textures, storage etc.
-  - [ ] Can write model loaders which also load textures
-  - [ ] Can write the text system as a single unit
-  - [ ] Render.zon schema needs to accommodate a generic "bind all stuff in resource X"
-  - [ ] Each resource should have a field for group tags for targeting in render
-    - [ ] Render.zon for-all-in-group-filter (e.g. "world & transparent") macro syntax
-      - Consider using a generic templating library
-- [ ] Build-time font generation
 - [ ] Comptime resource loader namespace generators (fns that return a resource namespace)
   - [ ] textureFromFile
   - [ ] vertexBufferFromFile
@@ -41,7 +43,9 @@
 - [ ] Generic mutable registry (maintain shadow list of mutexes for sync)
   - [ ] Anchors
   - [ ] Strings
-- [ ] Compute passes
+- [ ] 3D instance render & shaders
+  - [ ] Lighting (directional)
+  - [X] Lighting (point light sources)
 
 # Done
 
