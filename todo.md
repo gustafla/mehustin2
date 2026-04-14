@@ -19,6 +19,7 @@
   - [ ] depth_targets
   - [ ] rename samplers.name to .id
   - [ ] Implement resource id resolution ("render"-namespace for internals)
+  - [ ] ping-pong sugar
 
 # Backlog
 
