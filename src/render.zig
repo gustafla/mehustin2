@@ -616,7 +616,12 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
                 .format = resolveTextureFormat(tex.format),
                 .usage = c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
-                    if (tex.sample_count == .@"1") c.SDL_GPU_TEXTUREUSAGE_SAMPLER else 0,
+                    if (tex.sample_count == .@"1")
+                        (c.SDL_GPU_TEXTUREUSAGE_SAMPLER |
+                            c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
+                            c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE)
+                    else
+                        0,
                 .width = script.config.main.width * tex.p / tex.q,
                 .height = script.config.main.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,
