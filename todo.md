@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Storage textures
 - [ ] Allow custom shader entry points in render.zon schema
 - [ ] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
 - [ ] Build-time font generation
@@ -14,6 +13,12 @@
   - [ ] Render.zon schema changes:
     - [ ] Support dot path separator syntax for all binds
     - [ ] Accommodate a generic "bind all stuff in resource X"
+- [ ] Determine granular texture usage flags at compile time from render.zon
+- [ ] Id-based render.zon schema:
+  - [ ] color_targets
+  - [ ] depth_targets
+  - [ ] rename samplers.name to .id
+  - [ ] Implement resource id resolution ("render"-namespace for internals)
 
 # Backlog
 
@@ -46,6 +51,7 @@
 
 # Done
 
+- [X] Storage textures
 - [X] Compute passes
 - [X] More robust exit handling (by script not audio)
 - [X] Project repo: load script.zig (but not script utils), data and shaders (but not shader lib) from outside the repo
