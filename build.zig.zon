@@ -48,11 +48,20 @@
             .url = "git+https://github.com/prideout/par#b3571fdf83518d921af3b69d13ea0cb8749147aa",
             .hash = "N-V-__8AALTJ3wB-ghbZfn2Z1wjc7OuwddGMVwOncg7BHs28",
         },
+        .msdf_atlas_gen = .{
+            .url = "https://github.com/Chlumsky/msdf-atlas-gen/archive/refs/tags/v1.4.tar.gz",
+            .hash = "N-V-__8AAF7pBAB4yjm7dIRymiQ9QdpMsBrH3EU6m-VyLE5i",
+        },
+        .msdfgen = .{
+            .url = "https://github.com/Chlumsky/msdfgen/archive/refs/tags/v1.13.tar.gz",
+            .hash = "N-V-__8AACyUBwCQGRHpKwDSxzd2DHqHkeRj0UJs58fhHS9w",
+        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
+        "vendor",
         "shader_lib",
         "README.md",
         "LICENSE",

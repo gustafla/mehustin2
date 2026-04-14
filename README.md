@@ -5,9 +5,11 @@
 Currently, the engine cannot be built from this repository, as it requires a
 "script" module which drives the demo's resources and logic.
 
-Build dependencies:
+Build-time system dependencies:
 - Zig 0.15.2
 - glslc
+- freetype2
+- libpng
 - SDL3 (optional, use `-Dsystem_sdl=false` to build a static library)
 
 Example project (outdated): See [Abyss](https://github.com/gustafla/abyss).
@@ -30,3 +32,6 @@ via the script module.
 ## License
 
 This engine is released under the [zlib License](LICENSE).
+
+For the third party open source component licenses,
+see [vendor/LICENSES.md](vendor/LICENSES.md).

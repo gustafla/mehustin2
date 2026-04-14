@@ -1,4 +1,5 @@
 const std = @import("std");
+const msdf_atlas_gen = @import("vendor/msdf_atlas_gen/build.zig");
 
 // Hooks up module dependencies in the caller project's build graph.
 pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) void {
@@ -158,10 +159,25 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
         .install_subdir = "data",
     }).step);
 
-    // Add README to bin
+    // Test run of msdf-atlas-gen
+    // const msdf = d.artifact("msdf-atlas-gen");
+    // const msdf_run = b.addRunArtifact(msdf);
+    // msdf_run.addArg("-font");
+    // msdf_run.addFileArg(b.path("data/Inter-VariableFont_opsz,wght.ttf"));
+    // msdf_run.addArg("-imageout");
+    // const msdf_png = msdf_run.addOutputFileArg("atlas.png");
+    // b.getInstallStep().dependOn(&b.addInstallBinFile(msdf_png, "data/atlas.png").step);
+
+    // Add README.md to bin
     b.getInstallStep().dependOn(&b.addInstallBinFile(
         b.path("README.md"),
         "README.md",
+    ).step);
+
+    // Add THIRD-PARTY-LICENSES.md to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
+        d.path("vendor/LICENSES.md"),
+        "THIRD-PARTY-LICENSES.md",
     ).step);
 
     // Set exe rpath
@@ -317,6 +333,9 @@ pub fn build(b: *std.Build) void {
     });
     const docs_step = b.step("docs", "Generate documentation");
     docs_step.dependOn(&install_docs.step);
+
+    // Setup msdf-atlas-gen executable
+    msdf_atlas_gen.build(b);
 }
 
 fn toUpper(comptime str: []const u8) [str.len]u8 {
