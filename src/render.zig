@@ -29,7 +29,9 @@ const texture_ids = @typeInfo(script.Texture).@"enum".fields;
 const storage_buffer_ids = @typeInfo(script.StorageBuffer).@"enum".fields;
 const SamplerEnum = builder.SamplerEnum(config);
 const GraphicsPipelineKey = builder.GraphicsPipelineKey(config);
+const ComputePipelineKey = builder.ComputePipelineKey(config);
 const graphics_pipeline_set = builder.ComptimeSet(GraphicsPipelineKey);
+const compute_pipeline_set = builder.ComptimeSet(ComputePipelineKey);
 
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
@@ -52,6 +54,7 @@ var update_transfer_buffer: ?*c.SDL_GPUTransferBuffer = undefined;
 var samplers: [config.samplers.len]*c.SDL_GPUSampler = undefined;
 var output_buffer: *c.SDL_GPUTexture = undefined;
 var graphics_pipelines: [graphics_pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
+var compute_pipelines: [compute_pipeline_set.keys.len]*c.SDL_GPUComputePipeline = undefined;
 var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
 var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
 
@@ -122,6 +125,9 @@ pub fn deinit() void {
     for (graphics_pipelines) |pipeline| {
         c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
+    for (compute_pipelines) |pipeline| {
+        c.SDL_ReleaseGPUComputePipeline(device, pipeline);
+    }
     c.SDL_ReleaseGPUTexture(device, output_buffer);
     for (samplers) |sampler| {
         c.SDL_ReleaseGPUSampler(device, sampler);
@@ -139,7 +145,18 @@ pub fn deinit() void {
     // }
 }
 
-fn initPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPipeline {
+fn initComputePipeline(comptime key: ComputePipelineKey) !*c.SDL_GPUComputePipeline {
+    const spv = try shader.loadSpirv(gpa, key.comp);
+    defer gpa.free(spv);
+    var create_info = std.mem.zeroInit(c.SDL_GPUComputePipelineCreateInfo, key.comp_info);
+    create_info.code_size = spv.len;
+    create_info.code = spv.ptr;
+    create_info.entrypoint = "main"; // TODO: Configure this
+    create_info.format = c.SDL_GPU_SHADERFORMAT_SPIRV;
+    return try sdlerr(c.SDL_CreateGPUComputePipeline(device, &create_info));
+}
+
+fn initGraphicsPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
     const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
@@ -626,8 +643,13 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     }
 
     inline for (graphics_pipeline_set.keys, &graphics_pipelines) |key, *pipeline| {
-        pipeline.* = try initPipeline(key);
+        pipeline.* = try initGraphicsPipeline(key);
         errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
+    }
+
+    inline for (compute_pipeline_set.keys, &compute_pipelines) |key, *pipeline| {
+        pipeline.* = try initComputePipeline(key);
+        errdefer c.SDL_ReleaseGPUComputePipeline(device, pipeline.*);
     }
 }
 
@@ -741,10 +763,86 @@ fn computePass(
     comptime pass: schema.Render.ComputePass,
     cmdbuf: *c.SDL_GPUCommandBuffer,
 ) !void {
-    _ = clip;
-    _ = pass;
-    _ = cmdbuf;
-    @panic("Compute passes are not implemented in this version");
+    // Filter pass by clip id list
+    comptime if (pass.condition) |clip_ids| {
+        const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
+        if (idx == null) return;
+    };
+
+    // TODO: storage textures
+    // var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
+    const storage_texture_bindings: [0]c.SDL_GPUStorageTextureReadWriteBinding = .{};
+
+    var storage_buffer_bindings: [pass.readwrite_storage_buffers.len]c.SDL_GPUStorageBufferReadWriteBinding = undefined;
+    for (pass.readwrite_storage_buffers, &storage_buffer_bindings) |name, *buffer| {
+        const idx = @intFromEnum(@field(script.StorageBuffer, name));
+        buffer.* = .{
+            .buffer = storage_buffers[idx],
+            .cycle = true,
+        };
+    }
+
+    const compute_pass = c.SDL_BeginGPUComputePass(
+        cmdbuf,
+        &storage_texture_bindings,
+        storage_texture_bindings.len,
+        &storage_buffer_bindings,
+        storage_buffer_bindings.len,
+    );
+
+    inline for (pass.dispatches) |dispatch| {
+        // Filter dispatch by clip id list
+        comptime if (dispatch.condition) |clip_ids| {
+            const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
+            if (idx == null) continue;
+        };
+
+        for (dispatch.samplers, 0..) |tex, slot| {
+            const reference = comptime builder.parseIndex(tex.texture) catch |e|
+                @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+            c.SDL_BindGPUComputeSamplers(compute_pass, @intCast(slot), &.{
+                .texture = if (reference) |result|
+                    @field(@This(), result.ref)[result.idx]
+                else
+                    textures[@intFromEnum(@field(script.Texture, tex.texture))],
+                .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
+            }, 1);
+        }
+
+        // TODO: storage textures
+        // for (dispatch.readonly_storage_textures, 0..) |name, slot| {
+        //     const idx = @intFromEnum(@field(script.StorageTexture, name));
+        //     c.SDL_BindGPUComputeStorageTextures(
+        //         compute_pass,
+        //         @intCast(slot),
+        //         &storage_textures[idx],
+        //         1,
+        //     );
+        // }
+
+        for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
+            const idx = @intFromEnum(@field(script.StorageBuffer, name));
+            c.SDL_BindGPUComputeStorageBuffers(
+                compute_pass,
+                @intCast(slot),
+                &storage_buffers[idx],
+                1,
+            );
+        }
+
+        const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch);
+        const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
+        c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
+
+        c.SDL_DispatchGPUCompute(
+            compute_pass,
+            dispatch.groupcount.x,
+            dispatch.groupcount.y,
+            dispatch.groupcount.z,
+        );
+    }
+
+    c.SDL_EndGPUComputePass(compute_pass);
 }
 
 fn renderPass(

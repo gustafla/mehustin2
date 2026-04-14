@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const engine = @import("engine");
-const Config = engine.schema.Render;
+const schema = engine.schema;
 const types = engine.types;
 const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
@@ -99,9 +99,9 @@ const ShaderInfo = struct {
     num_uniform_buffers: u32,
 };
 
-pub fn GraphicsPipelineKey(comptime config: Config) type {
+pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
     return struct {
-        pipeline: Config.Pipeline,
+        pipeline: schema.Render.GraphicsPipeline,
         vert_info: ShaderInfo,
         frag_info: ShaderInfo,
         vertex_layout: ?type,
@@ -162,12 +162,12 @@ pub fn GraphicsPipelineKey(comptime config: Config) type {
         };
 
         pub fn init(
-            comptime render_pass: Config.RenderPass,
-            comptime drawcall: Config.Drawcall,
-            comptime pipeline: Config.Pipeline,
+            comptime pass: schema.Render.RenderPass,
+            comptime drawcall: schema.Render.Drawcall,
+            comptime pipeline: schema.Render.GraphicsPipeline,
         ) @This() {
             var color_targets = std.mem.zeroes([max_color_targets]types.TextureFormat);
-            for (render_pass.color_targets, 0..) |target, i| {
+            for (pass.color_targets, 0..) |target, i| {
                 color_targets[i] = switch (target.target) {
                     .index => |idx| config.color_targets[idx].format,
                     .swapchain => .swapchain,
@@ -175,8 +175,8 @@ pub fn GraphicsPipelineKey(comptime config: Config) type {
             }
 
             const sample_count: types.SampleCount = blk: {
-                if (render_pass.color_targets.len == 0) break :blk .@"1";
-                break :blk switch (render_pass.color_targets[0].target) {
+                if (pass.color_targets.len == 0) break :blk .@"1";
+                break :blk switch (pass.color_targets[0].target) {
                     .index => |idx| config.color_targets[idx].sample_count,
                     .swapchain => .@"1",
                 };
@@ -205,9 +205,77 @@ pub fn GraphicsPipelineKey(comptime config: Config) type {
                 else
                     null,
                 .color_targets_buf = color_targets,
-                .num_color_targets = render_pass.color_targets.len,
-                .depth_target = if (render_pass.depth_target) |t| config.depth_targets[t.target].format else null,
+                .num_color_targets = pass.color_targets.len,
+                .depth_target = if (pass.depth_target) |t| config.depth_targets[t.target].format else null,
                 .sample_count = sample_count,
+            };
+        }
+    };
+}
+
+const CompInfo = struct {
+    num_samplers: u32,
+    num_readonly_storage_textures: u32,
+    num_readonly_storage_buffers: u32,
+    num_readwrite_storage_textures: u32,
+    num_readwrite_storage_buffers: u32,
+    threadcount_x: u32,
+    threadcount_y: u32,
+    threadcount_z: u32,
+};
+
+pub fn ComputePipelineKey(comptime config: schema.Render) type {
+    return struct {
+        comp: []const u8,
+        comp_info: CompInfo,
+
+        pub const Iterator = struct {
+            pass_idx: usize = 0,
+            dispatch_idx: usize = 0,
+
+            pub fn next(self: *@This()) ?ComputePipelineKey(config) {
+                while (self.pass_idx < config.passes.len) {
+                    const pass = switch (config.passes[self.pass_idx]) {
+                        .compute => |compute_pass| compute_pass,
+                        .render => {
+                            self.pass_idx += 1;
+                            continue;
+                        },
+                    };
+
+                    if (self.dispatch_idx >= pass.dispatches.len) {
+                        self.pass_idx += 1;
+                        self.dispatch_idx = 0;
+                        continue;
+                    }
+
+                    const dispatch = pass.dispatches[self.dispatch_idx];
+                    const key = init(pass, dispatch);
+
+                    self.dispatch_idx += 1;
+                    return key;
+                }
+
+                return null;
+            }
+        };
+
+        pub fn init(
+            comptime pass: schema.Render.ComputePass,
+            comptime dispatch: schema.Render.ComputeDispatch,
+        ) @This() {
+            return .{
+                .comp = dispatch.comp,
+                .comp_info = .{
+                    .num_samplers = dispatch.samplers.len,
+                    .num_readonly_storage_textures = dispatch.readonly_storage_textures.len,
+                    .num_readonly_storage_buffers = dispatch.readonly_storage_buffers.len,
+                    .num_readwrite_storage_textures = pass.readwrite_storage_textures.len,
+                    .num_readwrite_storage_buffers = pass.readwrite_storage_buffers.len,
+                    .threadcount_x = dispatch.threadcount.x,
+                    .threadcount_y = dispatch.threadcount.y,
+                    .threadcount_z = dispatch.threadcount.z,
+                },
             };
         }
     };
@@ -247,7 +315,7 @@ pub fn ComptimeSet(comptime T: type) type {
     };
 }
 
-pub fn SamplerEnum(comptime config: Config) type {
+pub fn SamplerEnum(comptime config: schema.Render) type {
     var fields: [config.samplers.len]std.builtin.Type.EnumField = undefined;
     for (config.samplers, 0..) |sampler, i| {
         fields[i] = .{ .name = sampler.name[0.. :0], .value = i };

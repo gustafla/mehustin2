@@ -24,7 +24,7 @@ pub const Render = struct {
     samplers: []const Sampler,
     passes: []const Pass,
 
-    pub const Pipeline = struct {
+    pub const GraphicsPipeline = struct {
         vert: []const u8 = "tri.vert",
         frag: []const u8,
         primitive_type: PrimitiveType = .trianglestrip,
@@ -76,7 +76,7 @@ pub const Render = struct {
 
     pub const Drawcall = struct {
         condition: ?[]const timeline.Clip = null,
-        pipelines: []const Pipeline,
+        pipelines: []const GraphicsPipeline,
         index_buffer: ?[]const u8 = null,
         vertex_buffer: ?[]const u8 = null,
         instance_buffer: ?[]const u8 = null,
@@ -88,16 +88,20 @@ pub const Render = struct {
         num_instances: ?u32 = null,
     };
 
-    pub const Dispatch = struct {
+    pub const ComputeDimensions = struct {
+        x: u32,
+        y: u32 = 1,
+        z: u32 = 1,
+    };
+
+    pub const ComputeDispatch = struct {
         condition: ?[]const timeline.Clip = null,
         comp: []const u8,
-        threads: [3]u32,
-        groups: [3]u32,
+        threadcount: ComputeDimensions,
+        groupcount: ComputeDimensions,
         samplers: []const TextureSamplerBinding = &.{},
         readonly_storage_textures: []const []const u8 = &.{},
         readonly_storage_buffers: []const []const u8 = &.{},
-        readwrite_storage_textures: []const []const u8 = &.{},
-        readwrite_storage_buffers: []const []const u8 = &.{},
     };
 
     pub const Pass = union(enum) {
@@ -114,7 +118,9 @@ pub const Render = struct {
 
     pub const ComputePass = struct {
         condition: ?[]const timeline.Clip = null,
-        dispatches: []const Dispatch,
+        dispatches: []const ComputeDispatch,
+        readwrite_storage_textures: []const []const u8 = &.{},
+        readwrite_storage_buffers: []const []const u8 = &.{},
     };
 
     pub const TargetTexture = struct {
