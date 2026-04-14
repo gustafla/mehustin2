@@ -1,8 +1,8 @@
 # High priority
 
+- [ ] Storage textures
 - [ ] Allow custom shader entry points in render.zon schema
 - [ ] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
-- [ ] Compute passes
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [ ] Call msdf-atlas-gen at build-time
@@ -40,15 +40,13 @@
   - [ ] Position at world anchor projected to NDC space
 - [ ] HDR textures from file
 - [ ] Render scene to cubemap
-- [ ] Generic mutable registry (maintain shadow list of mutexes for sync)
-  - [ ] Anchors
-  - [ ] Strings
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [X] Lighting (point light sources)
 
 # Done
 
+- [X] Compute passes
 - [X] More robust exit handling (by script not audio)
 - [X] Project repo: load script.zig (but not script utils), data and shaders (but not shader lib) from outside the repo
 - [X] Index buffers
@@ -131,3 +129,7 @@
 - [ ] Parameter tracks
 - [ ] AABBs and CPU culling (script can update the instance buffer on the fly)
 - [ ] comptime GLSL reflection macro that parses buffer blocks, creating a matching Zig SSBO namespace
+- [ ] comptime GLSL reflection that generates render.zon blocks
+- [ ] Generic mutable registry (maintain shadow list of mutexes for sync)
+  - [ ] Anchors
+  - [ ] Strings
