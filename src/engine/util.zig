@@ -110,7 +110,7 @@ pub fn ambientFromEnvmap(
     return sky_color;
 }
 
-pub fn loadFile(io: std.Io, gpa: std.mem.Allocator, name: []const u8) ![]u8 {
+pub fn loadFile(io: std.Io, gpa: std.mem.Allocator, name: []const u8) ![:0]u8 {
     const path = try resource.dataFilePath(gpa, name);
     defer gpa.free(path);
     return try resource.loadFileZ(io, gpa, path);
