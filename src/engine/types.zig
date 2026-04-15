@@ -1,12 +1,13 @@
 const std = @import("std");
 
-const c = @import("../engine.zig").c;
+const c = @import("c");
+
 const math = @import("math.zig");
 const timeline = @import("timeline.zig");
 
 fn enumFieldNameFromC(
     comptime name: []const u8,
-) [:0]u8 {
+) []const u8 {
     // Convert to lowercase
     var buf: [name.len + 1]u8 = undefined;
     for (name, 0..) |chr, i| {
@@ -14,14 +15,14 @@ fn enumFieldNameFromC(
     }
 
     buf[name.len] = 0;
-    return buf[0..name.len :0];
+    return buf[0..name.len];
 }
 
 pub fn EnumFromC(
     comptime type_name: []const u8,
     comptime opt: struct {
         prefix: []const u8 = "SDL_GPU",
-        extra_fields: []const @Type(.enum_literal) = &.{},
+        extra_fields: []const @EnumLiteral() = &.{},
     },
 ) type {
     @setEvalBranchQuota(100000);
@@ -35,7 +36,8 @@ pub fn EnumFromC(
         variant[i] = std.ascii.toUpper(chr);
     }
 
-    var fields: [c_decls.len]std.builtin.Type.EnumField = undefined;
+    var field_names: [c_decls.len][]const u8 = undefined;
+    var field_values: [c_decls.len]Tag = undefined;
     var index: usize = 0;
     var max_val: Tag = 0;
 
@@ -48,30 +50,20 @@ pub fn EnumFromC(
                 max_val = val;
             }
             const raw_name = decl.name[search_prefix.len + 1 ..];
-            fields[index] = .{
-                .name = enumFieldNameFromC(raw_name),
-                .value = val,
-            };
+            field_names[index] = enumFieldNameFromC(raw_name);
+            field_values[index] = val;
             index += 1;
         }
     }
 
     for (opt.extra_fields) |extra| {
         max_val += 1;
-        fields[index] = .{
-            .name = @tagName(extra),
-            .value = max_val,
-        };
+        field_names[index] = @tagName(extra);
+        field_values[index] = max_val;
         index += 1;
     }
 
-    // TODO: Change this to @Enum in 0.16
-    return @Type(.{ .@"enum" = .{
-        .decls = &.{},
-        .tag_type = Tag,
-        .fields = fields[0..index],
-        .is_exhaustive = true,
-    } });
+    return @Enum(Tag, .exhaustive, field_names[0..index], field_values[0..index]);
 }
 
 pub const VertexFormat = EnumFromC("VertexElementFormat", .{});

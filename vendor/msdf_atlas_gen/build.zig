@@ -3,14 +3,12 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const exe_mod = b.addModule("msdf_atlas_gen", .{
         .target = b.resolveTargetQuery(.{}), // Native
+        .link_libcpp = true,
     });
     const exe = b.addExecutable(.{
         .name = "msdf-atlas-gen",
         .root_module = exe_mod,
     });
-
-    // Link C++ standard library
-    exe.linkLibCpp();
 
     // Define C Macros
     exe_mod.addCMacro("MSDF_ATLAS_STANDALONE", "");

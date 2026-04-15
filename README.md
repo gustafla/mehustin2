@@ -6,7 +6,7 @@ Currently, the engine cannot be built from this repository, as it requires a
 "script" module which drives the demo's resources and logic.
 
 Build-time system dependencies:
-- Zig 0.15.2
+- Zig 0.16.0
 - glslc
 - freetype2
 - libpng

@@ -2,7 +2,7 @@ const std = @import("std");
 const net = std.net;
 const posix = std.posix;
 
-const c = @import("engine").c;
+const c = @import("c");
 
 const rate = c.SDL_NS_PER_SECOND / 20;
 var lastsend: u64 = 0;

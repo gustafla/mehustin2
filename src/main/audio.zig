@@ -1,8 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const root = @import("root");
-const c = root.c;
 
+const c = @import("c");
 const engine = @import("engine");
 const resource = engine.resource;
 const sdlerr = engine.err.sdlerr;

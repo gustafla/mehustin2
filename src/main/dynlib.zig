@@ -1,13 +1,12 @@
 //! Loading, unloading and calling into librender.so
 const std = @import("std");
-const c = @import("root").c;
 
+const c = @import("c");
 const engine = @import("engine");
 const sdlerr = engine.err.sdlerr;
 
 const filename = "librender.so";
 const log = std.log.scoped(.dynlib);
-
 var dynlib: ?std.DynLib = null;
 var init_ok: bool = false;
 var window: *c.SDL_Window = undefined;
@@ -20,15 +19,7 @@ var api: struct {
     isPaused: *const fn () callconv(.c) bool,
     seek: *const fn (f32) callconv(.c) void,
     getTime: *const fn () callconv(.c) f32,
-    host_print: *?*const fn ([*]const u8, usize) callconv(.c) void,
 } = undefined;
-
-const host_prefix = "host_";
-const host_functions = struct {
-    fn print(ptr: [*]const u8, len: usize) callconv(.c) void {
-        std.debug.print("{s}\n", .{ptr[0..len]});
-    }
-};
 
 pub fn deinit() void {
     if (init_ok) {
@@ -116,19 +107,6 @@ fn load() !void {
             @TypeOf(@field(api, field.name)),
             field.name,
         ) orelse return error.SymbolNotFound;
-    }
-
-    // Set up host functions
-    inline for (api_fields) |field| {
-        if (!comptime std.mem.startsWith(u8, field.name, host_prefix)) {
-            continue;
-        }
-
-        const fun = field.name[host_prefix.len..];
-        if (@hasDecl(host_functions, fun)) {
-            log.info("Hookup {s}", .{field.name});
-            @field(api, field.name).* = @field(host_functions, fun);
-        }
     }
 }
 

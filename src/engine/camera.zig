@@ -432,24 +432,17 @@ pub const fns = struct {
 pub const Motion = blk: {
     const decls = @typeInfo(fns).@"struct".decls;
     const Enum = std.meta.DeclEnum(fns);
-    var union_fields: [decls.len]std.builtin.Type.UnionField = undefined;
+    var field_names: [decls.len][]const u8 = undefined;
+    var field_types: [decls.len]type = undefined;
 
-    for (decls, &union_fields) |decl, *field| {
+    for (decls, 0..) |decl, i| {
         const func = @field(fns, decl.name);
         const params = @typeInfo(@TypeOf(func)).@"fn".params;
 
         const ParamType = params[2].type.?;
-        field.* = .{
-            .name = decl.name,
-            .type = ParamType,
-            .alignment = @alignOf(ParamType),
-        };
+        field_names[i] = decl.name;
+        field_types[i] = ParamType;
     }
 
-    break :blk @Type(.{ .@"union" = .{
-        .layout = .auto,
-        .tag_type = Enum,
-        .fields = &union_fields,
-        .decls = &.{},
-    } });
+    break :blk @Union(.auto, Enum, &field_names, &field_types, &@splat(.{}));
 };

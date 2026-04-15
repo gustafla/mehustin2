@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const c = @import("c");
 const config = @import("script").config;
 const engine = @import("engine");
 const options = engine.options;
@@ -9,15 +10,6 @@ const sdlerr = engine.err.sdlerr;
 
 const audio = @import("main/audio.zig");
 
-pub const c = @cImport({
-    @cDefine("SDL_DISABLE_OLD_NAMES", {});
-    @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3/SDL_revision.h");
-    @cDefine("SDL_MAIN_HANDLED", {});
-    @cInclude("SDL3/SDL_main.h");
-    @cDefine("STB_VORBIS_HEADER_ONLY", {});
-    @cInclude("stb_vorbis.c");
-});
 // Render is defined as dynlib.zig or render.zig depending on build configuration
 const render = if (options.render_dynlib)
     @import("main/dynlib.zig")

@@ -1,4 +1,4 @@
-const c = @import("engine").c;
+const c = @import("c");
 
 var start: u64 = 0;
 var offset: u64 = 0;

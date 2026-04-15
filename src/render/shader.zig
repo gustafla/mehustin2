@@ -1,9 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const c = @import("c");
 const engine = @import("engine");
 const resource = engine.resource;
-const c = engine.c;
 const sdlerr = engine.err.sdlerr;
 
 pub const Stage = enum(c_uint) {
@@ -28,7 +28,7 @@ fn createShader(device: *c.SDL_GPUDevice, data: []const u8, stage: Stage, info: 
     return sdlerr(c.SDL_CreateGPUShader(device, &create_info));
 }
 
-pub fn loadSpirv(gpa: Allocator, name: []const u8) ![:0]const u8 {
+pub fn loadSpirv(io: std.Io, gpa: Allocator, name: []const u8) ![:0]const u8 {
     // Allocate relative path to SPIR-V file
     const spirv_name = try std.mem.concat(gpa, u8, &.{ name, ".spv" });
     defer gpa.free(spirv_name);
@@ -36,14 +36,20 @@ pub fn loadSpirv(gpa: Allocator, name: []const u8) ![:0]const u8 {
     // Load SPIR-V binary
     const path = try resource.dataFilePath(gpa, spirv_name);
     defer gpa.free(path);
-    const data = try resource.loadFileZ(gpa, path);
+    const data = try resource.loadFileZ(io, gpa, path);
 
     return data;
 }
 
-pub fn loadShader(gpa: Allocator, device: *c.SDL_GPUDevice, name: []const u8, info: anytype) !*c.SDL_GPUShader {
+pub fn loadShader(
+    io: std.Io,
+    gpa: Allocator,
+    device: *c.SDL_GPUDevice,
+    name: []const u8,
+    info: anytype,
+) !*c.SDL_GPUShader {
     const stage = try Stage.fromExtension(name);
-    const data = try loadSpirv(gpa, name);
+    const data = try loadSpirv(io, gpa, name);
     defer gpa.free(data);
     return createShader(device, data, stage, info);
 }

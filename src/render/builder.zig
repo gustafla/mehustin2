@@ -316,14 +316,11 @@ pub fn ComptimeSet(comptime T: type) type {
 }
 
 pub fn SamplerEnum(comptime config: schema.Render) type {
-    var fields: [config.samplers.len]std.builtin.Type.EnumField = undefined;
+    var field_names: [config.samplers.len][]const u8 = undefined;
+    var field_values: [config.samplers.len]usize = undefined;
     for (config.samplers, 0..) |sampler, i| {
-        fields[i] = .{ .name = sampler.name[0.. :0], .value = i };
+        field_names[i] = sampler.name;
+        field_values[i] = i;
     }
-    return @Type(.{ .@"enum" = .{
-        .tag_type = usize,
-        .fields = &fields,
-        .decls = &.{},
-        .is_exhaustive = true,
-    } });
+    return @Enum(usize, .exhaustive, &field_names, &field_values);
 }

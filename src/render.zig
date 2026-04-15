@@ -2,8 +2,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
+const c = @import("c");
 const engine = @import("engine");
-const c = engine.c;
 const timeline = engine.timeline;
 const types = engine.types;
 const BufferInfo = types.BufferInfo;
@@ -12,8 +12,8 @@ const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
 const schema = engine.schema;
-const options = engine.options;
 const sdlerr = engine.err.sdlerr;
+const options = @import("options");
 const script = @import("script");
 const config = script.config.render;
 
@@ -44,9 +44,15 @@ const max_attributes = blk: {
     break :blk max;
 };
 
-// TODO: https://github.com/ziglang/zig/issues/25026
-// var debug_allocator: std.heap.DebugAllocator(.{}) = undefined;
-var gpa: Allocator = undefined;
+var threaded_io: std.Io.Threaded = .init_single_threaded;
+const io: std.Io = threaded_io.io();
+
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+const gpa: Allocator = if (builtin.mode == .Debug)
+    debug_allocator.allocator()
+else
+    std.heap.c_allocator;
+
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 
@@ -139,14 +145,13 @@ pub fn deinit() void {
         c.SDL_ReleaseGPUBuffer(device, buffer);
     }
 
-    // TODO: https://github.com/ziglang/zig/issues/25026
-    // if (builtin.mode == .Debug) {
-    //     _ = debug_allocator.detectLeaks();
-    // }
+    if (builtin.mode == .Debug) {
+        _ = debug_allocator.detectLeaks();
+    }
 }
 
 fn initComputePipeline(comptime key: ComputePipelineKey) !*c.SDL_GPUComputePipeline {
-    const spv = try shader.loadSpirv(gpa, key.comp);
+    const spv = try shader.loadSpirv(io, gpa, key.comp);
     defer gpa.free(spv);
     var create_info = std.mem.zeroInit(c.SDL_GPUComputePipelineCreateInfo, key.comp_info);
     create_info.code_size = spv.len;
@@ -158,9 +163,9 @@ fn initComputePipeline(comptime key: ComputePipelineKey) !*c.SDL_GPUComputePipel
 
 fn initGraphicsPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
-    const vert = try shader.loadShader(gpa, device, pipeline.vert, key.vert_info);
+    const vert = try shader.loadShader(io, gpa, device, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(gpa, device, pipeline.frag, key.frag_info);
+    const frag = try shader.loadShader(io, gpa, device, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     var color_target_descs: [GraphicsPipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
@@ -541,15 +546,6 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
 pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     errdefer |e| log.err("{s}", .{@errorName(e)});
-
-    // Initialize allocator
-    gpa =
-        // TODO: https://github.com/ziglang/zig/issues/25026
-        // if (builtin.mode == .Debug) blk: {
-        //     debug_allocator = std.heap.DebugAllocator(.{}).init;
-        //     break :blk debug_allocator.allocator();
-        // } else
-        std.heap.c_allocator;
 
     window = win;
     device = dev;
@@ -1268,8 +1264,6 @@ pub fn getTime() callconv(.c) f32 {
     return time.getTime();
 }
 
-var host_print: ?*const fn ([*]const u8, usize) callconv(.c) void = null;
-
 // Export symbols if build configuration requires
 comptime {
     if (options.render_dynlib) {
@@ -1280,35 +1274,9 @@ comptime {
         @export(&isPaused, .{ .name = "isPaused" });
         @export(&seek, .{ .name = "seek" });
         @export(&getTime, .{ .name = "getTime" });
-        @export(&host_print, .{ .name = "host_print" });
     }
-}
-
-fn myLogFn(
-    comptime level: std.log.Level,
-    comptime scope: @Type(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    const print = host_print orelse return;
-
-    var buf: [1024]u8 = undefined;
-
-    const prefix = "[DYN] " ++ @tagName(level) ++
-        (if (scope == std.log.default_log_scope)
-            ""
-        else
-            ("(" ++ @tagName(scope) ++ ")")) ++
-        ": ";
-
-    const msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch blk: {
-        break :blk "Log message too long";
-    };
-
-    print(msg.ptr, msg.len);
 }
 
 pub const std_options: std.Options = .{
     .log_level = if (builtin.mode == .Debug) .debug else .err,
-    .logFn = if (options.render_dynlib) myLogFn else std.log.defaultLog,
 };

@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const msdf_atlas_gen = @import("vendor/msdf_atlas_gen/build.zig");
 
 // Hooks up module dependencies in the caller project's build graph.
@@ -12,22 +13,26 @@ pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) voi
 
 /// Sets up glslc steps for all files in the caller project's "shaders" directory.
 pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) void {
+    const io = b.graph.io;
+    const arena = b.graph.arena;
+
     // Create glsl compiler run step for each shader
     var shader_source_dir = b.build_root.handle.openDir(
+        io,
         config.shader_dir,
         .{ .iterate = true },
     ) catch @panic("Can't open shader dir");
     var iter = shader_source_dir.iterate();
-    while (iter.next() catch @panic("Can't iterate shader dir")) |entry| {
+    while (iter.next(io) catch @panic("Can't iterate shader dir")) |entry| {
         if (entry.kind != .file) continue;
 
         // Init input and output paths
         const input_path = std.fs.path.join(
-            b.allocator,
+            arena,
             &.{ config.shader_dir, entry.name },
         ) catch @panic("OOM");
         const output_path = std.mem.concat(
-            b.allocator,
+            arena,
             u8,
             &.{ config.data_dir, "/", entry.name, ".spv" },
         ) catch @panic("OOM");
@@ -90,6 +95,8 @@ pub const Options = struct {
     udp_client: bool,
 
     pub fn init(b: *std.Build) @This() {
+        const arena = b.graph.arena;
+
         // Use standard target options
         const target = b.standardTargetOptions(.{});
 
@@ -105,8 +112,8 @@ pub const Options = struct {
                 "exe_name",
                 "Executable file name",
             ) orelse if (!target.query.isNative()) blk: {
-                const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
-                break :blk std.mem.concat(b.allocator, u8, &.{
+                const triple = target.result.linuxTriple(arena) catch @panic("OOM");
+                break :blk std.mem.concat(arena, u8, &.{
                     "demo",
                     "-",
                     triple,
@@ -140,14 +147,14 @@ pub const Options = struct {
         };
     }
 
-    pub fn optionsMod(self: *const @This(), bb: *std.Build) *std.Build.Step.Options {
+    pub fn optionsMod(self: *const @This(), bb: *std.Build) *std.Build.Module {
         const options_mod = bb.addOptions();
         options_mod.addOption(bool, "system_sdl", self.system_sdl);
         options_mod.addOption(bool, "render_dynlib", self.render_dynlib);
         options_mod.addOption(bool, "show_fps", self.show_fps);
         options_mod.addOption(PresentationMode, "present_mode", self.present_mode);
         options_mod.addOption(bool, "udp_client", self.udp_client);
-        return options_mod;
+        return options_mod.createModule();
     }
 };
 
@@ -198,6 +205,7 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     // Add run step
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.setCwd(exe.getEmittedBinDirectory());
     const run_step = b.step("run", "Run the demo");
     run_step.dependOn(&run_cmd.step);
 }
@@ -206,16 +214,44 @@ pub fn build(b: *std.Build) void {
     const options = Options.init(b);
     const options_mod = options.optionsMod(b);
 
-    // Define variable for release setting
-    const lto: std.zig.LtoMode = if (options.optimize != .Debug) .full else .none;
-
-    // Create a module for main.zig
-    const exe_mod = b.addModule("exe", .{
-        .root_source_file = b.path("src/main.zig"),
+    // Get SDL3 dependency from build.zig.zon
+    const sdl_dep = b.dependency("sdl", .{
         .target = options.target,
         .optimize = options.optimize,
+        .preferred_linkage = .static,
         .strip = options.optimize != .Debug,
         .sanitize_c = .off,
+    });
+
+    // Get the stb dependency
+    const stb_dep = b.dependency("stb", .{});
+
+    // Get the par dependency
+    const par_dep = b.dependency("par", .{});
+
+    // Create a translate C step for engine.zig
+    const engine_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/engine/c.h"),
+        .target = options.target,
+        .optimize = options.optimize,
+    });
+    engine_c.addIncludePath(sdl_dep.path("include"));
+    engine_c.addIncludePath(stb_dep.path("."));
+    engine_c.addIncludePath(par_dep.path("."));
+    const engine_c_mod = engine_c.createModule();
+
+    // Create a module for engine.zig
+    const engine_mod = b.addModule("engine", .{
+        .root_source_file = b.path("src/engine.zig"),
+        .target = options.target,
+        .optimize = options.optimize,
+        .strip = false,
+        .sanitize_c = .off,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "c", .module = engine_c_mod },
+            .{ .name = "options", .module = options_mod },
+        },
     });
 
     // Create a module for render.zig
@@ -225,59 +261,52 @@ pub fn build(b: *std.Build) void {
         .optimize = options.optimize,
         .strip = false,
         .sanitize_c = .off,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "c", .module = engine_c_mod },
+            .{ .name = "options", .module = options_mod },
+            .{ .name = "engine", .module = engine_mod },
+        },
     });
 
-    // Create a module for engine.zig
-    const engine_mod = b.addModule("engine", .{
-        .root_source_file = b.path("src/engine.zig"),
+    // Create a translate C step for main.zig
+    const exe_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/main/c.h"),
         .target = options.target,
         .optimize = options.optimize,
-        .strip = false,
-        .sanitize_c = .off,
     });
+    exe_c.addIncludePath(sdl_dep.path("include"));
+    exe_c.addIncludePath(stb_dep.path("."));
 
-    // Setup internal deps
-    exe_mod.addImport("engine", engine_mod);
-    render_mod.addImport("engine", engine_mod);
-
-    // Import build options into engine module
-    engine_mod.addOptions("options", options_mod);
-
-    // Get SDL3 dependency from build.zig.zon
-    const sdl_dep = b.dependency("sdl", .{
+    // Create a module for main.zig
+    const exe_mod = b.addModule("exe", .{
+        .root_source_file = b.path("src/main.zig"),
         .target = options.target,
         .optimize = options.optimize,
-        .preferred_linkage = .static,
         .strip = options.optimize != .Debug,
-        .lto = lto,
         .sanitize_c = .off,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "c", .module = exe_c.createModule() },
+            .{ .name = "options", .module = options_mod },
+            .{ .name = "engine", .module = engine_mod },
+        },
     });
-    exe_mod.addIncludePath(sdl_dep.path("include"));
-    render_mod.addIncludePath(sdl_dep.path("include"));
-    engine_mod.addIncludePath(sdl_dep.path("include"));
 
     // Link SDL
     if (options.system_sdl) {
-        exe_mod.linkSystemLibrary("SDL3", .{});
-        render_mod.linkSystemLibrary("SDL3", .{});
         engine_mod.linkSystemLibrary("SDL3", .{});
+        render_mod.linkSystemLibrary("SDL3", .{});
+        exe_mod.linkSystemLibrary("SDL3", .{});
     } else {
         const sdl_lib = sdl_dep.artifact("SDL3");
-        exe_mod.linkLibrary(sdl_lib);
-        render_mod.linkLibrary(sdl_lib);
         engine_mod.linkLibrary(sdl_lib);
+        render_mod.linkLibrary(sdl_lib);
+        exe_mod.linkLibrary(sdl_lib);
     }
 
-    // Get the stb dependency from build.zig.zon
-    const stb_dep = b.dependency("stb", .{});
-    exe_mod.addIncludePath(stb_dep.path("."));
-    engine_mod.addIncludePath(stb_dep.path("."));
-
-    // Get the par dependency
-    const par_dep = b.dependency("par", .{});
-    engine_mod.addIncludePath(par_dep.path(".")); // par_shapes
-
     // Add stb_vorbis to exe
+    exe_mod.addIncludePath(stb_dep.path("."));
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
 
     // Generate C files for C header libraries
@@ -289,6 +318,7 @@ pub fn build(b: *std.Build) void {
         \\#include <stb_image.h>
         \\
     );
+    engine_mod.addIncludePath(stb_dep.path("."));
     engine_mod.addCSourceFile(.{ .file = stb_image_c });
     const stb_truetype_c = c_write.add("stb_truetype.c",
         \\#define STB_TRUETYPE_IMPLEMENTATION
@@ -301,6 +331,7 @@ pub fn build(b: *std.Build) void {
         \\#include <par_shapes.h>
         \\
     );
+    engine_mod.addIncludePath(par_dep.path("."));
     engine_mod.addCSourceFile(.{ .file = par_shapes_c });
 
     // Set up render shared library
@@ -309,9 +340,7 @@ pub fn build(b: *std.Build) void {
             .name = "render",
             .linkage = .dynamic,
             .root_module = render_mod,
-            .use_llvm = true, // TODO: Remove this in upcoming release if fixed
         });
-        render.linkLibC();
         b.installArtifact(render);
     }
 
@@ -319,10 +348,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = options.exe_name,
         .root_module = exe_mod,
-        .use_llvm = true, // TODO: Remove this in upcoming release if fixed
     });
-    exe.linkLibC();
-    exe.lto = lto;
     b.installArtifact(exe);
 
     // Setup docs generation

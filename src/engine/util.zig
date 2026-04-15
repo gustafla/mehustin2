@@ -1,9 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const c = @import("c");
 const options = @import("options");
 
-const c = @import("../engine.zig").c;
 const math = @import("math.zig");
 const resource = @import("resource.zig");
 const timeline = @import("timeline.zig");
@@ -110,10 +110,10 @@ pub fn ambientFromEnvmap(
     return sky_color;
 }
 
-pub fn loadFile(gpa: std.mem.Allocator, name: []const u8) ![]u8 {
+pub fn loadFile(io: std.Io, gpa: std.mem.Allocator, name: []const u8) ![]u8 {
     const path = try resource.dataFilePath(gpa, name);
     defer gpa.free(path);
-    return try resource.loadFileZ(gpa, path);
+    return try resource.loadFileZ(io, gpa, path);
 }
 
 pub fn hslToRgb(hsl: math.Vec3) math.Vec3 {

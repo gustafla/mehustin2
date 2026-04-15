@@ -70,22 +70,23 @@ pub const State = struct {
 };
 
 pub const Clip = blk: {
-    var fields: [timeline.clip_track.len]std.builtin.Type.EnumField = undefined;
+    const bits = std.math.log2_int_ceil(usize, timeline.clip_track.len);
+    const Int = @Int(.unsigned, bits);
+
+    var field_names: [timeline.clip_track.len][]const u8 = undefined;
+    var field_values: [timeline.clip_track.len]Int = undefined;
+
     var num_fields = 0;
     outer: for (timeline.clip_track) |clip| {
-        for (fields[0..num_fields]) |field| {
-            if (std.mem.eql(u8, clip.id, field.name)) continue :outer;
+        for (field_names[0..num_fields]) |name| {
+            if (std.mem.eql(u8, clip.id, name)) continue :outer;
         }
-        fields[num_fields] = .{ .name = clip.id[0.. :0], .value = num_fields };
+        field_names[num_fields] = clip.id;
+        field_values[num_fields] = num_fields;
         num_fields += 1;
     }
-    const bits = std.math.log2_int_ceil(usize, fields.len);
-    break :blk @Type(.{ .@"enum" = .{
-        .tag_type = @Type(.{ .int = .{ .signedness = .unsigned, .bits = bits } }),
-        .fields = fields[0..num_fields],
-        .decls = &.{},
-        .is_exhaustive = true,
-    } });
+
+    break :blk @Enum(Int, .exhaustive, &field_names, &field_values);
 };
 
 const clip_table = blk: {
@@ -270,7 +271,7 @@ pub const InstanceText = extern struct {
 var font_sizes: [timeline.text.fonts.len]f32 = undefined;
 var font_glyphs: [timeline.text.fonts.len][128]font.GlyphInfo = undefined;
 
-pub fn FontAtlas(gpa: *std.mem.Allocator) type {
+pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
     return struct {
         pub fn create() !TextureInfo {
             return .{
@@ -294,7 +295,7 @@ pub fn FontAtlas(gpa: *std.mem.Allocator) type {
                 0..,
             ) |def, *size, *glyph_info, i| {
                 size.* = def.size;
-                const ttf = try util.loadFile(gpa.*, def.name);
+                const ttf = try util.loadFile(io.*, gpa.*, def.name);
                 defer gpa.free(ttf);
 
                 try font.bakeSDFAtlas(
