@@ -768,7 +768,7 @@ fn computePass(
 ) !void {
     // Filter pass by clip id list
     comptime if (pass.condition) |clip_ids| {
-        const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
+        const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
         if (idx == null) return;
     };
 
@@ -807,7 +807,7 @@ fn computePass(
     inline for (pass.dispatches) |dispatch| {
         // Filter dispatch by clip id list
         comptime if (dispatch.condition) |clip_ids| {
-            const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
+            const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
             if (idx == null) continue;
         };
 
@@ -869,7 +869,7 @@ fn renderPass(
 ) !void {
     // Filter pass by clip id list
     comptime if (pass.condition) |clip_ids| {
-        const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
+        const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
         if (idx == null) return;
     };
 
@@ -953,7 +953,7 @@ fn renderPass(
     inline for (pass.drawcalls) |drawcall| {
         // Filter drawcall by clip id list
         comptime if (drawcall.condition) |clip_ids| {
-            const idx = std.mem.indexOfScalar(timeline.Clip, clip_ids, clip);
+            const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
             if (idx == null) continue;
         };
 

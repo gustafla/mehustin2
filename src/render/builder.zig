@@ -15,7 +15,7 @@ pub fn parseIndex(
     comptime name: []const u8,
 ) !?struct { ref: []const u8, idx: usize } {
     if (name[name.len - 1] != ']') return null;
-    const bracket = std.mem.indexOfScalar(u8, name, '[') orelse
+    const bracket = std.mem.findScalar(u8, name, '[') orelse
         return error.MissingOpeningBracket;
     const index_str = name[bracket + 1 .. name.len - 1];
     const index = try std.fmt.parseInt(usize, index_str, 0);
