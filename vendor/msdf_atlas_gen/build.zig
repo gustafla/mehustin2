@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const exe_mod = b.addModule("msdf_atlas_gen", .{
         .target = b.resolveTargetQuery(.{}), // Native
+        .optimize = .ReleaseFast,
         .link_libcpp = true,
     });
     const exe = b.addExecutable(.{

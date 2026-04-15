@@ -248,7 +248,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/engine.zig"),
         .target = options.target,
         .optimize = options.optimize,
-        .strip = false,
+        .strip = options.optimize != .Debug,
         .sanitize_c = .off,
         .link_libc = true,
         .imports = &.{
@@ -262,7 +262,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/render.zig"),
         .target = options.target,
         .optimize = options.optimize,
-        .strip = false,
+        .strip = options.optimize != .Debug,
         .sanitize_c = .off,
         .link_libc = true,
         .imports = &.{
