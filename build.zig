@@ -147,7 +147,7 @@ pub const Options = struct {
         };
     }
 
-    pub fn optionsMod(self: *const @This(), bb: *std.Build) *std.Build.Module {
+    pub fn createModule(self: *const @This(), bb: *std.Build) *std.Build.Module {
         const options_mod = bb.addOptions();
         options_mod.addOption(bool, "system_sdl", self.system_sdl);
         options_mod.addOption(bool, "render_dynlib", self.render_dynlib);
@@ -212,7 +212,7 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
 
 pub fn build(b: *std.Build) void {
     const options = Options.init(b);
-    const options_mod = options.optionsMod(b);
+    const options_mod = options.createModule(b);
 
     // Get SDL3 dependency from build.zig.zon
     const sdl_dep = b.dependency("sdl", .{
@@ -229,16 +229,20 @@ pub fn build(b: *std.Build) void {
     // Get the par dependency
     const par_dep = b.dependency("par", .{});
 
-    // Create a translate C step for engine.zig
-    const engine_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/engine/c.h"),
+    // Create a translate C step
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c.h"),
         .target = options.target,
         .optimize = options.optimize,
     });
-    engine_c.addIncludePath(sdl_dep.path("include"));
-    engine_c.addIncludePath(stb_dep.path("."));
-    engine_c.addIncludePath(par_dep.path("."));
-    const engine_c_mod = engine_c.createModule();
+    if (options.system_sdl) {
+        translate_c.linkSystemLibrary("SDL3", .{});
+    } else {
+        translate_c.addIncludePath(sdl_dep.path("include"));
+    }
+    translate_c.addIncludePath(stb_dep.path("."));
+    translate_c.addIncludePath(par_dep.path("."));
+    const translate_c_mod = translate_c.createModule();
 
     // Create a module for engine.zig
     const engine_mod = b.addModule("engine", .{
@@ -249,7 +253,7 @@ pub fn build(b: *std.Build) void {
         .sanitize_c = .off,
         .link_libc = true,
         .imports = &.{
-            .{ .name = "c", .module = engine_c_mod },
+            .{ .name = "c", .module = translate_c_mod },
             .{ .name = "options", .module = options_mod },
         },
     });
@@ -263,20 +267,11 @@ pub fn build(b: *std.Build) void {
         .sanitize_c = .off,
         .link_libc = true,
         .imports = &.{
-            .{ .name = "c", .module = engine_c_mod },
+            .{ .name = "c", .module = translate_c_mod },
             .{ .name = "options", .module = options_mod },
             .{ .name = "engine", .module = engine_mod },
         },
     });
-
-    // Create a translate C step for main.zig
-    const exe_c = b.addTranslateC(.{
-        .root_source_file = b.path("src/main/c.h"),
-        .target = options.target,
-        .optimize = options.optimize,
-    });
-    exe_c.addIncludePath(sdl_dep.path("include"));
-    exe_c.addIncludePath(stb_dep.path("."));
 
     // Create a module for main.zig
     const exe_mod = b.addModule("exe", .{
@@ -287,7 +282,7 @@ pub fn build(b: *std.Build) void {
         .sanitize_c = .off,
         .link_libc = true,
         .imports = &.{
-            .{ .name = "c", .module = exe_c.createModule() },
+            .{ .name = "c", .module = translate_c_mod },
             .{ .name = "options", .module = options_mod },
             .{ .name = "engine", .module = engine_mod },
         },
