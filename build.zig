@@ -346,15 +346,6 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
-    // Setup docs generation
-    const install_docs = b.addInstallDirectory(.{
-        .install_dir = .prefix,
-        .install_subdir = "docs",
-        .source_dir = exe.getEmittedDocs(),
-    });
-    const docs_step = b.step("docs", "Generate documentation");
-    docs_step.dependOn(&install_docs.step);
-
     // Setup msdf-atlas-gen executable
     msdf_atlas_gen.build(b);
 }
