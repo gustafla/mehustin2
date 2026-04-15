@@ -23,6 +23,7 @@
 
 # Backlog
 
+- [ ] Add win32 icon resource
 - [ ] Reorganize uniforms
   - 128 bytes per uniform slot per shader stage (4 slots per stage)
   - [ ] Use the corner rays method in tri.vert, no inverse matrices on the GPU
