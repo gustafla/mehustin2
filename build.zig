@@ -160,11 +160,12 @@ pub const Options = struct {
 
 pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     // Add data files to bin
-    b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+    const install_data_dir = b.addInstallDirectory(.{
         .source_dir = b.path("data"),
         .install_dir = .bin,
         .install_subdir = "data",
-    }).step);
+    });
+    b.getInstallStep().dependOn(&install_data_dir.step);
 
     // Test run of msdf-atlas-gen
     // const msdf = d.artifact("msdf-atlas-gen");
@@ -204,8 +205,8 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
 
     // Add run step
     const run_cmd = b.addRunArtifact(exe);
+    run_cmd.setCwd(.{ .cwd_relative = b.exe_dir });
     run_cmd.step.dependOn(b.getInstallStep());
-    run_cmd.setCwd(exe.getEmittedBinDirectory());
     const run_step = b.step("run", "Run the demo");
     run_step.dependOn(&run_cmd.step);
 }
