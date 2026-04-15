@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const msdf_atlas_gen = @import("vendor/msdf_atlas_gen/build.zig");
-
 // Hooks up module dependencies in the caller project's build graph.
 pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) void {
     const engine_mod = d.module("engine");
@@ -347,8 +345,10 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
-    // Setup msdf-atlas-gen executable
-    msdf_atlas_gen.build(b);
+    // Add msdf-atlas-gen
+    const msdf_dep = b.dependency("msdf_atlas_gen", .{});
+    const msdf_atlas_gen = msdf_dep.artifact("msdf-atlas-gen");
+    b.installArtifact(msdf_atlas_gen);
 }
 
 fn toUpper(comptime str: []const u8) [str.len]u8 {

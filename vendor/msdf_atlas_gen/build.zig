@@ -106,7 +106,7 @@ pub fn build(b: *std.Build) void {
 
     // Add patched main
     exe_mod.addCSourceFile(.{
-        .file = b.path("vendor/msdf_atlas_gen/main.cpp"),
+        .file = b.path("src/main.cpp"),
         .flags = cxx_flags,
     });
 
