@@ -5,19 +5,6 @@ const c = @import("c");
 const math = @import("math.zig");
 const timeline = @import("timeline.zig");
 
-fn enumFieldNameFromC(
-    comptime name: []const u8,
-) []const u8 {
-    // Convert to lowercase
-    var buf: [name.len + 1]u8 = undefined;
-    for (name, 0..) |chr, i| {
-        buf[i] = std.ascii.toLower(chr);
-    }
-
-    buf[name.len] = 0;
-    return buf[0..name.len];
-}
-
 pub fn EnumFromC(
     comptime type_name: []const u8,
     comptime opt: struct {
@@ -41,6 +28,10 @@ pub fn EnumFromC(
     var index: usize = 0;
     var max_val: Tag = 0;
 
+    // Buffer for lowercased field names
+    var string_buf: [1024 * 16]u8 = undefined;
+    var string_cursor: usize = 0;
+
     // Search prefix: "SDL_GPU_VERTEXELEMENTFORMAT"
     const search_prefix = opt.prefix ++ "_" ++ variant;
     for (c_decls) |decl| {
@@ -50,8 +41,15 @@ pub fn EnumFromC(
                 max_val = val;
             }
             const raw_name = decl.name[search_prefix.len + 1 ..];
-            field_names[index] = enumFieldNameFromC(raw_name);
+
+            const string_start = string_cursor;
+            for (raw_name) |chr| {
+                string_buf[string_cursor] = std.ascii.toLower(chr);
+                string_cursor += 1;
+            }
+            field_names[index] = string_buf[string_start..string_cursor];
             field_values[index] = val;
+
             index += 1;
         }
     }
