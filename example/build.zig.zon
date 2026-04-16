@@ -1,0 +1,17 @@
+.{
+    .name = .demo,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .mehustin2 = .{
+            .path = "..",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "shaders",
+    },
+    .fingerprint = 0xd642dfa01d4e1d10,
+}

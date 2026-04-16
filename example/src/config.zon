@@ -1,0 +1,10 @@
+.{
+    .data_dir = "data",
+    .shader_dir = "shaders",
+
+    .width = 1920,
+    .height = 1080,
+    .near = 1,
+    .far = 1024,
+    .noise_size = 64,
+}

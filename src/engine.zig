@@ -45,6 +45,14 @@ comptime {
         }
     }
 
+    // Assert that buffer layouts are extern structs
+    for (@typeInfo(script.buffer).@"struct".decls) |decl| {
+        const buffer = @field(script.buffer, decl.name);
+        if (@typeInfo(buffer.Layout).@"struct".layout != .@"extern") {
+            @compileError(std.fmt.comptimePrint("{s}.Layout is not extern", .{decl.name}));
+        }
+    }
+
     // Assert that SSBO layouts are extern structs
     for (@typeInfo(script.storage_buffer).@"struct".decls) |decl| {
         const ssbo = @field(script.storage_buffer, decl.name);

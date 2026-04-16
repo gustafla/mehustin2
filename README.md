@@ -12,7 +12,13 @@ Build-time system dependencies:
 - libpng
 - SDL3 (optional, use `-Dsystem_sdl=false` to build a static library)
 
-Example project (outdated): See [Abyss](https://github.com/gustafla/abyss).
+Example projects:
+- The repository example:
+  ```
+  cd example
+  zig build run
+  ```
+- (outdated) [Abyss by Mehu](https://github.com/gustafla/abyss)
 
 ## Dynamic Reloading
 
