@@ -262,6 +262,7 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     // Initialize textures and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
+
     inline for (
         texture_ids,
         &textures,
@@ -277,25 +278,30 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             info.depth,
         );
 
-        log.debug("Initializing Texture {s} ({})", .{ id.name, id.value });
-        texture.* =
-            try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-                .type = @intFromEnum(info.tex_type),
-                .format = @intFromEnum(info.format),
-                .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER |
-                    c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
-                    c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
-                .width = info.width,
-                .height = info.height,
-                .layer_count_or_depth = info.depth,
-                .num_levels = info.mip_levels,
-                .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-            }));
-        errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
+        // Guard against zero size
+        if (size.* > 0) {
+            log.debug("Initializing Texture {s} ({})", .{ id.name, id.value });
+
+            texture.* =
+                try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+                    .type = @intFromEnum(info.tex_type),
+                    .format = @intFromEnum(info.format),
+                    .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER |
+                        c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
+                        c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
+                    .width = info.width,
+                    .height = info.height,
+                    .layer_count_or_depth = info.depth,
+                    .num_levels = info.mip_levels,
+                    .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+                }));
+            errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
+        }
 
         if (@hasDecl(texture_src, "init")) {
             init_transfer_buffer_size += size.*;
         }
+
         if (@hasDecl(texture_src, "updateData")) {
             update_transfer_buffer_size += size.*;
         }
@@ -322,10 +328,12 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         try texture_src.init(tbp[0..size]);
         tbp += size;
     }
+
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     // Record transfer buffer uploads to textures
     var offset: u32 = 0;
+
     inline for (
         texture_ids,
         textures,
@@ -333,27 +341,29 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         texture_sizes,
     ) |id, texture, info, size| {
         if (!@hasDecl(@field(script.texture, id.name), "init")) continue;
-        c.SDL_UploadToGPUTexture(
-            copy_pass,
-            &.{
-                .transfer_buffer = transfer_buffer,
-                .offset = offset,
-                .pixels_per_row = info.width,
-                .rows_per_layer = info.height,
-            },
-            &.{
-                .texture = texture,
-                .mip_level = 0,
-                .layer = 0,
-                .x = 0,
-                .y = 0,
-                .z = 0,
-                .w = info.width,
-                .h = info.height,
-                .d = info.depth,
-            },
-            false,
-        );
+        if (size > 0) {
+            c.SDL_UploadToGPUTexture(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = offset,
+                    .pixels_per_row = info.width,
+                    .rows_per_layer = info.height,
+                },
+                &.{
+                    .texture = texture,
+                    .mip_level = 0,
+                    .layer = 0,
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
+                    .w = info.width,
+                    .h = info.height,
+                    .d = info.depth,
+                },
+                false,
+            );
+        }
         offset += size;
     }
 
@@ -367,11 +377,12 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     // Initialize buffers and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
+
     inline for (buffer_ids, &buffers, &buffer_sizes) |id, *buffer, *size| {
         const buffer_src = @field(script.buffer, id.name);
         const layout_size = @sizeOf(buffer_src.Layout);
 
-        // Zero-size buffers may be used for programmable instance counts
+        // Zero-size, no-create buffers may be used for instance counts
         if (layout_size == 0) {
             size.* = 0;
             continue;
@@ -380,24 +391,29 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         const num_elements = try buffer_src.create();
         size.* = num_elements * layout_size;
 
-        log.debug("Initializing Buffer {s} ({}) with {s}", .{
-            id.name, id.value, @typeName(buffer_src.Layout),
-        });
-        log.debug("    num_elements = {}, layout_size = {}, size = {}", .{
-            num_elements, layout_size, size.*,
-        });
-        buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
-            .usage = if (@typeInfo(buffer_src.Layout) == .int)
-                c.SDL_GPU_BUFFERUSAGE_INDEX
-            else
-                c.SDL_GPU_BUFFERUSAGE_VERTEX,
-            .size = size.*,
-        }));
-        errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+        // Guard against zero elements returned
+        if (size.* > 0) {
+            log.debug("Initializing Buffer {s} ({}) with {s}", .{
+                id.name, id.value, @typeName(buffer_src.Layout),
+            });
+            log.debug("    num_elements = {}, layout_size = {}, size = {}", .{
+                num_elements, layout_size, size.*,
+            });
+
+            buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
+                .usage = if (@typeInfo(buffer_src.Layout) == .int)
+                    c.SDL_GPU_BUFFERUSAGE_INDEX
+                else
+                    c.SDL_GPU_BUFFERUSAGE_VERTEX,
+                .size = size.*,
+            }));
+            errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+        }
 
         if (@hasDecl(buffer_src, "init")) {
             init_transfer_buffer_size += size.*;
         }
+
         if (@hasDecl(buffer_src, "updateData")) {
             update_transfer_buffer_size += size.*;
         }
@@ -422,31 +438,36 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         transfer_buffer,
         false,
     )));
+
     inline for (buffer_ids, &buffer_infos, buffer_sizes) |id, *info, size| {
         const buffer_src = @field(script.buffer, id.name);
         if (!@hasDecl(buffer_src, "init")) continue;
         info.* = try buffer_src.init(@ptrCast(@alignCast(tbp[0..size])));
         tbp += size;
     }
+
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     // Record transfer buffer uploads to buffers
     var offset: u32 = 0;
+
     inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
         if (!@hasDecl(@field(script.buffer, id.name), "init")) continue;
-        c.SDL_UploadToGPUBuffer(
-            copy_pass,
-            &.{
-                .transfer_buffer = transfer_buffer,
-                .offset = offset,
-            },
-            &.{
-                .buffer = buffer,
-                .offset = 0,
-                .size = size,
-            },
-            false,
-        );
+        if (size > 0) {
+            c.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = offset,
+                },
+                &.{
+                    .buffer = buffer,
+                    .offset = 0,
+                    .size = size,
+                },
+                false,
+            );
+        }
         offset += size;
     }
 
@@ -457,6 +478,7 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     // Initialize buffers and transfer buffer
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
+
     inline for (
         storage_buffer_ids,
         &storage_buffers,
@@ -468,23 +490,28 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         const layout_size = @sizeOf(storage_buffer_src.Element);
         size.* = header_size + (layout_size * num_elements);
 
-        log.debug("Initializing Storage Buffer {s} ({})", .{
-            id.name, id.value,
-        });
-        log.debug("    num_elements = {}, header_size = {}, layout_size = {}, size = {}", .{
-            num_elements, header_size, layout_size, size.*,
-        });
-        buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
-            .usage = c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
-                c.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
-            .size = size.*,
-        }));
-        errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+        // Guard against zero size
+        if (size.* > 0) {
+            log.debug("Initializing Storage Buffer {s} ({})", .{
+                id.name, id.value,
+            });
+            log.debug("    num_elements = {}, header_size = {}, layout_size = {}, size = {}", .{
+                num_elements, header_size, layout_size, size.*,
+            });
+
+            buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
+                .usage = c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
+                    c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
+                    c.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+                .size = size.*,
+            }));
+            errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
+        }
 
         if (@hasDecl(storage_buffer_src, "init")) {
             init_transfer_buffer_size += size.*;
         }
+
         if (@hasDecl(storage_buffer_src, "updateData")) {
             update_transfer_buffer_size += size.*;
         }
@@ -509,35 +536,40 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         transfer_buffer,
         false,
     )));
+
     inline for (storage_buffer_ids, storage_buffer_sizes) |id, size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
         if (!@hasDecl(storage_buffer_src, "init")) continue;
         try storage_buffer_src.init(tbp[0..size]);
         tbp += size;
     }
+
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     // Record transfer buffer uploads to buffers
     var offset: u32 = 0;
+
     inline for (
         storage_buffer_ids,
         storage_buffers,
         storage_buffer_sizes,
     ) |id, buffer, size| {
         if (!@hasDecl(@field(script.storage_buffer, id.name), "init")) continue;
-        c.SDL_UploadToGPUBuffer(
-            copy_pass,
-            &.{
-                .transfer_buffer = transfer_buffer,
-                .offset = offset,
-            },
-            &.{
-                .buffer = buffer,
-                .offset = 0,
-                .size = size,
-            },
-            false,
-        );
+        if (size > 0) {
+            c.SDL_UploadToGPUBuffer(
+                copy_pass,
+                &.{
+                    .transfer_buffer = transfer_buffer,
+                    .offset = offset,
+                },
+                &.{
+                    .buffer = buffer,
+                    .offset = 0,
+                    .size = size,
+                },
+                false,
+            );
+        }
         offset += size;
     }
 
@@ -659,6 +691,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
 fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
     // Populate transfer buffer with data and record upload commands
     var offset = base;
+
     inline for (
         texture_ids,
         textures,
@@ -670,22 +703,24 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
 
         try texture_src.updateData(tbp[offset..][0..size]);
 
-        c.SDL_UploadToGPUTexture(copy_pass, &.{
-            .transfer_buffer = update_transfer_buffer,
-            .offset = offset,
-            .pixels_per_row = info.width,
-            .rows_per_layer = info.height,
-        }, &.{
-            .texture = texture,
-            .mip_level = 0,
-            .layer = 0,
-            .x = 0,
-            .y = 0,
-            .z = 0,
-            .w = info.width,
-            .h = info.height,
-            .d = info.depth,
-        }, true);
+        if (size > 0) {
+            c.SDL_UploadToGPUTexture(copy_pass, &.{
+                .transfer_buffer = update_transfer_buffer,
+                .offset = offset,
+                .pixels_per_row = info.width,
+                .rows_per_layer = info.height,
+            }, &.{
+                .texture = texture,
+                .mip_level = 0,
+                .layer = 0,
+                .x = 0,
+                .y = 0,
+                .z = 0,
+                .w = info.width,
+                .h = info.height,
+                .d = info.depth,
+            }, true);
+        }
 
         offset += size;
     }
@@ -696,6 +731,7 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
 fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
     // Populate transfer buffer with data and record upload commands
     var offset = base;
+
     inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
         const buffer_src = @field(script.buffer, id.name);
         if (!@hasDecl(buffer_src, "updateData")) continue;
@@ -729,6 +765,7 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
 fn updateStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
     // Populate transfer buffer with data and record upload commands
     var offset = base;
+
     inline for (
         storage_buffer_ids,
         storage_buffers,
@@ -739,14 +776,16 @@ fn updateStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u
 
         try storage_buffer_src.updateData(tbp[offset..][0..size]);
 
-        c.SDL_UploadToGPUBuffer(copy_pass, &.{
-            .transfer_buffer = update_transfer_buffer,
-            .offset = offset,
-        }, &.{
-            .buffer = buffer,
-            .offset = 0,
-            .size = size,
-        }, true);
+        if (size > 0) {
+            c.SDL_UploadToGPUBuffer(copy_pass, &.{
+                .transfer_buffer = update_transfer_buffer,
+                .offset = offset,
+            }, &.{
+                .buffer = buffer,
+                .offset = 0,
+                .size = size,
+            }, true);
+        }
 
         offset += size;
     }
