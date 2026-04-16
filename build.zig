@@ -1,12 +1,23 @@
 const std = @import("std");
 
+fn addScript(
+    engine_mod: *std.Build.Module,
+    render_mod: *std.Build.Module,
+    exe_mod: *std.Build.Module,
+    script_mod: *std.Build.Module,
+) void {
+    script_mod.addImport("engine", engine_mod);
+    engine_mod.addImport("script", script_mod);
+    render_mod.addImport("script", script_mod);
+    exe_mod.addImport("script", script_mod);
+}
+
 // Hooks up module dependencies in the caller project's build graph.
 pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) void {
     const engine_mod = d.module("engine");
-    script_mod.addImport("engine", engine_mod);
-    engine_mod.addImport("script", script_mod);
-    d.module("render").addImport("script", script_mod);
-    d.module("exe").addImport("script", script_mod);
+    const render_mod = d.module("render");
+    const exe_mod = d.module("exe");
+    addScript(engine_mod, render_mod, exe_mod, script_mod);
 }
 
 /// Sets up glslc steps for all files in the caller project's "shaders" directory.
@@ -281,6 +292,16 @@ pub fn build(b: *std.Build) void {
             .{ .name = "engine", .module = engine_mod },
         },
     });
+
+    // Add default script, so that builds succeed (override with importScript)
+    addScript(engine_mod, render_mod, exe_mod, b.createModule(.{
+        .root_source_file = b.path("example/src/script.zig"),
+        .target = options.target,
+        .optimize = options.optimize,
+        .strip = options.optimize != .Debug,
+        .sanitize_c = .off,
+        .link_libc = true,
+    }));
 
     // Link SDL
     if (options.system_sdl) {
