@@ -14,7 +14,7 @@ Based on SDL3 GPU API and glslc, implemented in [Zig](https://ziglang.org).
   - Implemented entirely with `comptime` reflection and explicit inlining
 - Runtime dynamic reloading while editing
 - Shader library and `#include` support
-- Ogg/vorbis music tracks (with bpm-time)
+- Ogg/vorbis music tracks (with bpm time)
 - Text rendering with SDF fonts
 - Seamless multiplatform builds
 
