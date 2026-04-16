@@ -122,18 +122,18 @@ pub fn hslToRgb(hsl: math.Vec3) math.Vec3 {
     const x = cc * (1 - @abs(@mod(h, 2) - 1));
     const r, const g, const b =
         if (0 <= h and h < 1)
-            .{ c, x, 0 }
+            .{ cc, x, 0 }
         else if (1 <= h and h < 2)
-            .{ x, c, 0 }
+            .{ x, cc, 0 }
         else if (2 <= h and h < 3)
-            .{ 0, c, x }
+            .{ 0, cc, x }
         else if (3 <= h and h < 4)
-            .{ 0, x, c }
+            .{ 0, x, cc }
         else if (4 <= h and h < 5)
-            .{ x, 0, c }
+            .{ x, 0, cc }
         else
-            .{ c, 0, x };
-    const m = hsl[2] - c / 2;
+            .{ cc, 0, x };
+    const m = hsl[2] - cc / 2;
     return .{ r + m, g + m, b + m };
 }
 

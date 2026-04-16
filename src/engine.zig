@@ -45,11 +45,15 @@ comptime {
         }
     }
 
-    // Assert that buffer layouts are extern structs
+    // Assert that buffer layouts are compatible with render
     for (@typeInfo(script.buffer).@"struct".decls) |decl| {
-        const buffer = @field(script.buffer, decl.name);
-        if (@typeInfo(buffer.Layout).@"struct".layout != .@"extern") {
-            @compileError(std.fmt.comptimePrint("{s}.Layout is not extern", .{decl.name}));
+        const info = @typeInfo(@field(script.buffer, decl.name).Layout);
+        switch (info) {
+            .@"struct" => |s| if (s.layout != .@"extern") {
+                @compileError(std.fmt.comptimePrint("{s}.Layout is not extern", .{decl.name}));
+            },
+            .int, .void => {},
+            else => @compileError(std.fmt.comptimePrint("{s}.Layout is an unsupported type", .{decl.name})),
         }
     }
 
