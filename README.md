@@ -10,8 +10,8 @@ Based on SDL3 GPU API and glslc, implemented in [Zig](https://ziglang.org).
 **Features**:
 - Render and compute pipeline abstraction
 - Timeline abstration, cameras
-  - Based on Zig's compile-time ZON file parsing: `@import("render.zon")`
-  - Implemented entirely with `comptime` reflection and explicit inlining
+- Based on Zig's compile-time ZON file parsing: `@import("render.zon")`
+- Implemented entirely with `comptime` reflection and explicit inlining
 - Runtime dynamic reloading while editing
 - Shader library and `#include` support
 - Ogg/vorbis music tracks (with bpm time)
