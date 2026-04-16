@@ -50,6 +50,7 @@
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [X] Lighting (point light sources)
+- [ ] SDL_shadercross support
 
 # Done
 
