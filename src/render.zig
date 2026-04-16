@@ -56,23 +56,23 @@ else
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 
-var update_transfer_buffer: ?*c.SDL_GPUTransferBuffer = undefined;
-var samplers: [config.samplers.len]*c.SDL_GPUSampler = undefined;
-var output_buffer: *c.SDL_GPUTexture = undefined;
-var graphics_pipelines: [graphics_pipeline_set.keys.len]*c.SDL_GPUGraphicsPipeline = undefined;
-var compute_pipelines: [compute_pipeline_set.keys.len]*c.SDL_GPUComputePipeline = undefined;
-var color_targets: [config.color_targets.len]*c.SDL_GPUTexture = undefined;
-var depth_targets: [config.depth_targets.len]*c.SDL_GPUTexture = undefined;
+var update_transfer_buffer: ?*c.SDL_GPUTransferBuffer = null;
+var samplers: [config.samplers.len]?*c.SDL_GPUSampler = @splat(null);
+var output_buffer: ?*c.SDL_GPUTexture = null;
+var graphics_pipelines: [graphics_pipeline_set.keys.len]?*c.SDL_GPUGraphicsPipeline = @splat(null);
+var compute_pipelines: [compute_pipeline_set.keys.len]?*c.SDL_GPUComputePipeline = @splat(null);
+var color_targets: [config.color_targets.len]?*c.SDL_GPUTexture = @splat(null);
+var depth_targets: [config.depth_targets.len]?*c.SDL_GPUTexture = @splat(null);
 
-var textures: [texture_ids.len]*c.SDL_GPUTexture = undefined;
+var textures: [texture_ids.len]?*c.SDL_GPUTexture = @splat(null);
 var texture_infos: [texture_ids.len]TextureInfo = undefined;
 var texture_sizes: [texture_ids.len]u32 = undefined;
 
-var buffers: [buffer_ids.len]*c.SDL_GPUBuffer = undefined;
+var buffers: [buffer_ids.len]?*c.SDL_GPUBuffer = @splat(null);
 var buffer_infos: [buffer_ids.len]BufferInfo = undefined;
 var buffer_sizes: [buffer_ids.len]u32 = undefined;
 
-var storage_buffers: [storage_buffer_ids.len]*c.SDL_GPUBuffer = undefined;
+var storage_buffers: [storage_buffer_ids.len]?*c.SDL_GPUBuffer = @splat(null);
 var storage_buffer_sizes: [storage_buffer_ids.len]u32 = undefined;
 
 fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
@@ -116,34 +116,16 @@ fn resolveVertexFormat(comptime T: type) c.SDL_GPUVertexElementFormat {
 }
 
 pub fn deinit() void {
-    if (update_transfer_buffer) |transfer_buffer| {
-        c.SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
-    }
-    for (depth_targets) |texture| {
-        c.SDL_ReleaseGPUTexture(device, texture);
-    }
-    for (color_targets) |texture| {
-        c.SDL_ReleaseGPUTexture(device, texture);
-    }
-    for (textures) |texture| {
-        c.SDL_ReleaseGPUTexture(device, texture);
-    }
-    for (graphics_pipelines) |pipeline| {
-        c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
-    }
-    for (compute_pipelines) |pipeline| {
-        c.SDL_ReleaseGPUComputePipeline(device, pipeline);
-    }
-    c.SDL_ReleaseGPUTexture(device, output_buffer);
-    for (samplers) |sampler| {
-        c.SDL_ReleaseGPUSampler(device, sampler);
-    }
-    for (buffers) |buffer| {
-        c.SDL_ReleaseGPUBuffer(device, buffer);
-    }
-    for (storage_buffers) |buffer| {
-        c.SDL_ReleaseGPUBuffer(device, buffer);
-    }
+    if (update_transfer_buffer) |p| c.SDL_ReleaseGPUTransferBuffer(device, p);
+    if (output_buffer) |p| c.SDL_ReleaseGPUTexture(device, p);
+    for (depth_targets) |o| if (o) |p| c.SDL_ReleaseGPUTexture(device, p);
+    for (color_targets) |o| if (o) |p| c.SDL_ReleaseGPUTexture(device, p);
+    for (textures) |o| if (o) |p| c.SDL_ReleaseGPUTexture(device, p);
+    for (samplers) |o| if (o) |p| c.SDL_ReleaseGPUSampler(device, p);
+    for (buffers) |o| if (o) |p| c.SDL_ReleaseGPUBuffer(device, p);
+    for (storage_buffers) |o| if (o) |p| c.SDL_ReleaseGPUBuffer(device, p);
+    for (graphics_pipelines) |o| if (o) |p| c.SDL_ReleaseGPUGraphicsPipeline(device, p);
+    for (compute_pipelines) |o| if (o) |p| c.SDL_ReleaseGPUComputePipeline(device, p);
 
     if (builtin.mode == .Debug) {
         _ = debug_allocator.detectLeaks();
@@ -295,7 +277,6 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                     .num_levels = info.mip_levels,
                     .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
                 }));
-            errdefer c.SDL_ReleaseGPUTexture(device, texture.*);
         }
 
         if (@hasDecl(texture_src, "init")) {
@@ -407,7 +388,6 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                     c.SDL_GPU_BUFFERUSAGE_VERTEX,
                 .size = size.*,
             }));
-            errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
         }
 
         if (@hasDecl(buffer_src, "init")) {
@@ -505,7 +485,6 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                     c.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
                 .size = size.*,
             }));
-            errdefer c.SDL_ReleaseGPUBuffer(device, buffer.*);
         }
 
         if (@hasDecl(storage_buffer_src, "init")) {
@@ -577,7 +556,10 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 }
 
 pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
-    errdefer |e| log.err("{s}", .{@errorName(e)});
+    errdefer |e| {
+        log.err("{s}", .{@errorName(e)});
+        deinit();
+    }
 
     window = win;
     device = dev;
@@ -585,29 +567,34 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     // Pass gpa to script
     script.init(gpa);
 
-    // Start copy pass
-    const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
-    errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
-    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
-
     // Initialize resources and update transfer buffer
-    var update_transfer_buffer_size: u32 = 0;
-    update_transfer_buffer_size += try initTextures(copy_pass);
-    update_transfer_buffer_size += try initBuffers(copy_pass);
-    update_transfer_buffer_size += try initStorageBuffers(copy_pass);
+    const update_transfer_buffer_size = blk: {
+        var size: u32 = 0;
+
+        // Start copy pass
+        const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
+        errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
+        const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+
+        size += try initTextures(copy_pass);
+        size += try initBuffers(copy_pass);
+        size += try initStorageBuffers(copy_pass);
+
+        // Submit copy pass
+        c.SDL_EndGPUCopyPass(copy_pass);
+        try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+
+        break :blk size;
+    };
+
     if (update_transfer_buffer_size > 0) {
         update_transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
             .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
             .size = update_transfer_buffer_size,
         }));
-        errdefer c.SDL_ReleaseGPUTransferBuffer(device, update_transfer_buffer);
     } else {
         update_transfer_buffer = null;
     }
-
-    // Submit copy pass
-    c.SDL_EndGPUCopyPass(copy_pass);
-    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
 
     for (config.samplers, &samplers) |smp, *sampler| {
         sampler.* = try sdlerr(c.SDL_CreateGPUSampler(device, &.{
@@ -625,7 +612,6 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             .enable_anisotropy = smp.enable_anisotropy,
             .enable_compare = smp.enable_compare,
         }));
-        errdefer c.SDL_ReleaseGPUSampler(device, sampler.*);
     }
 
     output_buffer =
@@ -639,7 +625,6 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
             .num_levels = 1,
             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
         }));
-    errdefer c.SDL_ReleaseGPUTexture(device, output_buffer);
 
     for (config.color_targets, &color_targets) |tex, *texture| {
         texture.* =
@@ -659,7 +644,6 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
                 .num_levels = 1,
                 .sample_count = @intFromEnum(tex.sample_count),
             }));
-        errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     for (config.depth_targets, &depth_targets) |tex, *texture| {
@@ -675,17 +659,14 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
                 .num_levels = 1,
                 .sample_count = @intFromEnum(tex.sample_count),
             }));
-        errdefer c.SDL_ReleaseGPUTexture(texture.*);
     }
 
     inline for (graphics_pipeline_set.keys, &graphics_pipelines) |key, *pipeline| {
         pipeline.* = try initGraphicsPipeline(key);
-        errdefer c.SDL_ReleaseGPUGraphicsPipeline(device, pipeline.*);
     }
 
     inline for (compute_pipeline_set.keys, &compute_pipelines) |key, *pipeline| {
         pipeline.* = try initComputePipeline(key);
-        errdefer c.SDL_ReleaseGPUComputePipeline(device, pipeline.*);
     }
 }
 
@@ -1193,114 +1174,118 @@ pub fn render() !void {
 
     // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
-    errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
 
-    // Acquire swapchain texture
-    var swapchain_width: u32 = 0;
-    var swapchain_height: u32 = 0;
-    const swapchain_texture = blk: {
-        var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+    {
+        errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
+
+        // Acquire swapchain texture
+        var swapchain_width: u32 = 0;
+        var swapchain_height: u32 = 0;
+        var swapchain_texture_opt: ?*c.SDL_GPUTexture = null;
+
         try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
             cmdbuf,
             window,
-            &swapchain_texture,
+            &swapchain_texture_opt,
             &swapchain_width,
             &swapchain_height,
         ));
-        break :blk swapchain_texture orelse {
-            try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
+
+        const swapchain_texture = swapchain_texture_opt orelse {
+            _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
             return;
         };
-    };
-    const resolution_match =
-        (swapchain_width == script.config.main.width and swapchain_height >= script.config.main.height) or
-        (swapchain_height == script.config.main.height and swapchain_width >= script.config.main.width);
 
-    // Compute viewport preserving aspect ratio rendering to swapchain
-    const swapchain_viewport = viewport(swapchain_width, swapchain_height);
+        const resolution_match =
+            (swapchain_width == script.config.main.width and swapchain_height >= script.config.main.height) or
+            (swapchain_height == script.config.main.height and swapchain_width >= script.config.main.width);
 
-    // Measure this frame's timestamp after the swapchain acquisition blocked
-    const timestamp = time.getTime() * timeline.bps;
+        // Compute viewport preserving aspect ratio rendering to swapchain
+        const swapchain_viewport = viewport(swapchain_width, swapchain_height);
 
-    // Update script frame
-    const frame_state = script.frame.update(timestamp);
+        // Measure this frame's timestamp after the swapchain acquisition blocked
+        const timestamp = time.getTime() * timeline.bps;
 
-    // Update dynamic buffers
-    if (update_transfer_buffer) |transfer_buffer| {
-        {
-            const tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
-                device,
-                transfer_buffer,
-                true,
-            )));
-            defer c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+        // Update script frame
+        const frame_state = script.frame.update(timestamp);
 
-            var offset: u32 = 0;
-            offset = try updateTextureData(tbp, offset);
-            offset = try updateBufferData(tbp, offset);
-            offset = try updateStorageBufferData(tbp, offset);
+        // Update dynamic buffers
+        if (update_transfer_buffer) |transfer_buffer| {
+            {
+                const tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+                    device,
+                    transfer_buffer,
+                    true,
+                )));
+                defer c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+                var offset: u32 = 0;
+                offset = try updateTextureData(tbp, offset);
+                offset = try updateBufferData(tbp, offset);
+                offset = try updateStorageBufferData(tbp, offset);
+            }
+
+            {
+                const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+                defer c.SDL_EndGPUCopyPass(copy_pass);
+
+                var offset: u32 = 0;
+                offset = try uploadTextures(copy_pass, offset);
+                offset = try uploadBuffers(copy_pass, offset);
+                offset = try uploadStorageBuffers(copy_pass, offset);
+            }
         }
 
-        {
-            const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
-            defer c.SDL_EndGPUCopyPass(copy_pass);
+        // Update frame uniforms
+        const frame_uniforms = frame_state.uniforms();
+        c.SDL_PushGPUVertexUniformData(
+            cmdbuf,
+            0,
+            @ptrCast(&frame_uniforms.vertex),
+            @sizeOf(@TypeOf(frame_uniforms.vertex)),
+        );
+        c.SDL_PushGPUFragmentUniformData(
+            cmdbuf,
+            0,
+            @ptrCast(&frame_uniforms.fragment),
+            @sizeOf(@TypeOf(frame_uniforms.fragment)),
+        );
+        // Reminder, per shader uniform counts are hardcoded at shader creation:
+        comptime std.debug.assert(builder.num_fragment_uniform_buffers == 2);
 
-            var offset: u32 = 0;
-            offset = try uploadTextures(copy_pass, offset);
-            offset = try uploadBuffers(copy_pass, offset);
-            offset = try uploadStorageBuffers(copy_pass, offset);
+        // Record passes (specializes the renderer for each clip configuration)
+        switch (frame_state.clip) {
+            .end => {},
+            inline else => |clip| try recordPasses(clip, .{
+                .cmdbuf = cmdbuf,
+                .swapchain_texture = swapchain_texture,
+                .swapchain_viewport = &swapchain_viewport,
+                .resolution_match = resolution_match,
+            }),
         }
-    }
 
-    // Update frame uniforms
-    const frame_uniforms = frame_state.uniforms();
-    c.SDL_PushGPUVertexUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&frame_uniforms.vertex),
-        @sizeOf(@TypeOf(frame_uniforms.vertex)),
-    );
-    c.SDL_PushGPUFragmentUniformData(
-        cmdbuf,
-        0,
-        @ptrCast(&frame_uniforms.fragment),
-        @sizeOf(@TypeOf(frame_uniforms.fragment)),
-    );
-    // Reminder, per shader uniform counts are hardcoded at shader creation:
-    comptime std.debug.assert(builder.num_fragment_uniform_buffers == 2);
-
-    // Record passes (specializes the renderer for each clip configuration)
-    switch (frame_state.clip) {
-        .end => {},
-        inline else => |clip| try recordPasses(clip, .{
-            .cmdbuf = cmdbuf,
-            .swapchain_texture = swapchain_texture,
-            .swapchain_viewport = &swapchain_viewport,
-            .resolution_match = resolution_match,
-        }),
-    }
-
-    // Blit output_buffer to swapchain when necessary
-    if (!resolution_match) {
-        c.SDL_BlitGPUTexture(cmdbuf, &.{
-            .source = .{
-                .texture = output_buffer,
-                .w = script.config.main.width,
-                .h = script.config.main.height,
-            },
-            .destination = .{
-                .texture = swapchain_texture,
-                .x = @intFromFloat(swapchain_viewport.x + 0.5),
-                .y = @intFromFloat(swapchain_viewport.y + 0.5),
-                .w = @intFromFloat(swapchain_viewport.w + 0.5),
-                .h = @intFromFloat(swapchain_viewport.h + 0.5),
-            },
-            .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
-            .flip_mode = c.SDL_FLIP_NONE,
-            .filter = c.SDL_GPU_FILTER_NEAREST,
-            .cycle = true,
-        });
+        // Blit output_buffer to swapchain when necessary
+        if (!resolution_match) {
+            c.SDL_BlitGPUTexture(cmdbuf, &.{
+                .source = .{
+                    .texture = output_buffer,
+                    .w = script.config.main.width,
+                    .h = script.config.main.height,
+                },
+                .destination = .{
+                    .texture = swapchain_texture,
+                    .x = @intFromFloat(swapchain_viewport.x + 0.5),
+                    .y = @intFromFloat(swapchain_viewport.y + 0.5),
+                    .w = @intFromFloat(swapchain_viewport.w + 0.5),
+                    .h = @intFromFloat(swapchain_viewport.h + 0.5),
+                },
+                .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+                .flip_mode = c.SDL_FLIP_NONE,
+                .filter = c.SDL_GPU_FILTER_NEAREST,
+                .cycle = true,
+            });
+        }
     }
 
     try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));

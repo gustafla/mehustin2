@@ -26,7 +26,7 @@ const InitStep = enum {
     render,
 
     const N = @typeInfo(@This()).@"enum".fields.len;
-    var buffer = [_]InitStep{undefined} ** N;
+    var buffer: [N]InitStep = undefined;
     var stack: []InitStep = buffer[N..N];
 
     fn push(sys: InitStep) void {

@@ -43,28 +43,34 @@ pub fn render() !void {
     if (!init_ok or !api.render()) {
         // Fill window red when render is not succeeding
         const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
-        errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
-        const swapchain_texture = blk: {
-            var swapchain_texture: ?*c.SDL_GPUTexture = undefined;
+
+        {
+            errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
+
+            var swapchain_texture_opt: ?*c.SDL_GPUTexture = null;
+
             try sdlerr(c.SDL_WaitAndAcquireGPUSwapchainTexture(
                 cmdbuf,
                 window,
-                &swapchain_texture,
+                &swapchain_texture_opt,
                 null,
                 null,
             ));
-            break :blk swapchain_texture orelse {
-                try sdlerr(c.SDL_CancelGPUCommandBuffer(cmdbuf));
+
+            const swapchain_texture = swapchain_texture_opt orelse {
+                _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
                 return;
             };
-        };
-        const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &.{
-            .texture = swapchain_texture,
-            .clear_color = .{ .r = 1, .g = 0, .b = 0, .a = 1 },
-            .load_op = c.SDL_GPU_LOADOP_CLEAR,
-            .store_op = c.SDL_GPU_STOREOP_STORE,
-        }, 1, null);
-        c.SDL_EndGPURenderPass(render_pass);
+
+            const render_pass = c.SDL_BeginGPURenderPass(cmdbuf, &.{
+                .texture = swapchain_texture,
+                .clear_color = .{ .r = 1, .g = 0, .b = 0, .a = 1 },
+                .load_op = c.SDL_GPU_LOADOP_CLEAR,
+                .store_op = c.SDL_GPU_STOREOP_STORE,
+            }, 1, null);
+            c.SDL_EndGPURenderPass(render_pass);
+        }
+
         try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
     }
 }
