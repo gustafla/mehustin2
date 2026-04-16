@@ -2,8 +2,8 @@
 
 ## Building
 
-Currently, the engine cannot be built from this repository, as it requires a
-"script" module which drives the demo's resources and logic.
+The engine is built together with a "script" module which drives the demo's
+resources and logic. See the [example build.zig file](example/build.zig).
 
 Build-time system dependencies:
 - Zig 0.16.0
@@ -18,7 +18,7 @@ Example projects:
   cd example
   zig build run
   ```
-- (outdated) [Abyss by Mehu](https://github.com/gustafla/abyss)
+- (unmaintained) [Abyss by Mehu](https://github.com/gustafla/abyss)
 
 ## Dynamic Reloading
 
@@ -37,7 +37,7 @@ via the script module.
 
 ## License
 
-This engine is released under the [zlib License](LICENSE).
+This engine is available under the [zlib License](LICENSE).
 
 For the third party open source component licenses,
 see [vendor/LICENSES.md](vendor/LICENSES.md).
