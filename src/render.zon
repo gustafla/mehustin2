@@ -1,0 +1,230 @@
+.{
+    .color_targets = .{
+        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
+        .{ .format = .r16g16b16a16_float }, // MSAA Resolve Texture
+        .{ .format = .r16g16b16a16_float, .q = 2 }, // Kawase Bloom Result
+        .{ .format = .r16g16b16a16_float, .q = 4 },
+        .{ .format = .r16g16b16a16_float, .q = 8 },
+        .{ .format = .r16g16b16a16_float, .q = 16 },
+        .{ .format = .r16g16b16a16_float, .q = 32 },
+        .{ .format = .r16g16b16a16_float, .q = 64 },
+    },
+    .depth_targets = .{
+        .{ .format = .d16_unorm, .sample_count = .@"4" },
+    },
+    .samplers = .{
+        .{ .name = "nearest" },
+        .{ .name = "linear", .min_filter = .linear, .mag_filter = .linear },
+    },
+    .passes = .{
+        // Main render pass
+        .{ .render = .{
+            .drawcalls = .{},
+            .color_targets = .{.{
+                .target = .{ .index = 0 },
+                .resolve_target = .{ .index = 1 },
+                .store_op = .resolve,
+            }},
+            .depth_target = .{ .target = 0, .store_op = .dont_care },
+        } },
+        // Bloom prefilter to 1/2
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "bloom_prefilter.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[1]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 2 } }},
+        } },
+        // Kawase blur down 1/4
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "dual_kawase_down.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[2]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 3 } }},
+        } },
+        // Kawase blur down 1/8
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "dual_kawase_down.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[3]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 4 } }},
+        } },
+        // Kawase blur down 1/16
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "dual_kawase_down.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[4]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 5 } }},
+        } },
+        // Kawase blur down 1/32
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "dual_kawase_down.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[5]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 6 } }},
+        } },
+        // Kawase blur down 1/64
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{ .frag = "dual_kawase_down.frag" },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[6]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 7 } }},
+        } },
+        // Kawase blur up 1/32
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{
+                            .frag = "dual_kawase_up.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                                .src_color = .one,
+                                .dst_color = .one,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[7]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 6 }, .load_op = .load }},
+        } },
+        // Kawase blur up 1/16
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{
+                            .frag = "dual_kawase_up.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                                .src_color = .one,
+                                .dst_color = .one,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[6]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 5 }, .load_op = .load }},
+        } },
+        // Kawase blur up 1/8
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{
+                            .frag = "dual_kawase_up.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                                .src_color = .one,
+                                .dst_color = .one,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[5]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 4 }, .load_op = .load }},
+        } },
+        // Kawase blur up 1/4
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{
+                            .frag = "dual_kawase_up.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                                .src_color = .one,
+                                .dst_color = .one,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[4]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 3 }, .load_op = .load }},
+        } },
+        // Kawase blur up 1/2
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{
+                        .{
+                            .frag = "dual_kawase_up.frag",
+                            .blend_states = .{.{
+                                .enable = true,
+                                .src_color = .one,
+                                .dst_color = .one,
+                            }},
+                        },
+                    },
+                    .fragment_samplers = .{.{ .texture = "color_targets[3]", .sampler = "linear" }},
+                },
+            },
+            .color_targets = .{.{ .target = .{ .index = 2 }, .load_op = .load }},
+        } },
+        // Post processing output pass
+        .{
+            .render = .{
+                .drawcalls = .{
+                    .{
+                        .pipelines = .{.{
+                            .frag = "post.frag",
+                        }},
+                        .fragment_samplers = .{
+                            .{ .texture = "color_targets[1]", .sampler = "nearest" },
+                            .{ .texture = "color_targets[2]", .sampler = "linear" },
+                            .{ .texture = "noise", .sampler = "nearest" },
+                        },
+                    },
+                    // Text in front of everything
+                    .{
+                        .pipelines = .{
+                            .{
+                                .vert = "text.vert",
+                                .frag = "text.frag",
+                                .blend_states = .{.{
+                                    .enable = true,
+                                }},
+                            },
+                        },
+                        .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
+                        .instance_buffer = "text_instances",
+                        .num_vertices = 4,
+                    },
+                },
+            },
+        },
+    },
+}
