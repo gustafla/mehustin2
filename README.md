@@ -10,7 +10,7 @@ Based on SDL3 GPU API and glslc, implemented in [Zig](https://ziglang.org).
 **Features**:
 - Render and compute pipeline abstraction
 - Timeline abstration, cameras
-  - Based on Zig's compile-time ZON file parsing (e.g. `@import("render.zon")`)
+  - Based on Zig's compile-time ZON file parsing: `@import("render.zon")`
   - Implemented entirely with `comptime` reflection and explicit inlining
 - Runtime dynamic reloading while editing
 - Shader library and `#include` support
@@ -34,7 +34,6 @@ Build-time system dependencies:
 - glslc
 - freetype2
 - libpng
-- SDL3 (optional, use `-Dsystem_sdl=false` to build a static library)
 
 Example projects:
 - The repository example:
@@ -51,8 +50,7 @@ Developed on GNU/Linux (i.e. `-Dtarget=x86_64-linux-gnu`), but can be
 built for, and run on `x86_64-windows-gnu` and `aarch64-linux-gnu` as well.
 
 Special care has been taken to support low-spec Linux devices running Wayland
-compositors, a zero-copy fullscreen output path exists when built with
-`-Dsystem_sdl=false`.
+compositors, a zero-copy path exists for fullscreen output.
 
 ## Dynamic Reloading
 

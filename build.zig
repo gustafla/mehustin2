@@ -115,8 +115,8 @@ pub const Options = struct {
             .system_sdl = b.option(
                 bool,
                 "system_sdl",
-                "Link with system SDL library",
-            ) orelse (optimize == .Debug),
+                "Link with system dynamic SDL library",
+            ) orelse false,
             .render_dynlib = b.option(
                 bool,
                 "render_dynlib",
