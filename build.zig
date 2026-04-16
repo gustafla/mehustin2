@@ -11,26 +11,23 @@ pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) voi
 
 /// Sets up glslc steps for all files in the caller project's "shaders" directory.
 pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) void {
-    const io = b.graph.io;
-    const arena = b.graph.arena;
-
     // Create glsl compiler run step for each shader
     var shader_source_dir = b.build_root.handle.openDir(
-        io,
+        b.graph.io,
         config.shader_dir,
         .{ .iterate = true },
     ) catch @panic("Can't open shader dir");
     var iter = shader_source_dir.iterate();
-    while (iter.next(io) catch @panic("Can't iterate shader dir")) |entry| {
+    while (iter.next(b.graph.io) catch @panic("Can't iterate shader dir")) |entry| {
         if (entry.kind != .file) continue;
 
         // Init input and output paths
         const input_path = std.fs.path.join(
-            arena,
+            b.allocator,
             &.{ config.shader_dir, entry.name },
         ) catch @panic("OOM");
         const output_path = std.mem.concat(
-            arena,
+            b.allocator,
             u8,
             &.{ config.data_dir, "/", entry.name, ".spv" },
         ) catch @panic("OOM");
@@ -93,8 +90,6 @@ pub const Options = struct {
     udp_client: bool,
 
     pub fn init(b: *std.Build) @This() {
-        const arena = b.graph.arena;
-
         // Use standard target options
         const target = b.standardTargetOptions(.{});
 
@@ -110,8 +105,8 @@ pub const Options = struct {
                 "exe_name",
                 "Executable file name",
             ) orelse if (!target.query.isNative()) blk: {
-                const triple = target.result.linuxTriple(arena) catch @panic("OOM");
-                break :blk std.mem.concat(arena, u8, &.{
+                const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
+                break :blk std.mem.concat(b.allocator, u8, &.{
                     "demo",
                     "-",
                     triple,
