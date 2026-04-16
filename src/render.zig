@@ -587,6 +587,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
 
     // Start copy pass
     const cmdbuf = c.SDL_AcquireGPUCommandBuffer(device);
+    errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
     const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
 
     // Initialize resources and update transfer buffer
@@ -688,8 +689,26 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     }
 }
 
-fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
-    // Populate transfer buffer with data and record upload commands
+fn updateTextureData(tbp: [*]u8, base: u32) !u32 {
+    // Populate transfer buffer with data
+    var offset = base;
+
+    inline for (
+        texture_ids,
+        texture_sizes,
+    ) |id, size| {
+        const texture_src = @field(script.texture, id.name);
+        if (!@hasDecl(texture_src, "updateData")) continue;
+
+        try texture_src.updateData(tbp[offset..][0..size]);
+        offset += size;
+    }
+
+    return offset;
+}
+
+fn uploadTextures(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
+    // Record upload commands
     var offset = base;
 
     inline for (
@@ -700,8 +719,6 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
     ) |id, texture, info, size| {
         const texture_src = @field(script.texture, id.name);
         if (!@hasDecl(texture_src, "updateData")) continue;
-
-        try texture_src.updateData(tbp[offset..][0..size]);
 
         if (size > 0) {
             c.SDL_UploadToGPUTexture(copy_pass, &.{
@@ -728,15 +745,36 @@ fn updateTextures(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
     return offset;
 }
 
-fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
-    // Populate transfer buffer with data and record upload commands
+fn updateBufferData(tbp: [*]u8, base: u32) !u32 {
+    // Populate transfer buffer with data
+    var offset = base;
+
+    inline for (buffer_ids, buffer_sizes) |id, size| {
+        const buffer_src = @field(script.buffer, id.name);
+        if (!@hasDecl(buffer_src, "updateData")) continue;
+
+        try buffer_src.updateData(@ptrCast(@alignCast(tbp[offset..][0..size])));
+
+        offset += size;
+    }
+
+    // Update buffer infos
+    inline for (buffer_ids, &buffer_infos) |id, *info| {
+        const buffer_src = @field(script.buffer, id.name);
+        if (!@hasDecl(buffer_src, "updateInfo")) continue;
+        info.* = buffer_src.updateInfo();
+    }
+
+    return offset;
+}
+
+fn uploadBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
+    // Record upload commands
     var offset = base;
 
     inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
         const buffer_src = @field(script.buffer, id.name);
         if (!@hasDecl(buffer_src, "updateData")) continue;
-
-        try buffer_src.updateData(@ptrCast(@alignCast(tbp[offset..][0..size])));
 
         if (size > 0) {
             c.SDL_UploadToGPUBuffer(copy_pass, &.{
@@ -752,18 +790,30 @@ fn updateBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
         offset += size;
     }
 
-    // Update buffer infos
-    inline for (buffer_ids, &buffer_infos) |id, *info| {
-        const buffer_src = @field(script.buffer, id.name);
-        if (!@hasDecl(buffer_src, "updateInfo")) continue;
-        info.* = buffer_src.updateInfo();
+    return offset;
+}
+
+fn updateStorageBufferData(tbp: [*]u8, base: u32) !u32 {
+    // Populate transfer buffer with data
+    var offset = base;
+
+    inline for (
+        storage_buffer_ids,
+        storage_buffer_sizes,
+    ) |id, size| {
+        const storage_buffer_src = @field(script.storage_buffer, id.name);
+        if (!@hasDecl(storage_buffer_src, "updateData")) continue;
+
+        try storage_buffer_src.updateData(tbp[offset..][0..size]);
+
+        offset += size;
     }
 
     return offset;
 }
 
-fn updateStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u32 {
-    // Populate transfer buffer with data and record upload commands
+fn uploadStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
+    // Record upload commands
     var offset = base;
 
     inline for (
@@ -773,8 +823,6 @@ fn updateStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, tbp: [*]u8, base: u32) !u
     ) |id, buffer, size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
         if (!@hasDecl(storage_buffer_src, "updateData")) continue;
-
-        try storage_buffer_src.updateData(tbp[offset..][0..size]);
 
         if (size > 0) {
             c.SDL_UploadToGPUBuffer(copy_pass, &.{
@@ -1179,20 +1227,29 @@ pub fn render() !void {
 
     // Update dynamic buffers
     if (update_transfer_buffer) |transfer_buffer| {
-        const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
-        const tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
-            device,
-            transfer_buffer,
-            true,
-        )));
+        {
+            const tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+                device,
+                transfer_buffer,
+                true,
+            )));
+            defer c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
-        var offset: u32 = 0;
-        offset = try updateTextures(copy_pass, tbp, offset);
-        offset = try updateBuffers(copy_pass, tbp, offset);
-        offset = try updateStorageBuffers(copy_pass, tbp, offset);
+            var offset: u32 = 0;
+            offset = try updateTextureData(tbp, offset);
+            offset = try updateBufferData(tbp, offset);
+            offset = try updateStorageBufferData(tbp, offset);
+        }
 
-        c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
-        c.SDL_EndGPUCopyPass(copy_pass);
+        {
+            const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf).?;
+            defer c.SDL_EndGPUCopyPass(copy_pass);
+
+            var offset: u32 = 0;
+            offset = try uploadTextures(copy_pass, offset);
+            offset = try uploadBuffers(copy_pass, offset);
+            offset = try uploadStorageBuffers(copy_pass, offset);
+        }
     }
 
     // Update frame uniforms
@@ -1250,6 +1307,10 @@ pub fn render() !void {
 }
 
 fn viewport(target_width: u32, target_height: u32) c.SDL_GPUViewport {
+    if (target_width == 0 or target_height == 0) {
+        return std.mem.zeroes(c.SDL_GPUViewport);
+    }
+
     const width_f32: f32 = @floatFromInt(target_width);
     const height_f32: f32 = @floatFromInt(target_height);
     const aspect_ratio = width_f32 / height_f32;
