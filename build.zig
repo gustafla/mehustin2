@@ -193,9 +193,11 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     ).step);
 
     // Set exe rpath
-    const exe_mod = d.module("exe");
-    const lib_path = b.getInstallPath(.lib, ".");
-    exe_mod.addRPath(.{ .cwd_relative = lib_path });
+    if (options.render_dynlib) {
+        const exe_mod = d.module("exe");
+        const lib_path = b.getInstallPath(.lib, ".");
+        exe_mod.addRPath(.{ .cwd_relative = lib_path });
+    }
 
     // Add exe to bin
     const exe = d.artifact(options.exe_name);
