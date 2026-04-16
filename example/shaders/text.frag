@@ -14,8 +14,6 @@ layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
     float u_time_r;
 };
 
-#include <noise.glsl>
-
 void main() {
     vec3 coord = vec3(in_uv, float(in_style.x));
 
