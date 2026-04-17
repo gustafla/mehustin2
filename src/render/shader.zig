@@ -3,53 +3,46 @@ const Allocator = std.mem.Allocator;
 
 const c = @import("c");
 const engine = @import("engine");
+const types = engine.types;
 const resource = engine.resource;
 const sdlerr = engine.err.sdlerr;
+const schema = engine.schema;
 
-pub const Stage = enum(c_uint) {
-    vert = c.SDL_GPU_SHADERSTAGE_VERTEX,
-    frag = c.SDL_GPU_SHADERSTAGE_FRAGMENT,
+const Error = error{SdlError} || resource.Error;
 
-    pub fn fromExtension(name: []const u8) !@This() {
-        const extension = std.fs.path.extension(name);
-        if (extension.len == 0) return error.NoStageExtension;
-        return std.meta.stringToEnum(Stage, extension[1..]) orelse error.NoStageExtension;
-    }
-};
-
-fn createShader(device: *c.SDL_GPUDevice, data: []const u8, stage: Stage, info: anytype) !*c.SDL_GPUShader {
-    var create_info = std.mem.zeroInit(c.SDL_GPUShaderCreateInfo, info);
-    create_info.code_size = data.len;
-    create_info.code = data.ptr;
-    create_info.entrypoint = "main"; // TODO: Remove this
-    create_info.format = c.SDL_GPU_SHADERFORMAT_SPIRV;
-    create_info.stage = @intFromEnum(stage);
-
-    return sdlerr(c.SDL_CreateGPUShader(device, &create_info));
-}
-
-pub fn loadSpirv(io: std.Io, gpa: Allocator, name: []const u8) ![:0]const u8 {
-    // Allocate relative path to SPIR-V file
-    const spirv_name = try std.mem.concat(gpa, u8, &.{ name, ".spv" });
-    defer gpa.free(spirv_name);
-
-    // Load SPIR-V binary
-    const path = try resource.dataFilePath(gpa, spirv_name);
-    defer gpa.free(path);
-    const data = try resource.loadFileZ(io, gpa, path);
-
-    return data;
+pub fn fileName(
+    allocator: Allocator,
+    stage: []const u8,
+    shader: schema.Render.Shader,
+) Allocator.Error![]const u8 {
+    return try std.mem.concat(
+        allocator,
+        u8,
+        &.{ stage, ".", shader.file, ".", shader.entrypoint, ".spv" },
+    );
 }
 
 pub fn loadShader(
     io: std.Io,
-    gpa: Allocator,
+    arena: Allocator,
     device: *c.SDL_GPUDevice,
-    name: []const u8,
+    stage: types.ShaderStage,
+    shader: schema.Render.Shader,
     info: anytype,
-) !*c.SDL_GPUShader {
-    const stage = try Stage.fromExtension(name);
-    const data = try loadSpirv(io, gpa, name);
-    defer gpa.free(data);
-    return createShader(device, data, stage, info);
+) Error!*c.SDL_GPUShader {
+    // Allocate SPIR-V file name
+    const spirv_name = try fileName(arena, @tagName(stage), shader);
+
+    // Load SPIR-V binary
+    const path = try resource.dataFilePath(arena, spirv_name);
+    const data = try resource.loadFileZ(io, arena, path);
+
+    var create_info = std.mem.zeroInit(c.SDL_GPUShaderCreateInfo, info);
+    create_info.code_size = data.len;
+    create_info.code = data.ptr;
+    create_info.entrypoint = shader.entrypoint.ptr;
+    create_info.format = c.SDL_GPU_SHADERFORMAT_SPIRV;
+    create_info.stage = @intFromEnum(stage);
+
+    return sdlerr(c.SDL_CreateGPUShader(device, &create_info));
 }

@@ -1,6 +1,7 @@
 # High priority
 
-- [ ] Allow custom shader entry points in render.zon schema
+- [ ] Rework shader compilation with tree shaking and entry point macros
+- [ ] Add init-time arena allocator
 - [ ] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
@@ -54,6 +55,7 @@
 
 # Done
 
+- [X] Allow custom shader entry points in render.zon schema
 - [X] Storage textures
 - [X] Compute passes
 - [X] More robust exit handling (by script not audio)
@@ -108,7 +110,7 @@
 - [ ] Marching cubes (https://gist.github.com/dwilliamson/c041e3454a713e58baf6e4f8e5fffecd)
 - [ ] Use (games-by-mason) libraries?
   - [ ] Zex
-  - [ ] shader_compiler
+  - [ ] mr_glsl
   - [ ] tracy_zig
   - [ ] Tween
   - [ ] dear_imgui_zig

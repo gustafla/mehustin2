@@ -3,6 +3,7 @@ const std = @import("std");
 const engine = @import("engine");
 const schema = engine.schema;
 const types = engine.types;
+const ShaderStage = types.ShaderStage;
 const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
 const MultisampleState = types.MultisampleState;
@@ -226,7 +227,7 @@ const CompInfo = struct {
 
 pub fn ComputePipelineKey(comptime config: schema.Render) type {
     return struct {
-        comp: []const u8,
+        comp: schema.Render.Shader,
         comp_info: CompInfo,
 
         pub const Iterator = struct {

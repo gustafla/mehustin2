@@ -138,6 +138,7 @@ pub const FrameUniforms = struct {
     fragment: FragmentUniforms,
 };
 
+pub const ShaderStage = EnumFromC("ShaderStage", .{});
 pub const PrimitiveType = EnumFromC("PrimitiveType", .{});
 pub const FillMode = EnumFromC("FillMode", .{});
 pub const CullMode = EnumFromC("CullMode", .{});

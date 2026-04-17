@@ -24,9 +24,14 @@ pub const Render = struct {
     samplers: []const Sampler,
     passes: []const Pass,
 
+    pub const Shader = struct {
+        file: []const u8 = "shaders.glsl",
+        entrypoint: []const u8 = "main",
+    };
+
     pub const GraphicsPipeline = struct {
-        vert: []const u8 = "tri.vert",
-        frag: []const u8,
+        vert: Shader,
+        frag: Shader,
         primitive_type: PrimitiveType = .trianglestrip,
         rasterizer_state: RasterizerState = .{},
         enable_alpha_to_coverage: bool = false,
@@ -96,7 +101,7 @@ pub const Render = struct {
 
     pub const ComputeDispatch = struct {
         condition: ?[]const timeline.Clip = null,
-        comp: []const u8,
+        comp: Shader,
         threadcount: ComputeDimensions,
         groupcount: ComputeDimensions,
         samplers: []const TextureSamplerBinding = &.{},

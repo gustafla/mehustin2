@@ -13,6 +13,7 @@ const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
 const schema = engine.schema;
 const sdlerr = engine.err.sdlerr;
+const resource = engine.resource;
 const options = @import("options");
 const script = @import("script");
 const config = script.config.render;
@@ -133,21 +134,26 @@ pub fn deinit() void {
 }
 
 fn initComputePipeline(comptime key: ComputePipelineKey) !*c.SDL_GPUComputePipeline {
-    const spv = try shader.loadSpirv(io, gpa, key.comp);
-    defer gpa.free(spv);
+    // Allocate SPIR-V file name
+    const spirv_name = try shader.fileName(gpa, "compute", key.comp);
+
+    // Load SPIR-V binary
+    const path = try resource.dataFilePath(gpa, spirv_name);
+    const data = try resource.loadFileZ(io, gpa, path);
+
     var create_info = std.mem.zeroInit(c.SDL_GPUComputePipelineCreateInfo, key.comp_info);
-    create_info.code_size = spv.len;
-    create_info.code = spv.ptr;
-    create_info.entrypoint = "main"; // TODO: Configure this
+    create_info.code_size = data.len;
+    create_info.code = data.ptr;
+    create_info.entrypoint = key.comp.entrypoint.ptr;
     create_info.format = c.SDL_GPU_SHADERFORMAT_SPIRV;
     return try sdlerr(c.SDL_CreateGPUComputePipeline(device, &create_info));
 }
 
 fn initGraphicsPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
-    const vert = try shader.loadShader(io, gpa, device, pipeline.vert, key.vert_info);
+    const vert = try shader.loadShader(io, gpa, device, .vertex, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(io, gpa, device, pipeline.frag, key.frag_info);
+    const frag = try shader.loadShader(io, gpa, device, .fragment, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     var color_target_descs: [GraphicsPipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
@@ -170,7 +176,7 @@ fn initGraphicsPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPi
     var num_buffers: u32 = 0;
     var num_attribs: u32 = 0;
 
-    log.debug("Initializing vert: {s}, frag: {s}", .{
+    log.debug("Initializing vert: {any}, frag: {any}", .{
         pipeline.vert,
         pipeline.frag,
     });

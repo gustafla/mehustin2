@@ -14,8 +14,8 @@
             .drawcalls = .{
                 .{
                     .pipelines = .{.{
-                        .vert = "3d.vert",
-                        .frag = "3d.frag",
+                        .vert = .{ .entrypoint = "vertex" },
+                        .frag = .{ .entrypoint = "fragment" },
                         .primitive_type = .trianglelist,
                     }},
                     .vertex_buffer = "cube",
@@ -23,8 +23,8 @@
                 .{
                     .pipelines = .{
                         .{
-                            .vert = "text.vert",
-                            .frag = "text.frag",
+                            .vert = .{ .file = "text.glsl", .entrypoint = "vertex" },
+                            .frag = .{ .file = "text.glsl", .entrypoint = "fragment" },
                             .blend_states = .{.{
                                 .enable = true,
                             }},
