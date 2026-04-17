@@ -126,6 +126,8 @@ fn initComputePipeline(
     arena: Allocator,
     comptime key: ComputePipelineKey,
 ) !*c.SDL_GPUComputePipeline {
+    log.debug("Initializing comp: {s}.{s}", .{ key.comp.file, key.comp.entrypoint });
+
     // Allocate SPIR-V file name
     const spirv_name = try shader.fileName(arena, "compute", key.comp);
 
@@ -147,6 +149,11 @@ fn initGraphicsPipeline(
     comptime key: GraphicsPipelineKey,
 ) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
+    log.debug("Initializing vert: {s}.{s}, frag: {s}.{s}", .{
+        pipeline.vert.file, pipeline.vert.entrypoint,
+        pipeline.frag.file, pipeline.frag.entrypoint,
+    });
+
     const vert = try shader.loadShader(io, arena, device, .vertex, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
     const frag = try shader.loadShader(io, arena, device, .fragment, pipeline.frag, key.frag_info);
@@ -171,11 +178,6 @@ fn initGraphicsPipeline(
     var attribs: [max_attributes * 2]c.SDL_GPUVertexAttribute = undefined;
     var num_buffers: u32 = 0;
     var num_attribs: u32 = 0;
-
-    log.debug("Initializing vert: {any}, frag: {any}", .{
-        pipeline.vert,
-        pipeline.frag,
-    });
 
     inline for (.{
         .{ .layout = key.vertex_layout, .input_rate = c.SDL_GPU_VERTEXINPUTRATE_VERTEX },
