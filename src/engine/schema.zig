@@ -30,9 +30,9 @@ pub const Render = struct {
     };
 
     pub const GraphicsPipeline = struct {
-        vert: Shader,
-        frag: Shader,
-        primitive_type: PrimitiveType = .trianglestrip,
+        vert: Shader = .{},
+        frag: Shader = .{},
+        primitive_type: PrimitiveType = .trianglelist,
         rasterizer_state: RasterizerState = .{},
         enable_alpha_to_coverage: bool = false,
         depth_test: ?struct { // TODO: Consider implementing full DepthStencilState
@@ -101,7 +101,7 @@ pub const Render = struct {
 
     pub const ComputeDispatch = struct {
         condition: ?[]const timeline.Clip = null,
-        comp: Shader,
+        comp: Shader = .{},
         threadcount: ComputeDimensions,
         groupcount: ComputeDimensions,
         samplers: []const TextureSamplerBinding = &.{},

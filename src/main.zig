@@ -35,6 +35,10 @@ const InitStep = enum {
     }
 };
 
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+const gpa = if (builtin.mode == .Debug) debug_allocator.allocator() else std.heap.c_allocator;
+var arena: std.heap.ArenaAllocator = .init(gpa);
+
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var step_frame: bool = false;
@@ -159,7 +163,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     }
 
     // Init render
-    try render.init(@ptrCast(window), @ptrCast(device));
+    try render.init(&arena.allocator(), @ptrCast(window), @ptrCast(device));
     InitStep.push(.render);
 
     // Go fullscreen if release build
@@ -226,7 +230,8 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
 
                     // Reload (the dynlib.zig handles loading transparently)
                     render.deinit();
-                    try render.init(@ptrCast(window), @ptrCast(device));
+                    _ = arena.reset(.retain_capacity);
+                    try render.init(&arena.allocator(), @ptrCast(window), @ptrCast(device));
 
                     // Restore state
                     render.seek(time);
@@ -267,6 +272,11 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     }
 
     c.SDL_Quit();
+
+    arena.deinit();
+    if (builtin.mode == .Debug) {
+        _ = debug_allocator.deinit();
+    }
 }
 
 pub fn main() !u8 {

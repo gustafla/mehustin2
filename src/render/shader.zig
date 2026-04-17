@@ -18,7 +18,7 @@ pub fn fileName(
     return try std.mem.concat(
         allocator,
         u8,
-        &.{ stage, ".", shader.file, ".", shader.entrypoint, ".spv" },
+        &.{ shader.file, ".", stage, ".", shader.entrypoint, ".spv" },
     );
 }
 

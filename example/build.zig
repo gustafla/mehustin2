@@ -15,7 +15,12 @@ pub fn build(b: *std.Build) void {
     engine.importScript(engine_dep, script_mod);
 
     // Compile and install shaders
-    engine.compileShaders(b, engine_dep, @import("src/config.zon"));
+    engine.compileShaders(
+        b,
+        engine_dep,
+        @import("src/render.zon"),
+        @import("src/config.zon"),
+    );
 
     // Install the build artifacts
     engine.install(b, engine_dep, options);

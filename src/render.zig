@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 
@@ -44,15 +45,6 @@ const max_attributes = blk: {
     }
     break :blk max;
 };
-
-var threaded_io: std.Io.Threaded = .init_single_threaded;
-const io: std.Io = threaded_io.io();
-
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-const gpa: Allocator = if (builtin.mode == .Debug)
-    debug_allocator.allocator()
-else
-    std.heap.c_allocator;
 
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
@@ -127,19 +119,19 @@ pub fn deinit() void {
     for (storage_buffers) |o| if (o) |p| c.SDL_ReleaseGPUBuffer(device, p);
     for (graphics_pipelines) |o| if (o) |p| c.SDL_ReleaseGPUGraphicsPipeline(device, p);
     for (compute_pipelines) |o| if (o) |p| c.SDL_ReleaseGPUComputePipeline(device, p);
-
-    if (builtin.mode == .Debug) {
-        _ = debug_allocator.detectLeaks();
-    }
 }
 
-fn initComputePipeline(comptime key: ComputePipelineKey) !*c.SDL_GPUComputePipeline {
+fn initComputePipeline(
+    io: Io,
+    arena: Allocator,
+    comptime key: ComputePipelineKey,
+) !*c.SDL_GPUComputePipeline {
     // Allocate SPIR-V file name
-    const spirv_name = try shader.fileName(gpa, "compute", key.comp);
+    const spirv_name = try shader.fileName(arena, "compute", key.comp);
 
     // Load SPIR-V binary
-    const path = try resource.dataFilePath(gpa, spirv_name);
-    const data = try resource.loadFileZ(io, gpa, path);
+    const path = try resource.dataFilePath(arena, spirv_name);
+    const data = try resource.loadFileZ(io, arena, path);
 
     var create_info = std.mem.zeroInit(c.SDL_GPUComputePipelineCreateInfo, key.comp_info);
     create_info.code_size = data.len;
@@ -149,11 +141,15 @@ fn initComputePipeline(comptime key: ComputePipelineKey) !*c.SDL_GPUComputePipel
     return try sdlerr(c.SDL_CreateGPUComputePipeline(device, &create_info));
 }
 
-fn initGraphicsPipeline(comptime key: GraphicsPipelineKey) !*c.SDL_GPUGraphicsPipeline {
+fn initGraphicsPipeline(
+    io: Io,
+    arena: Allocator,
+    comptime key: GraphicsPipelineKey,
+) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
-    const vert = try shader.loadShader(io, gpa, device, .vertex, pipeline.vert, key.vert_info);
+    const vert = try shader.loadShader(io, arena, device, .vertex, pipeline.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(io, gpa, device, .fragment, pipeline.frag, key.frag_info);
+    const frag = try shader.loadShader(io, arena, device, .fragment, pipeline.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     var color_target_descs: [GraphicsPipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
@@ -561,7 +557,11 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     return update_transfer_buffer_size;
 }
 
-pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
+pub fn init(
+    arena_ptr: *const Allocator,
+    win: *c.SDL_Window,
+    dev: *c.SDL_GPUDevice,
+) !void {
     errdefer |e| {
         log.err("{s}", .{@errorName(e)});
         deinit();
@@ -570,8 +570,13 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     window = win;
     device = dev;
 
-    // Pass gpa to script
-    script.init(gpa);
+    // Init io
+    var threaded_io: Io.Threaded = .init_single_threaded;
+    const io = threaded_io.io();
+
+    // Pass arena to script
+    const arena = arena_ptr.*;
+    script.init(arena);
 
     // Initialize resources and update transfer buffer
     const update_transfer_buffer_size = blk: {
@@ -668,11 +673,11 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
     }
 
     inline for (graphics_pipeline_set.keys, &graphics_pipelines) |key, *pipeline| {
-        pipeline.* = try initGraphicsPipeline(key);
+        pipeline.* = try initGraphicsPipeline(io, arena, key);
     }
 
     inline for (compute_pipeline_set.keys, &compute_pipelines) |key, *pipeline| {
-        pipeline.* = try initComputePipeline(key);
+        pipeline.* = try initComputePipeline(io, arena, key);
     }
 }
 
@@ -1329,8 +1334,12 @@ fn deinitC() callconv(.c) void {
     deinit();
 }
 
-fn initC(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) callconv(.c) bool {
-    init(win, dev) catch return false;
+fn initC(
+    arena: *const Allocator,
+    win: *c.SDL_Window,
+    dev: *c.SDL_GPUDevice,
+) callconv(.c) bool {
+    init(arena, win, dev) catch return false;
     return true;
 }
 

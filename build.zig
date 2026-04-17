@@ -20,71 +20,132 @@ pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) voi
     addScript(engine_mod, render_mod, exe_mod, script_mod);
 }
 
-/// Sets up glslc steps for all files in the caller project's "shaders" directory.
-pub fn compileShaders(b: *std.Build, d: *std.Build.Dependency, config: anytype) void {
-    // Create glsl compiler run step for each shader
-    var shader_source_dir = b.build_root.handle.openDir(
-        b.graph.io,
-        config.shader_dir,
-        .{ .iterate = true },
-    ) catch @panic("Can't open shader dir");
-    var iter = shader_source_dir.iterate();
-    while (iter.next(b.graph.io) catch @panic("Can't iterate shader dir")) |entry| {
-        if (entry.kind != .file) continue;
+const ShaderStage = enum { vertex, fragment, compute };
 
-        // Init input and output paths
-        const input_path = std.fs.path.join(
-            b.allocator,
-            &.{ config.shader_dir, entry.name },
-        ) catch @panic("OOM");
-        const output_path = std.mem.concat(
-            b.allocator,
-            u8,
-            &.{ config.data_dir, "/", entry.name, ".spv" },
-        ) catch @panic("OOM");
+const Shader = struct {
+    file: []const u8,
+    entrypoint: []const u8,
+    stage: ShaderStage,
+};
 
-        // Create run step
-        const shaderc_run = b.addSystemCommand(&.{
-            "glslc",
-            "-O",
-            "-MD",
-            "-MF",
-        });
+fn compileShader(
+    b: *std.Build,
+    d: *std.Build.Dependency,
+    comptime shader: Shader,
+    comptime config: anytype,
+) void {
+    const input_path = std.fmt.comptimePrint("{s}/{s}", .{ config.shader_dir, shader.file });
+    const output_path = std.fmt.comptimePrint(
+        "{s}/{s}.{s}.{s}.spv",
+        .{ config.data_dir, shader.file, @tagName(shader.stage), shader.entrypoint },
+    );
 
-        _ = shaderc_run.addDepFileOutputArg("shader.d");
-        shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir).path(b, "lib"));
-        shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
+    // Create run step
+    const shaderc_run = b.addSystemCommand(&.{
+        "glslc",
+        "-O",
+        "-MD",
+        "-MF",
+    });
 
-        // Add args from conf
-        inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
-            const upper = comptime toUpper(field.name);
-            switch (@typeInfo(field.type)) {
-                .comptime_float, .comptime_int, .float, .int => {
-                    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={}", .{
+    _ = shaderc_run.addDepFileOutputArg("shader.d");
+    shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
+    shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
+
+    // Set the stage
+    shaderc_run.addArg(std.fmt.comptimePrint("-fshader-stage={s}", .{@tagName(shader.stage)}));
+
+    // Enable the stage and entry point macros
+    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}", .{comptime toUpper(@tagName(shader.stage))}));
+    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}", .{comptime toUpper(shader.entrypoint)}));
+
+    // Add args from conf
+    inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
+        const upper = comptime toUpper(field.name);
+        switch (@typeInfo(field.type)) {
+            .comptime_float, .comptime_int, .float, .int => {
+                shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={}", .{
+                    &upper, @field(config, field.name),
+                }));
+            },
+            .pointer => |ptr| {
+                if (ptr.size == .slice and ptr.child == u8) {
+                    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={s}", .{
                         &upper, @field(config, field.name),
                     }));
-                },
-                .pointer => |ptr| {
-                    if (ptr.size == .slice and ptr.child == u8) {
-                        shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={s}", .{
-                            &upper, @field(config, field.name),
-                        }));
-                    }
-                },
-                else => {},
-            }
+                }
+            },
+            else => {},
         }
+    }
 
-        const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
-        shaderc_run.addFileArg(b.path(input_path));
+    const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
+    shaderc_run.addFileArg(b.path(input_path));
 
-        // Create install step
-        const shader_install = b.addInstallBinFile(
-            shaderc_output,
-            output_path,
-        );
-        shader_install.step.dependOn(&shaderc_run.step);
-        b.getInstallStep().dependOn(&shader_install.step);
+    // Create install step
+    const shader_install = b.addInstallBinFile(
+        shaderc_output,
+        output_path,
+    );
+    shader_install.step.dependOn(&shaderc_run.step);
+    b.getInstallStep().dependOn(&shader_install.step);
+}
+
+fn getFileAndEntrypoint(
+    comptime container: anytype,
+    comptime field: []const u8,
+) struct { []const u8, []const u8 } {
+    const default_file = "shaders.glsl";
+    const default_entrypoint = "main";
+
+    const Container = @TypeOf(container);
+
+    return if (@hasField(Container, field)) blk: {
+        const def = @field(container, field);
+        const T = @TypeOf(def);
+        break :blk .{
+            if (@hasField(T, "file")) def.file else default_file,
+            if (@hasField(T, "entrypoint")) def.entrypoint else default_entrypoint,
+        };
+    } else .{ default_file, default_entrypoint };
+}
+
+/// Sets up glslc steps for all shader combinations in the caller project's render.zon
+pub fn compileShaders(
+    b: *std.Build,
+    d: *std.Build.Dependency,
+    comptime render: anytype,
+    comptime config: anytype,
+) void {
+    // Unroll the render.zon tree.
+    // TODO: Do this with runtime zon parsing to avoid build.zig rebuilds.
+    inline for (render.passes) |pass| {
+        const Pass = @TypeOf(pass);
+        if (@hasField(Pass, "render")) {
+            inline for (pass.render.drawcalls) |draw| {
+                inline for (draw.pipelines) |pipe| {
+                    inline for (.{ "vert", "frag" }, .{ .vertex, .fragment }) |field, stage| {
+                        const file, const entrypoint = comptime getFileAndEntrypoint(pipe, field);
+                        const shader: Shader = .{
+                            .file = file,
+                            .entrypoint = entrypoint,
+                            .stage = stage,
+                        };
+                        compileShader(b, d, shader, config);
+                    }
+                }
+            }
+        } else if (@hasField(Pass, "compute")) {
+            inline for (pass.compute.dispatches) |disp| {
+                const file, const entrypoint = comptime getFileAndEntrypoint(disp, "comp");
+                const shader: Shader = .{
+                    .file = file,
+                    .entrypoint = entrypoint,
+                    .stage = .compute,
+                };
+                compileShader(b, d, shader, config);
+            }
+        } else unreachable;
     }
 }
 

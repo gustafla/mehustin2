@@ -10,37 +10,36 @@
     },
     .passes = .{
         // Main render pass
-        .{ .render = .{
-            .drawcalls = .{
-                .{
-                    .pipelines = .{.{
-                        .vert = .{ .entrypoint = "vertex" },
-                        .frag = .{ .entrypoint = "fragment" },
-                        .primitive_type = .trianglelist,
-                    }},
-                    .vertex_buffer = "cube",
-                },
-                .{
-                    .pipelines = .{
-                        .{
-                            .vert = .{ .file = "text.glsl", .entrypoint = "vertex" },
-                            .frag = .{ .file = "text.glsl", .entrypoint = "fragment" },
-                            .blend_states = .{.{
-                                .enable = true,
-                            }},
-                        },
+        .{
+            .render = .{
+                .drawcalls = .{
+                    .{
+                        .pipelines = .{.{}}, // Defaults
+                        .vertex_buffer = "cube",
                     },
-                    .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
-                    .instance_buffer = "text_instances",
-                    .num_vertices = 4,
+                    .{
+                        .pipelines = .{
+                            .{
+                                .vert = .{ .file = "text.glsl" },
+                                .frag = .{ .file = "text.glsl" },
+                                .primitive_type = .trianglestrip,
+                                .blend_states = .{.{
+                                    .enable = true,
+                                }},
+                            },
+                        },
+                        .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
+                        .instance_buffer = "text_instances",
+                        .num_vertices = 4,
+                    },
                 },
+                .color_targets = .{.{
+                    .target = .{ .index = 0 },
+                    .resolve_target = .swapchain,
+                    .store_op = .resolve,
+                }},
+                .depth_target = .{ .target = 0, .store_op = .dont_care },
             },
-            .color_targets = .{.{
-                .target = .{ .index = 0 },
-                .resolve_target = .swapchain,
-                .store_op = .resolve,
-            }},
-            .depth_target = .{ .target = 0, .store_op = .dont_care },
-        } },
+        },
     },
 }

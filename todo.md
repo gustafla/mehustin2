@@ -1,7 +1,5 @@
 # High priority
 
-- [ ] Rework shader compilation with tree shaking and entry point macros
-- [ ] Add init-time arena allocator
 - [ ] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
@@ -55,6 +53,8 @@
 
 # Done
 
+- [X] Rework shader compilation with tree shaking and entry point macros
+- [X] Add init-time arena allocator
 - [X] Allow custom shader entry points in render.zon schema
 - [X] Storage textures
 - [X] Compute passes

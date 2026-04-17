@@ -1,5 +1,6 @@
 //! Loading, unloading and calling into librender.so
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const c = @import("c");
 const engine = @import("engine");
@@ -13,7 +14,11 @@ var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 var api: struct {
     deinit: *const fn () callconv(.c) void,
-    init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) bool,
+    init: *const fn (
+        *const Allocator,
+        *c.SDL_Window,
+        *c.SDL_GPUDevice,
+    ) callconv(.c) bool,
     render: *const fn () callconv(.c) bool,
     pause: *const fn (bool) callconv(.c) void,
     isPaused: *const fn () callconv(.c) bool,
@@ -28,7 +33,11 @@ pub fn deinit() void {
     init_ok = false;
 }
 
-pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
+pub fn init(
+    arena: *const Allocator,
+    win: *c.SDL_Window,
+    dev: *c.SDL_GPUDevice,
+) !void {
     window = win;
     device = dev;
     load() catch |e| {
@@ -36,7 +45,7 @@ pub fn init(win: *c.SDL_Window, dev: *c.SDL_GPUDevice) !void {
         log.err("{}", .{e});
         return;
     };
-    init_ok = api.init(win, dev);
+    init_ok = api.init(arena, win, dev);
 }
 
 pub fn render() !void {
