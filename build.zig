@@ -20,25 +20,35 @@ pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) voi
     addScript(engine_mod, render_mod, exe_mod, script_mod);
 }
 
-const ShaderStage = enum { vertex, fragment, compute };
-
 const Shader = struct {
-    file: []const u8,
-    entrypoint: []const u8,
-    stage: ShaderStage,
+    file: []const u8 = "shaders.glsl",
+    entrypoint: []const u8 = "main",
+
+    const Stage = enum {
+        vertex,
+        fragment,
+        compute,
+    };
 };
 
 fn compileShader(
+    arena: std.mem.Allocator,
     b: *std.Build,
     d: *std.Build.Dependency,
-    comptime shader: Shader,
+    shader: Shader,
+    comptime stage: Shader.Stage,
     comptime config: anytype,
 ) void {
-    const input_path = std.fmt.comptimePrint("{s}/{s}", .{ config.shader_dir, shader.file });
-    const output_path = std.fmt.comptimePrint(
-        "{s}/{s}.{s}.{s}.spv",
-        .{ config.data_dir, shader.file, @tagName(shader.stage), shader.entrypoint },
-    );
+    const allocPrint = std.fmt.allocPrint;
+
+    var buffer: [1024]u8 = undefined;
+
+    const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
+    const output_path = allocPrint(arena, "{s}.{s}.{s}.spv", .{
+        b.pathJoin(&.{ config.data_dir, shader.file }),
+        @tagName(stage),
+        shader.entrypoint,
+    }) catch @panic("OOM");
 
     // Create run step
     const shaderc_run = b.addSystemCommand(&.{
@@ -53,27 +63,26 @@ fn compileShader(
     shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
 
     // Set the stage
-    shaderc_run.addArg(std.fmt.comptimePrint("-fshader-stage={s}", .{@tagName(shader.stage)}));
+    shaderc_run.addArg(allocPrint(arena, "-fshader-stage={s}", .{
+        @tagName(stage),
+    }) catch @panic("OOM"));
 
     // Enable the stage and entry point macros
-    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}", .{comptime toUpper(@tagName(shader.stage))}));
-    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}", .{comptime toUpper(shader.entrypoint)}));
+    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{
+        toUpper(&buffer, @tagName(stage)),
+    }) catch @panic("OOM"));
+    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{
+        toUpper(&buffer, shader.entrypoint),
+    }) catch @panic("OOM"));
 
     // Add args from conf
     inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
-        const upper = comptime toUpper(field.name);
+        const upper = toUpper(&buffer, field.name);
         switch (@typeInfo(field.type)) {
             .comptime_float, .comptime_int, .float, .int => {
-                shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={}", .{
-                    &upper, @field(config, field.name),
-                }));
-            },
-            .pointer => |ptr| {
-                if (ptr.size == .slice and ptr.child == u8) {
-                    shaderc_run.addArg(std.fmt.comptimePrint("-D{s}={s}", .{
-                        &upper, @field(config, field.name),
-                    }));
-                }
+                shaderc_run.addArg(allocPrint(arena, "-D{s}={}", .{
+                    upper, @field(config, field.name),
+                }) catch @panic("OOM"));
             },
             else => {},
         }
@@ -91,61 +100,54 @@ fn compileShader(
     b.getInstallStep().dependOn(&shader_install.step);
 }
 
-fn getFileAndEntrypoint(
-    comptime container: anytype,
-    comptime field: []const u8,
-) struct { []const u8, []const u8 } {
-    const default_file = "shaders.glsl";
-    const default_entrypoint = "main";
-
-    const Container = @TypeOf(container);
-
-    return if (@hasField(Container, field)) blk: {
-        const def = @field(container, field);
-        const T = @TypeOf(def);
-        break :blk .{
-            if (@hasField(T, "file")) def.file else default_file,
-            if (@hasField(T, "entrypoint")) def.entrypoint else default_entrypoint,
-        };
-    } else .{ default_file, default_entrypoint };
-}
-
 /// Sets up glslc steps for all shader combinations in the caller project's render.zon
 pub fn compileShaders(
     b: *std.Build,
     d: *std.Build.Dependency,
-    comptime render: anytype,
     comptime config: anytype,
 ) void {
-    // Unroll the render.zon tree.
-    // TODO: Do this with runtime zon parsing to avoid build.zig rebuilds.
-    inline for (render.passes) |pass| {
-        const Pass = @TypeOf(pass);
-        if (@hasField(Pass, "render")) {
-            inline for (pass.render.drawcalls) |draw| {
-                inline for (draw.pipelines) |pipe| {
-                    inline for (.{ "vert", "frag" }, .{ .vertex, .fragment }) |field, stage| {
-                        const file, const entrypoint = comptime getFileAndEntrypoint(pipe, field);
-                        const shader: Shader = .{
-                            .file = file,
-                            .entrypoint = entrypoint,
-                            .stage = stage,
-                        };
-                        compileShader(b, d, shader, config);
-                    }
+    // Load and parse render.zon at runtime
+    var buffer: [1024]u8 = undefined;
+    const file = b.build_root.handle.openFile(
+        b.graph.io,
+        "src/render.zon",
+        .{},
+    ) catch @panic("Can't open src/render.zon");
+    defer file.close(b.graph.io);
+    var reader = file.reader(b.graph.io, &buffer);
+    const data = reader.interface.allocRemainingAlignedSentinel(
+        b.allocator,
+        .unlimited,
+        .of(u8),
+        0,
+    ) catch @panic("OOM");
+    const render = std.zon.parse.fromSliceAlloc(struct { passes: []const union(enum) {
+        render: struct { drawcalls: []const struct {
+            pipelines: []const struct {
+                vert: Shader = .{},
+                frag: Shader = .{},
+            },
+        } },
+        compute: struct { dispatches: []const struct {
+            comp: Shader = .{},
+        } },
+    } }, b.allocator, data, null, .{
+        .ignore_unknown_fields = true,
+    }) catch @panic("Failed to parse src/render.zon");
+
+    // Traverse the render.zon tree
+    for (render.passes) |pass| {
+        switch (pass) {
+            .render => |rpass| for (rpass.drawcalls) |draw| {
+                for (draw.pipelines) |pipe| {
+                    compileShader(b.allocator, b, d, pipe.vert, .vertex, config);
+                    compileShader(b.allocator, b, d, pipe.frag, .fragment, config);
                 }
-            }
-        } else if (@hasField(Pass, "compute")) {
-            inline for (pass.compute.dispatches) |disp| {
-                const file, const entrypoint = comptime getFileAndEntrypoint(disp, "comp");
-                const shader: Shader = .{
-                    .file = file,
-                    .entrypoint = entrypoint,
-                    .stage = .compute,
-                };
-                compileShader(b, d, shader, config);
-            }
-        } else unreachable;
+            },
+            .compute => |cpass| for (cpass.dispatches) |disp| {
+                compileShader(b.allocator, b, d, disp.comp, .compute, config);
+            },
+        }
     }
 }
 
@@ -430,10 +432,9 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(msdf_atlas_gen);
 }
 
-fn toUpper(comptime str: []const u8) [str.len]u8 {
-    var buf: [str.len]u8 = undefined;
-    for (&buf, str) |*u, c| {
+fn toUpper(buffer: []u8, str: []const u8) []const u8 {
+    for (buffer[0..str.len], str) |*u, c| {
         u.* = std.ascii.toUpper(c);
     }
-    return buf;
+    return buffer[0..str.len];
 }

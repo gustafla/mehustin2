@@ -18,7 +18,6 @@ pub fn build(b: *std.Build) void {
     engine.compileShaders(
         b,
         engine_dep,
-        @import("src/render.zon"),
         @import("src/config.zon"),
     );
 
