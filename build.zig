@@ -39,16 +39,12 @@ fn compileShader(
     comptime stage: Shader.Stage,
     comptime config: anytype,
 ) void {
-    const allocPrint = std.fmt.allocPrint;
-
-    var buffer: [1024]u8 = undefined;
-
     const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
     const output_path = allocPrint(arena, "{s}.{s}.{s}.spv", .{
         b.pathJoin(&.{ config.data_dir, shader.file }),
         @tagName(stage),
         shader.entrypoint,
-    }) catch @panic("OOM");
+    });
 
     // Create run step
     const shaderc_run = b.addSystemCommand(&.{
@@ -65,24 +61,23 @@ fn compileShader(
     // Set the stage
     shaderc_run.addArg(allocPrint(arena, "-fshader-stage={s}", .{
         @tagName(stage),
-    }) catch @panic("OOM"));
+    }));
 
     // Enable the stage and entry point macros
-    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{
-        toUpper(&buffer, @tagName(stage)),
-    }) catch @panic("OOM"));
-    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{
-        toUpper(&buffer, shader.entrypoint),
-    }) catch @panic("OOM"));
+    const STAGE = toUpper(arena, @tagName(stage));
+    const ENTRYPOINT = toUpper(arena, shader.entrypoint);
+    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{STAGE}));
+    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{ENTRYPOINT}));
+    shaderc_run.addArg(allocPrint(arena, "-D{s}_{s}", .{ ENTRYPOINT, STAGE }));
 
     // Add args from conf
     inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
-        const upper = toUpper(&buffer, field.name);
+        const upper = toUpper(arena, field.name);
         switch (@typeInfo(field.type)) {
             .comptime_float, .comptime_int, .float, .int => {
                 shaderc_run.addArg(allocPrint(arena, "-D{s}={}", .{
                     upper, @field(config, field.name),
-                }) catch @panic("OOM"));
+                }));
             },
             else => {},
         }
@@ -432,9 +427,18 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(msdf_atlas_gen);
 }
 
-fn toUpper(buffer: []u8, str: []const u8) []const u8 {
-    for (buffer[0..str.len], str) |*u, c| {
-        u.* = std.ascii.toUpper(c);
+fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
+    var buffer = arena.alloc(u8, str.len) catch @panic("OOM");
+    for (str, 0..) |c, i| {
+        buffer[i] = std.ascii.toUpper(c);
     }
-    return buffer[0..str.len];
+    return buffer;
+}
+
+fn allocPrint(
+    allocator: std.mem.Allocator,
+    comptime fmt: []const u8,
+    args: anytype,
+) []const u8 {
+    return std.fmt.allocPrint(allocator, fmt, args) catch @panic("OOM");
 }
