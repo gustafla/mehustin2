@@ -1,12 +1,10 @@
 # High priority
 
-- [ ] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [ ] Call msdf-atlas-gen at build-time
   - [ ] Parse msdf-atlas-gen JSON at comptime
   - [ ] Implement MSDF rendering
-- [ ] Replace BufferInfo return value with an optional pointer argument to it
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
@@ -53,6 +51,8 @@
 
 # Done
 
+- [X] Replace BufferInfo return value with an optional pointer argument to it
+- [X] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
 - [X] Determine granular texture usage flags at compile time from render.zon
 - [X] Rework shader compilation with tree shaking and entry point macros
 - [X] Add init-time arena allocator

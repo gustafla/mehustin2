@@ -96,16 +96,10 @@ pub const buffer = struct {
             0,  -1, 0,  0,  -1, 0,  0,  -1, 0,
         };
 
-        pub fn create() !u32 {
-            return position.len / 3;
-        }
+        pub const num_elements = position.len / 3;
 
-        pub fn init(dst: []Layout) !BufferInfo {
+        pub fn init(dst: []Layout, _: *BufferInfo) !void {
             util.interleave(Layout, dst, .{ &position, &normal });
-
-            return .{
-                .num_elements = @intCast(dst.len),
-            };
         }
     };
 };

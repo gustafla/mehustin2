@@ -511,7 +511,7 @@ pub const text_instances = struct {
         }
     }
 
-    pub fn updateInfo() BufferInfo {
-        return .{ .num_elements = num_elements };
+    pub fn updateInfo(info: *BufferInfo) void {
+        info.num_elements = num_elements;
     }
 };

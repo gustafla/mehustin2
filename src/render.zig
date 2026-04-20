@@ -13,6 +13,7 @@ const TextureType = types.TextureType;
 const TextureFormat = types.TextureFormat;
 const VertexFormat = types.VertexFormat;
 const schema = engine.schema;
+const util = engine.util;
 const sdlerr = engine.err.sdlerr;
 const resource = engine.resource;
 const options = @import("options");
@@ -258,7 +259,10 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         &texture_sizes,
     ) |id, usage, *texture, *info, *size| {
         const texture_src = @field(script.texture, id.name);
-        info.* = try texture_src.create();
+        info.* = if (@hasDecl(texture_src, "info"))
+            texture_src.info
+        else
+            try texture_src.create();
         size.* = c.SDL_CalculateGPUTextureFormatSize(
             @intFromEnum(info.format),
             info.width,
@@ -363,7 +367,12 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     var init_transfer_buffer_size: u32 = 0;
     var update_transfer_buffer_size: u32 = 0;
 
-    inline for (buffer_ids, &buffers, &buffer_sizes) |id, *buffer, *size| {
+    inline for (
+        buffer_ids,
+        &buffers,
+        &buffer_infos,
+        &buffer_sizes,
+    ) |id, *buffer, *info, *size| {
         const buffer_src = @field(script.buffer, id.name);
         const layout_size = @sizeOf(buffer_src.Layout);
 
@@ -373,7 +382,13 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             continue;
         }
 
-        const num_elements = try buffer_src.create();
+        const num_elements = if (@hasDecl(buffer_src, "data"))
+            buffer_src.data.len
+        else if (@hasDecl(buffer_src, "num_elements"))
+            buffer_src.num_elements
+        else
+            try buffer_src.create();
+        info.* = .{ .num_elements = num_elements };
         size.* = num_elements * layout_size;
 
         // Guard against zero elements returned
@@ -394,7 +409,7 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             }));
         }
 
-        if (@hasDecl(buffer_src, "init")) {
+        if (@hasDecl(buffer_src, "data") or @hasDecl(buffer_src, "init")) {
             init_transfer_buffer_size += size.*;
         }
 
@@ -425,8 +440,13 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
     inline for (buffer_ids, &buffer_infos, buffer_sizes) |id, *info, size| {
         const buffer_src = @field(script.buffer, id.name);
-        if (!@hasDecl(buffer_src, "init")) continue;
-        info.* = try buffer_src.init(@ptrCast(@alignCast(tbp[0..size])));
+        if (@hasDecl(buffer_src, "data")) {
+            const Child = @typeInfo(@TypeOf(buffer_src.data)).pointer.child;
+            const dest: []Child = @ptrCast(@alignCast(tbp[0..size]));
+            @memcpy(dest, buffer_src.data);
+        } else if (@hasDecl(buffer_src, "init")) {
+            try buffer_src.init(@ptrCast(@alignCast(tbp[0..size])), info);
+        } else continue;
         tbp += size;
     }
 
@@ -436,7 +456,9 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     var offset: u32 = 0;
 
     inline for (buffer_ids, buffers, buffer_sizes) |id, buffer, size| {
-        if (!@hasDecl(@field(script.buffer, id.name), "init")) continue;
+        const buffer_src = @field(script.buffer, id.name);
+        if (!@hasDecl(buffer_src, "data") and !@hasDecl(buffer_src, "init"))
+            continue;
         if (size > 0) {
             c.SDL_UploadToGPUBuffer(
                 copy_pass,
@@ -469,7 +491,14 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         &storage_buffer_sizes,
     ) |id, *buffer, *size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
-        const num_elements = try storage_buffer_src.create();
+        const num_elements =
+            if (@hasDecl(storage_buffer_src, "header") and
+            @hasDecl(storage_buffer_src, "data"))
+                storage_buffer_src.data.len
+            else if (@hasDecl(storage_buffer_src, "num_elements"))
+                storage_buffer_src.num_elements
+            else
+                try storage_buffer_src.create();
         const header_size = @sizeOf(storage_buffer_src.Header);
         const layout_size = @sizeOf(storage_buffer_src.Element);
         size.* = header_size + (layout_size * num_elements);
@@ -491,7 +520,10 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             }));
         }
 
-        if (@hasDecl(storage_buffer_src, "init")) {
+        if ((@hasDecl(storage_buffer_src, "header") and
+            @hasDecl(storage_buffer_src, "data")) or
+            @hasDecl(storage_buffer_src, "init"))
+        {
             init_transfer_buffer_size += size.*;
         }
 
@@ -522,8 +554,19 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
     inline for (storage_buffer_ids, storage_buffer_sizes) |id, size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
-        if (!@hasDecl(storage_buffer_src, "init")) continue;
-        try storage_buffer_src.init(tbp[0..size]);
+        if (@hasDecl(storage_buffer_src, "header") and
+            @hasDecl(storage_buffer_src, "data"))
+        {
+            util.writeSSBO(
+                storage_buffer_src.Header,
+                storage_buffer_src.Element,
+                tbp[0..size],
+                storage_buffer_src.header,
+                storage_buffer_src.data,
+            );
+        } else if (@hasDecl(storage_buffer_src, "init")) {
+            try storage_buffer_src.init(tbp[0..size]);
+        } else continue;
         tbp += size;
     }
 
@@ -537,7 +580,10 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         storage_buffers,
         storage_buffer_sizes,
     ) |id, buffer, size| {
-        if (!@hasDecl(@field(script.storage_buffer, id.name), "init")) continue;
+        const storage_buffer_src = @field(script.storage_buffer, id.name);
+        if (!(@hasDecl(storage_buffer_src, "header") and
+            @hasDecl(storage_buffer_src, "data")) and
+            !@hasDecl(storage_buffer_src, "init")) continue;
         if (size > 0) {
             c.SDL_UploadToGPUBuffer(
                 copy_pass,
@@ -757,7 +803,7 @@ fn updateBufferData(tbp: [*]u8, base: u32) !u32 {
     inline for (buffer_ids, &buffer_infos) |id, *info| {
         const buffer_src = @field(script.buffer, id.name);
         if (!@hasDecl(buffer_src, "updateInfo")) continue;
-        info.* = buffer_src.updateInfo();
+        buffer_src.updateInfo(info);
     }
 
     return offset;
