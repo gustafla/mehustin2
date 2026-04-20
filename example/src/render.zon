@@ -14,7 +14,11 @@
             .render = .{
                 .drawcalls = .{
                     .{
-                        .pipelines = .{.{}}, // Defaults
+                        .pipelines = .{.{
+                            .vert = .{}, // Default shaders.glsl
+                            .frag = .{}, // Default shaders.glsl
+                            .depth_test = .{},
+                        }},
                         .vertex_buffer = "cube",
                     },
                     .{
