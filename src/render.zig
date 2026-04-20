@@ -34,6 +34,7 @@ const GraphicsPipelineKey = builder.GraphicsPipelineKey(config);
 const ComputePipelineKey = builder.ComputePipelineKey(config);
 const graphics_pipeline_set = builder.ComptimeSet(GraphicsPipelineKey);
 const compute_pipeline_set = builder.ComptimeSet(ComputePipelineKey);
+const usage_flags: builder.UsageFlags(config) = .init;
 
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
@@ -251,10 +252,11 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
     inline for (
         texture_ids,
+        usage_flags.textures,
         &textures,
         &texture_infos,
         &texture_sizes,
-    ) |id, *texture, *info, *size| {
+    ) |id, usage, *texture, *info, *size| {
         const texture_src = @field(script.texture, id.name);
         info.* = try texture_src.create();
         size.* = c.SDL_CalculateGPUTextureFormatSize(
@@ -272,9 +274,7 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                 try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                     .type = @intFromEnum(info.tex_type),
                     .format = @intFromEnum(info.format),
-                    .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER |
-                        c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
-                        c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE,
+                    .usage = @bitCast(usage),
                     .width = info.width,
                     .height = info.height,
                     .layer_count_or_depth = info.depth,
@@ -639,18 +639,16 @@ pub fn init(
             .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
         }));
 
-    for (config.color_targets, &color_targets) |tex, *texture| {
+    for (
+        config.color_targets,
+        usage_flags.color_targets,
+        &color_targets,
+    ) |tex, usage, *texture| {
         texture.* =
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
                 .format = resolveTextureFormat(tex.format),
-                .usage = c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
-                    if (tex.sample_count == .@"1")
-                        (c.SDL_GPU_TEXTUREUSAGE_SAMPLER |
-                            c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
-                            c.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE)
-                    else
-                        0,
+                .usage = @bitCast(usage),
                 .width = script.config.main.width * tex.p / tex.q,
                 .height = script.config.main.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,
@@ -659,13 +657,16 @@ pub fn init(
             }));
     }
 
-    for (config.depth_targets, &depth_targets) |tex, *texture| {
+    for (
+        config.depth_targets,
+        usage_flags.depth_targets,
+        &depth_targets,
+    ) |tex, usage, *texture| {
         texture.* =
             try sdlerr(c.SDL_CreateGPUTexture(device, &.{
                 .type = c.SDL_GPU_TEXTURETYPE_2D,
                 .format = resolveTextureFormat(tex.format),
-                .usage = c.SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET |
-                    if (tex.sample_count == .@"1") c.SDL_GPU_TEXTUREUSAGE_SAMPLER else 0,
+                .usage = @bitCast(usage),
                 .width = script.config.main.width * tex.p / tex.q,
                 .height = script.config.main.height * tex.p / tex.q,
                 .layer_count_or_depth = 1,

@@ -7,6 +7,7 @@ const ShaderStage = types.ShaderStage;
 const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
 const MultisampleState = types.MultisampleState;
+const TextureUsageFlags = types.TextureUsageFlags;
 const script = @import("script");
 
 pub const num_vertex_uniform_buffers = 1;
@@ -324,4 +325,78 @@ pub fn SamplerEnum(comptime config: schema.Render) type {
         field_values[i] = i;
     }
     return @Enum(usize, .exhaustive, &field_names, &field_values);
+}
+
+pub fn UsageFlags(comptime config: schema.Render) type {
+    return struct {
+        color_targets: [config.color_targets.len]TextureUsageFlags,
+        depth_targets: [config.depth_targets.len]TextureUsageFlags,
+        textures: [@typeInfo(script.Texture).@"enum".fields.len]TextureUsageFlags,
+
+        pub const init: @This() = blk: {
+            var f = std.mem.zeroes(@This());
+
+            for (config.passes) |pass| switch (pass) {
+                .render => |rpass| {
+                    if (rpass.depth_target) |depth_target| {
+                        f.depth_targets[depth_target.target].depth_stencil_target = true;
+                        if (depth_target.resolve_target) |resolve_target| {
+                            f.depth_targets[resolve_target].depth_stencil_target = true;
+                        }
+                    }
+                    for (rpass.color_targets) |color_target| {
+                        switch (color_target.target) {
+                            .index => |i| f.color_targets[i].color_target = true,
+                            .swapchain => {},
+                        }
+                        if (color_target.resolve_target) |resolve_target| {
+                            switch (resolve_target) {
+                                .index => |i| f.color_targets[i].color_target = true,
+                                .swapchain => {},
+                            }
+                        }
+                    }
+                    for (rpass.drawcalls) |draw| {
+                        for (.{ "vertex", "fragment" }) |stage| {
+                            for (@field(draw, stage ++ "_samplers")) |binding| {
+                                const result = parseIndex(binding.texture) catch unreachable;
+                                if (result) |r| {
+                                    @field(f, r.ref)[r.idx].sampler = true;
+                                } else {
+                                    const idx = @intFromEnum(@field(script.Texture, binding.texture));
+                                    f.textures[idx].sampler = true;
+                                }
+                            }
+                        }
+                    }
+                },
+                .compute => |cpass| {
+                    for (cpass.readwrite_storage_textures) |rw_tex| {
+                        const result = parseIndex(rw_tex) catch unreachable;
+                        if (result) |r| {
+                            @field(f, r.ref)[r.idx].compute_storage_read = true;
+                            @field(f, r.ref)[r.idx].compute_storage_write = true;
+                        } else {
+                            const idx = @intFromEnum(@field(script.Texture, rw_tex));
+                            f.textures[idx].compute_storage_read = true;
+                            f.textures[idx].compute_storage_write = true;
+                        }
+                    }
+                    for (cpass.dispatches) |dispatch| {
+                        for (dispatch.readonly_storage_textures) |ro_tex| {
+                            const result = parseIndex(ro_tex) catch unreachable;
+                            if (result) |r| {
+                                @field(f, r.ref)[r.idx].compute_storage_read = true;
+                            } else {
+                                const idx = @intFromEnum(@field(script.Texture, ro_tex));
+                                f.textures[idx].compute_storage_read = true;
+                            }
+                        }
+                    }
+                },
+            };
+
+            break :blk f;
+        };
+    };
 }

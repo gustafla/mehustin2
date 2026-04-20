@@ -64,6 +64,62 @@ pub fn EnumFromC(
     return @Enum(Tag, .exhaustive, field_names[0..index], field_values[0..index]);
 }
 
+pub fn FlagsFromC(
+    comptime type_name: []const u8,
+    comptime opt: struct {
+        prefix: []const u8 = "SDL_GPU",
+    },
+) type {
+    @setEvalBranchQuota(100000);
+    const Backing = @field(c, opt.prefix ++ type_name ++ "Flags");
+    const c_decls = @typeInfo(c).@"struct".decls;
+
+    // Type name: "TextureUsage"
+    // Variant: "TEXTUREUSAGE"
+    var variant: [type_name.len]u8 = undefined;
+    for (type_name, 0..) |chr, i| {
+        variant[i] = std.ascii.toUpper(chr);
+    }
+
+    var field_names_raw: [c_decls.len][]const u8 = undefined;
+    var total_len: usize = 0;
+    var index: usize = 0;
+
+    // Search prefix: "SDL_GPU_TEXTUREUSAGE"
+    const search_prefix = opt.prefix ++ "_" ++ variant;
+    for (c_decls) |decl| {
+        if (std.mem.startsWith(u8, decl.name, search_prefix)) {
+            field_names_raw[index] = decl.name;
+            total_len += decl.name.len;
+            index += 1;
+        }
+    }
+
+    // Buffer for lowercased field names
+    var string_buf: [total_len]u8 = undefined;
+    var string_cursor: usize = 0;
+    var names: [@bitSizeOf(Backing)][]const u8 = undefined;
+
+    for (field_names_raw[0..index], 0..) |name_raw, i| {
+        // Assert C value is a power of two in sequence
+        std.debug.assert(@field(c, name_raw) == (1 << i));
+
+        const trimmed = name_raw[search_prefix.len + 1 ..];
+        const lowercased = string_buf[string_cursor..][0..trimmed.len];
+        string_cursor += trimmed.len;
+        for (trimmed, 0..) |chr, j| {
+            lowercased[j] = std.ascii.toLower(chr);
+        }
+        names[i] = lowercased;
+    }
+
+    for (index..@bitSizeOf(Backing)) |i| {
+        names[i] = std.fmt.comptimePrint("padding{}", .{i});
+    }
+
+    return @Struct(.@"packed", Backing, &names, &@splat(bool), &@splat(.{}));
+}
+
 pub const VertexFormat = EnumFromC("VertexElementFormat", .{});
 
 pub fn vertexFormatLen(format: VertexFormat) u32 {
@@ -103,6 +159,7 @@ pub const TextureFormat = EnumFromC(
     .{ .extra_fields = &.{.swapchain} },
 );
 pub const TextureType = EnumFromC("TextureType", .{});
+pub const TextureUsageFlags = FlagsFromC("TextureUsage", .{});
 
 pub const TextureInfo = struct {
     tex_type: TextureType = .@"2d",

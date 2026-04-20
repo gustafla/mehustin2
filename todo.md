@@ -12,7 +12,7 @@
   - [ ] Render.zon schema changes:
     - [ ] Support dot path separator syntax for all binds
     - [ ] Accommodate a generic "bind all stuff in resource X"
-- [ ] Determine granular texture usage flags at compile time from render.zon
+- [ ] Determine granular buffer usage flags at compile time from render.zon
 - [ ] Id-based render.zon schema:
   - [ ] color_targets
   - [ ] depth_targets
@@ -53,6 +53,7 @@
 
 # Done
 
+- [X] Determine granular texture usage flags at compile time from render.zon
 - [X] Rework shader compilation with tree shaking and entry point macros
 - [X] Add init-time arena allocator
 - [X] Allow custom shader entry points in render.zon schema
