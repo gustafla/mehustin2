@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] Determine granular buffer usage flags at compile time from render.zon
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [ ] Call msdf-atlas-gen at build-time
@@ -10,13 +11,11 @@
   - [ ] Render.zon schema changes:
     - [ ] Support dot path separator syntax for all binds
     - [ ] Accommodate a generic "bind all stuff in resource X"
-- [ ] Determine granular buffer usage flags at compile time from render.zon
-- [ ] Id-based render.zon schema:
-  - [ ] color_targets
-  - [ ] depth_targets
-  - [ ] rename samplers.name to .id
-  - [ ] Implement resource id resolution ("render"-namespace for internals)
-  - [ ] ping-pong sugar
+    - [ ] Id-based render.zon schema:
+      - [ ] color_targets
+      - [ ] depth_targets
+      - [ ] rename samplers.name to .id
+      - [ ] Implement resource id resolution ("render"-namespace for internals)
 
 # Backlog
 
