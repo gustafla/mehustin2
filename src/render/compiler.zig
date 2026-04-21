@@ -284,36 +284,86 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
     };
 }
 
+fn serialize(comptime key: anytype, writer: *std.Io.Writer) !void {
+    // Cannot use std.zon.stringify, because keys contain fields of type `type`.
+    try writer.writeByte('{');
+    const T = @TypeOf(key);
+    switch (@typeInfo(T)) {
+        .@"struct" => |info| for (info.fields) |field| {
+            try serialize(@field(key, field.name), writer);
+            try writer.writeByte(';');
+        },
+        .@"enum" => try writer.writeAll(@tagName(key)),
+        .int, .float, .bool => try writer.print("{}", .{key}),
+        .pointer => |info| if (info.size == .slice) {
+            if (info.child == u8) {
+                try writer.writeAll(key);
+            } else for (key) |e| try serialize(e, writer);
+        } else unreachable,
+        .array => for (key) |e| try serialize(e, writer),
+        .optional => if (key) |inner|
+            try serialize(inner, writer)
+        else
+            try writer.writeAll("null"),
+        .type => try writer.writeAll(@typeName(key)),
+        else => @compileError("Type " ++ @typeName(T) ++ " not handled"),
+    }
+    try writer.writeByte('}');
+}
+
 pub fn ComptimeSet(comptime T: type) type {
-    @setEvalBranchQuota(10000);
+    const max_len = 1024;
+
+    // Count total number of keys
     var count_iter: T.Iterator = .{};
     var max_count = 0;
     while (count_iter.next()) |_| : (max_count += 1) {}
 
+    @setEvalBranchQuota(max_count * max_len * 2);
+
+    // Deduplicate keys, serialize to strings
     var keys_buf: [max_count]T = undefined;
+    var string_buffers: [max_count][max_len]u8 = undefined;
+    var serialized_buf: [max_count][]const u8 = undefined;
     var unique_count = 0;
 
     var collect_iter: T.Iterator = .{};
     outer: while (collect_iter.next()) |candidate| {
-        for (keys_buf[0..unique_count]) |existing| {
-            if (std.meta.eql(existing, candidate)) continue :outer;
+        var writer = std.Io.Writer.fixed(&string_buffers[unique_count]);
+        serialize(candidate, &writer) catch unreachable;
+        const string = writer.buffered();
+        for (serialized_buf[0..unique_count]) |existing| {
+            if (std.mem.eql(u8, existing, string)) continue :outer;
         }
         keys_buf[unique_count] = candidate;
+        serialized_buf[unique_count] = string;
         unique_count += 1;
     }
 
-    const keys_array = keys_buf[0..unique_count].*;
+    const final_count = unique_count;
+    const final_fields = serialized_buf[0..final_count].*;
+    const final_keys = keys_buf[0..final_count].*;
+    const TagInt = std.math.IntFittingRange(0, @max(final_count, 2) - 1);
+    const Enum = @Enum(
+        TagInt,
+        .exhaustive,
+        &final_fields,
+        &std.simd.iota(TagInt, final_count),
+    );
 
     return struct {
-        pub const keys = keys_array;
+        pub const Tag = TagInt;
+        pub const Set = Enum;
 
-        pub fn getIndex(comptime key: T) usize {
-            @setEvalBranchQuota(10000);
-            for (keys, 0..) |k, i| {
-                if (std.meta.eql(k, key)) return i;
-            }
-            @compileError("Key not found in ComptimeSet: " ++
-                std.fmt.comptimePrint("{any}", .{key}));
+        pub const keys = final_keys;
+
+        pub fn getIndex(comptime key: T) Tag {
+            @setEvalBranchQuota(final_count * max_len * 2);
+            var buffer: [max_len]u8 = undefined;
+            var writer = std.Io.Writer.fixed(&buffer);
+            serialize(key, &writer) catch unreachable;
+            const string = writer.buffered();
+            return @intFromEnum(@field(Set, string));
         }
     };
 }
