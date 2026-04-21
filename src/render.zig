@@ -20,7 +20,7 @@ const options = @import("options");
 const script = @import("script");
 const config = script.config.render;
 
-const builder = @import("render/builder.zig");
+const compiler = @import("render/compiler.zig");
 const shader = @import("render/shader.zig");
 const time = @import("render/time.zig");
 
@@ -30,12 +30,12 @@ const log = std.log.scoped(.render);
 const buffer_ids = @typeInfo(script.Buffer).@"enum".fields;
 const texture_ids = @typeInfo(script.Texture).@"enum".fields;
 const storage_buffer_ids = @typeInfo(script.StorageBuffer).@"enum".fields;
-const SamplerEnum = builder.SamplerEnum(config);
-const GraphicsPipelineKey = builder.GraphicsPipelineKey(config);
-const ComputePipelineKey = builder.ComputePipelineKey(config);
-const graphics_pipeline_set = builder.ComptimeSet(GraphicsPipelineKey);
-const compute_pipeline_set = builder.ComptimeSet(ComputePipelineKey);
-const usage_flags: builder.UsageFlags(config) = .init;
+const SamplerEnum = compiler.SamplerEnum(config);
+const GraphicsPipelineKey = compiler.GraphicsPipelineKey(config);
+const ComputePipelineKey = compiler.ComputePipelineKey(config);
+const graphics_pipeline_set = compiler.ComptimeSet(GraphicsPipelineKey);
+const compute_pipeline_set = compiler.ComptimeSet(ComputePipelineKey);
+const usage_flags: compiler.UsageFlags(config) = .init;
 
 const max_attributes = blk: {
     const layout_decls = @typeInfo(script.layout).@"struct".decls;
@@ -901,7 +901,7 @@ fn computePass(
 
     var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
     for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
-        const reference = comptime builder.parseIndex(name) catch |e|
+        const reference = comptime compiler.parseIndex(name) catch |e|
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
         texture.* = .{
             .texture = if (reference) |result|
@@ -939,7 +939,7 @@ fn computePass(
         };
 
         for (dispatch.samplers, 0..) |tex, slot| {
-            const reference = comptime builder.parseIndex(tex.texture) catch |e|
+            const reference = comptime compiler.parseIndex(tex.texture) catch |e|
                 @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
             c.SDL_BindGPUComputeSamplers(compute_pass, @intCast(slot), &.{
                 .texture = if (reference) |result|
@@ -951,7 +951,7 @@ fn computePass(
         }
 
         for (dispatch.readonly_storage_textures, 0..) |name, slot| {
-            const reference = comptime builder.parseIndex(name) catch |e|
+            const reference = comptime compiler.parseIndex(name) catch |e|
                 @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
             c.SDL_BindGPUComputeStorageTextures(
                 compute_pass,
@@ -1158,7 +1158,7 @@ fn renderPass(
             },
         }) |stage| {
             inline for (stage.tex, 0..) |tex, slot| {
-                const reference = comptime builder.parseIndex(tex.texture) catch |e|
+                const reference = comptime compiler.parseIndex(tex.texture) catch |e|
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
                 stage.bind(render_pass, @intCast(slot), &.{
                     .texture = if (reference) |result|
@@ -1310,7 +1310,7 @@ pub fn render() !void {
             @sizeOf(@TypeOf(frame_uniforms.fragment)),
         );
         // Reminder, per shader uniform counts are hardcoded at shader creation:
-        comptime std.debug.assert(builder.num_fragment_uniform_buffers == 2);
+        comptime std.debug.assert(compiler.num_fragment_uniform_buffers == 2);
 
         // Record passes (specializes the renderer for each clip configuration)
         switch (frame_state.clip) {

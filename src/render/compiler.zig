@@ -95,13 +95,6 @@ pub const count_nonnull = struct {
     }
 };
 
-const ShaderInfo = struct {
-    num_samplers: u32,
-    num_storage_textures: u32,
-    num_storage_buffers: u32,
-    num_uniform_buffers: u32,
-};
-
 pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
     return struct {
         pipeline: schema.Render.GraphicsPipeline,
@@ -113,6 +106,13 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
         num_color_targets: u32,
         depth_target: ?types.TextureFormat,
         sample_count: types.SampleCount,
+
+        const ShaderInfo = struct {
+            num_samplers: u32,
+            num_storage_textures: u32,
+            num_storage_buffers: u32,
+            num_uniform_buffers: u32,
+        };
 
         pub const max_color_targets = fold(config.passes, &.{
             "render",
@@ -216,21 +216,21 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
     };
 }
 
-const CompInfo = struct {
-    num_samplers: u32,
-    num_readonly_storage_textures: u32,
-    num_readonly_storage_buffers: u32,
-    num_readwrite_storage_textures: u32,
-    num_readwrite_storage_buffers: u32,
-    threadcount_x: u32,
-    threadcount_y: u32,
-    threadcount_z: u32,
-};
-
 pub fn ComputePipelineKey(comptime config: schema.Render) type {
     return struct {
         comp: schema.Render.Shader,
         comp_info: CompInfo,
+
+        const CompInfo = struct {
+            num_samplers: u32,
+            num_readonly_storage_textures: u32,
+            num_readonly_storage_buffers: u32,
+            num_readwrite_storage_textures: u32,
+            num_readwrite_storage_buffers: u32,
+            threadcount_x: u32,
+            threadcount_y: u32,
+            threadcount_z: u32,
+        };
 
         pub const Iterator = struct {
             pass_idx: usize = 0,
