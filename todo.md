@@ -1,5 +1,9 @@
 # High priority
 
+- [ ] Make clips able to overlap (rename to e.g. logics)
+  - [ ] Logics currently active as a bit mask
+  - [ ] Render.zon condition must be processed with runtime branches
+  - [ ] Clip times & time left should be a uniform or SSBO array
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [ ] Call msdf-atlas-gen at build-time
@@ -22,10 +26,6 @@
 - [ ] Reorganize uniforms
   - 128 bytes per uniform slot per shader stage (4 slots per stage)
   - [ ] Use the corner rays method in tri.vert, no inverse matrices on the GPU
-- [ ] Make clips able to overlap (rename to e.g. logics)
-  - [ ] Logics currently active as a bit mask (Are 64 clips enough? Can extend with more)
-  - [ ] Render.zon condition can be reduced to single logic tag
-  - [ ] Clip times & time left should be an SSBO array
 - [ ] Comptime resource loader namespace generators (fns that return a resource namespace)
   - [ ] textureFromFile
   - [ ] vertexBufferFromFile
