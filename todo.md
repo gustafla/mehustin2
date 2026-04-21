@@ -45,6 +45,9 @@
 - [ ] 3D instance render & shaders
   - [ ] Lighting (directional)
   - [X] Lighting (point light sources)
+- [ ] Shadow mapping
+  - [ ] Filtering
+  - [ ] Cascading
 - [ ] SDL_shadercross support
 
 # Done
