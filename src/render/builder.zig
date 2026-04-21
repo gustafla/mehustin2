@@ -8,6 +8,7 @@ const VertexAttributes = types.VertexAttributes;
 const VertexFormat = types.VertexFormat;
 const MultisampleState = types.MultisampleState;
 const TextureUsageFlags = types.TextureUsageFlags;
+const BufferUsageFlags = types.BufferUsageFlags;
 const script = @import("script");
 
 pub const num_vertex_uniform_buffers = 1;
@@ -332,6 +333,7 @@ pub fn UsageFlags(comptime config: schema.Render) type {
         color_targets: [config.color_targets.len]TextureUsageFlags,
         depth_targets: [config.depth_targets.len]TextureUsageFlags,
         textures: [@typeInfo(script.Texture).@"enum".fields.len]TextureUsageFlags,
+        storage_buffers: [@typeInfo(script.StorageBuffer).@"enum".fields.len]BufferUsageFlags,
 
         pub const init: @This() = blk: {
             var f = std.mem.zeroes(@This());
@@ -367,6 +369,10 @@ pub fn UsageFlags(comptime config: schema.Render) type {
                                     f.textures[idx].sampler = true;
                                 }
                             }
+                            for (@field(draw, stage ++ "_storage_buffers")) |binding| {
+                                const idx = @intFromEnum(@field(script.StorageBuffer, binding));
+                                f.storage_buffers[idx].graphics_storage_read = true;
+                            }
                         }
                     }
                 },
@@ -382,6 +388,11 @@ pub fn UsageFlags(comptime config: schema.Render) type {
                             f.textures[idx].compute_storage_write = true;
                         }
                     }
+                    for (cpass.readwrite_storage_buffers) |rw_buf| {
+                        const idx = @intFromEnum(@field(script.StorageBuffer, rw_buf));
+                        f.storage_buffers[idx].compute_storage_read = true;
+                        f.storage_buffers[idx].compute_storage_write = true;
+                    }
                     for (cpass.dispatches) |dispatch| {
                         for (dispatch.readonly_storage_textures) |ro_tex| {
                             const result = parseIndex(ro_tex) catch unreachable;
@@ -391,6 +402,10 @@ pub fn UsageFlags(comptime config: schema.Render) type {
                                 const idx = @intFromEnum(@field(script.Texture, ro_tex));
                                 f.textures[idx].compute_storage_read = true;
                             }
+                        }
+                        for (dispatch.readonly_storage_buffers) |ro_buf| {
+                            const idx = @intFromEnum(@field(script.StorageBuffer, ro_buf));
+                            f.storage_buffers[idx].compute_storage_read = true;
                         }
                     }
                 },

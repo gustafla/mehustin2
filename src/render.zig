@@ -487,9 +487,10 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
     inline for (
         storage_buffer_ids,
+        usage_flags.storage_buffers,
         &storage_buffers,
         &storage_buffer_sizes,
-    ) |id, *buffer, *size| {
+    ) |id, usage, *buffer, *size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
         const num_elements =
             if (@hasDecl(storage_buffer_src, "header") and
@@ -513,9 +514,7 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             });
 
             buffer.* = try sdlerr(c.SDL_CreateGPUBuffer(device, &.{
-                .usage = c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
-                    c.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE |
-                    c.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+                .usage = @bitCast(usage),
                 .size = size.*,
             }));
         }

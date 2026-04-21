@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Determine granular buffer usage flags at compile time from render.zon
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [ ] Call msdf-atlas-gen at build-time
@@ -50,6 +49,7 @@
 
 # Done
 
+- [X] Determine granular buffer usage flags at compile time from render.zon
 - [X] Replace BufferInfo return value with an optional pointer argument to it
 - [X] Add script.zig resource sugar (`pub const size`, `pub const data`, etc.)
 - [X] Determine granular texture usage flags at compile time from render.zon

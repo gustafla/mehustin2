@@ -170,6 +170,7 @@ pub const TextureInfo = struct {
     mip_levels: u32 = 1,
 };
 
+pub const BufferUsageFlags = FlagsFromC("BufferUsage", .{});
 pub const BufferInfo = struct {
     num_elements: u32,
     first_element: u32 = 0,
