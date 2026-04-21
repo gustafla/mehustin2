@@ -151,14 +151,15 @@ fn initGraphicsPipeline(
     comptime key: GraphicsPipelineKey,
 ) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
+    const stages = pipeline.shader.resolve();
     log.debug("Initializing vert: {s}.{s}, frag: {s}.{s}", .{
-        pipeline.vert.file, pipeline.vert.entrypoint,
-        pipeline.frag.file, pipeline.frag.entrypoint,
+        stages.vert.file, stages.vert.entrypoint,
+        stages.frag.file, stages.frag.entrypoint,
     });
 
-    const vert = try shader.loadShader(io, arena, device, .vertex, pipeline.vert, key.vert_info);
+    const vert = try shader.loadShader(io, arena, device, .vertex, stages.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(io, arena, device, .fragment, pipeline.frag, key.frag_info);
+    const frag = try shader.loadShader(io, arena, device, .fragment, stages.frag, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     var color_target_descs: [GraphicsPipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;

@@ -4,6 +4,7 @@ const script = @import("script");
 
 const camera = @import("camera.zig");
 const math = @import("math.zig");
+pub const Shader = @import("schema/Shader.zig");
 const timeline = @import("timeline.zig");
 const types = @import("types.zig");
 const PrimitiveType = types.PrimitiveType;
@@ -24,14 +25,8 @@ pub const Render = struct {
     samplers: []const Sampler,
     passes: []const Pass,
 
-    pub const Shader = struct {
-        file: []const u8 = "shaders.glsl",
-        entrypoint: []const u8 = "main",
-    };
-
     pub const GraphicsPipeline = struct {
-        vert: Shader = .{},
-        frag: Shader = .{},
+        shader: Shader.Graphics,
         primitive_type: PrimitiveType = .trianglelist,
         rasterizer_state: RasterizerState = .{},
         enable_alpha_to_coverage: bool = false,
@@ -101,7 +96,7 @@ pub const Render = struct {
 
     pub const ComputeDispatch = struct {
         condition: ?[]const timeline.Clip = null,
-        comp: Shader = .{},
+        comp: Shader,
         threadcount: ComputeDimensions,
         groupcount: ComputeDimensions,
         samplers: []const TextureSamplerBinding = &.{},

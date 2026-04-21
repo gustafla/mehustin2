@@ -218,7 +218,7 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
 
 pub fn ComputePipelineKey(comptime config: schema.Render) type {
     return struct {
-        comp: schema.Render.Shader,
+        comp: schema.Shader,
         comp_info: CompInfo,
 
         const CompInfo = struct {
@@ -284,11 +284,21 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
     };
 }
 
-fn serialize(comptime key: anytype, writer: *std.Io.Writer) !void {
-    // Cannot use std.zon.stringify, because keys contain fields of type `type`.
-    try writer.writeByte('{');
+fn serialize(key: anytype, writer: *std.Io.Writer) !void {
+    // If value can be resolved (i.e. it's a convenience union), resolve it first
     const T = @TypeOf(key);
-    switch (@typeInfo(T)) {
+    const t_info = @typeInfo(T);
+    if ((t_info == .@"struct" or
+        t_info == .@"enum" or
+        t_info == .@"union" or
+        t_info == .@"opaque") and
+        @hasDecl(T, "resolve"))
+    {
+        return serialize(key.resolve(), writer);
+    }
+
+    try writer.writeByte('{');
+    switch (t_info) {
         .@"struct" => |info| for (info.fields) |field| {
             try serialize(@field(key, field.name), writer);
             try writer.writeByte(';');

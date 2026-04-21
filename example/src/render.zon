@@ -15,23 +15,19 @@
                 .drawcalls = .{
                     .{
                         .pipelines = .{.{
-                            .vert = .{}, // Default shaders.glsl
-                            .frag = .{}, // Default shaders.glsl
+                            .shader = .{ .entrypoint = "main" },
                             .depth_test = .{},
                         }},
                         .vertex_buffer = "cube",
                     },
                     .{
-                        .pipelines = .{
-                            .{
-                                .vert = .{ .file = "text.glsl" },
-                                .frag = .{ .file = "text.glsl" },
-                                .primitive_type = .trianglestrip,
-                                .blend_states = .{.{
-                                    .enable = true,
-                                }},
-                            },
-                        },
+                        .pipelines = .{.{
+                            .shader = .{ .file = "text.glsl" },
+                            .primitive_type = .trianglestrip,
+                            .blend_states = .{.{
+                                .enable = true,
+                            }},
+                        }},
                         .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
                         .instance_buffer = "text_instances",
                         .num_vertices = 4,

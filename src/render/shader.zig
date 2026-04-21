@@ -13,7 +13,7 @@ const Error = error{SdlError} || resource.Error;
 pub fn fileName(
     allocator: Allocator,
     stage: []const u8,
-    shader: schema.Render.Shader,
+    shader: schema.Shader,
 ) Allocator.Error![]const u8 {
     return try std.mem.concat(
         allocator,
@@ -27,7 +27,7 @@ pub fn loadShader(
     arena: Allocator,
     device: *c.SDL_GPUDevice,
     stage: types.ShaderStage,
-    shader: schema.Render.Shader,
+    shader: schema.Shader,
     info: anytype,
 ) Error!*c.SDL_GPUShader {
     // Allocate SPIR-V file name

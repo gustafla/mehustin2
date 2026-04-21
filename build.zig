@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Shader = @import("src/engine/schema/Shader.zig");
+
 fn addScript(
     engine_mod: *std.Build.Module,
     render_mod: *std.Build.Module,
@@ -19,17 +21,6 @@ pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) voi
     const exe_mod = d.module("exe");
     addScript(engine_mod, render_mod, exe_mod, script_mod);
 }
-
-const Shader = struct {
-    file: []const u8 = "shaders.glsl",
-    entrypoint: []const u8 = "main",
-
-    const Stage = enum {
-        vertex,
-        fragment,
-        compute,
-    };
-};
 
 fn compileShader(
     arena: std.mem.Allocator,
@@ -119,12 +110,11 @@ pub fn compileShaders(
     const render = std.zon.parse.fromSliceAlloc(struct { passes: []const union(enum) {
         render: struct { drawcalls: []const struct {
             pipelines: []const struct {
-                vert: Shader = .{},
-                frag: Shader = .{},
+                shader: Shader.Graphics,
             },
         } },
         compute: struct { dispatches: []const struct {
-            comp: Shader = .{},
+            comp: Shader,
         } },
     } }, b.allocator, data, null, .{
         .ignore_unknown_fields = true,
@@ -135,8 +125,9 @@ pub fn compileShaders(
         switch (pass) {
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
-                    compileShader(b.allocator, b, d, pipe.vert, .vertex, config);
-                    compileShader(b.allocator, b, d, pipe.frag, .fragment, config);
+                    const stages = pipe.shader.resolve();
+                    compileShader(b.allocator, b, d, stages.vert, .vertex, config);
+                    compileShader(b.allocator, b, d, stages.frag, .fragment, config);
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
