@@ -132,7 +132,7 @@ pub const Render = struct {
 };
 
 pub const Timeline = struct {
-    clip_track: []const ClipSegment,
+    tags: []const Tag,
     camera: struct {
         control: []const CameraControl,
         tracks: []const []const camera.Segment,
@@ -144,8 +144,9 @@ pub const Timeline = struct {
         track: []const TextSegment,
     },
 
-    pub const ClipSegment = struct {
+    pub const Tag = struct {
         t: f32,
+        duration: f32 = 0,
         id: []const u8,
     };
 

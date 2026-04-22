@@ -28,10 +28,10 @@ pub const duration = blk: {
 
 pub const State = struct {
     time: f32,
-    clip: Clip,
-    clip_time: f32,
-    clip_remaining_time: f32,
-    clip_length: f32,
+    tags_active: Tags,
+    tag_times: TagTimes,
+    tag_times_remaining: TagTimes,
+    tag_durations: TagTimes,
     camera: camera.State,
 
     pub fn uniforms(self: *const @This()) types.FrameUniforms {
@@ -69,32 +69,71 @@ pub const State = struct {
     }
 };
 
-pub const Clip = blk: {
-    const bits = std.math.log2_int_ceil(usize, timeline.clip_track.len);
-    const Int = @Int(.unsigned, bits);
-
-    var field_names: [timeline.clip_track.len][]const u8 = undefined;
-    var field_values: [timeline.clip_track.len]Int = undefined;
+pub const Tag = blk: {
+    var field_names: [timeline.tags.len][]const u8 = undefined;
 
     var num_fields = 0;
-    outer: for (timeline.clip_track) |clip| {
+    outer: for (timeline.tags) |tag| {
         for (field_names[0..num_fields]) |name| {
-            if (std.mem.eql(u8, clip.id, name)) continue :outer;
+            if (std.mem.eql(u8, tag.id, name)) continue :outer;
         }
-        field_names[num_fields] = clip.id;
-        field_values[num_fields] = num_fields;
+        field_names[num_fields] = tag.id;
         num_fields += 1;
     }
 
-    break :blk @Enum(Int, .exhaustive, &field_names, &field_values);
+    const Int = std.math.IntFittingRange(0, @max(num_fields, 2) - 1);
+
+    break :blk @Enum(
+        Int,
+        .exhaustive,
+        field_names[0..num_fields],
+        &std.simd.iota(Int, num_fields),
+    );
 };
 
-const clip_table = blk: {
-    var clips: [timeline.clip_track.len]Clip = undefined;
-    for (timeline.clip_track, &clips) |clip, *clip_enum| {
-        clip_enum.* = @field(Clip, clip.id);
+pub const Tags = blk: {
+    const info = @typeInfo(Tag).@"enum";
+    var field_names: [info.fields.len][]const u8 = undefined;
+
+    for (&field_names, info.fields) |*name, field| name.* = field.name;
+
+    break :blk @Struct(
+        .@"packed",
+        @Int(.unsigned, info.fields.len),
+        field_names,
+        &@splat(bool),
+        &@splat(.{}),
+    );
+};
+
+pub const TagTimes = blk: {
+    const info = @typeInfo(Tag).@"enum";
+    const fours = std.mem.alignForward(usize, info.fields.len, 4);
+    var field_names: [fours][]const u8 = undefined;
+
+    for (field_names[0..info.fields.len], info.fields) |*name, field| {
+        name.* = field.name;
     }
-    break :blk clips;
+
+    for (field_names[info.fields.len..fours], 0..) |*name, i| {
+        name.* = std.fmt.comptimePrint("padding{}", .{i});
+    }
+
+    break :blk @Struct(
+        .@"extern",
+        null,
+        field_names,
+        &@splat(f32),
+        &@splat(.{}),
+    );
+};
+
+const tag_table = blk: {
+    var tags: [timeline.tags.len]Tag = undefined;
+    for (&tags, timeline.tags) |*tag, tag_raw| {
+        tag.* = @field(Tag, tag_raw.id);
+    }
+    break :blk tags;
 };
 
 fn sumLen(comptime slices: anytype) usize {
@@ -158,7 +197,7 @@ inline fn getAnchor(a: Anchor) Vec3 {
     };
 }
 
-fn scan(slice: anytype, time: f32) usize {
+fn scanNonOverlapping(slice: anytype, time: f32) usize {
     for (slice, 0..) |unit, i| {
         if (time < unit.t) {
             return i -| 1;
@@ -169,22 +208,25 @@ fn scan(slice: anytype, time: f32) usize {
 }
 
 pub fn resolve(time: f32) State {
-    const clip_idx = scan(timeline.clip_track, time);
-    const clip = clip_table[clip_idx];
-    const clip_time = time - timeline.clip_track[clip_idx].t;
-    const clip_remaining_time, const clip_length =
-        if (clip_idx + 1 < timeline.clip_track.len)
-            .{
-                timeline.clip_track[clip_idx + 1].t - time,
-                timeline.clip_track[clip_idx + 1].t - timeline.clip_track[clip_idx].t,
-            }
-        else
-            .{ std.math.inf(f32), std.math.inf(f32) };
+    var tags_active = std.mem.zeroes(Tags);
+    var tag_times = std.mem.zeroes(TagTimes);
+    var tag_times_remaining = std.mem.zeroes(TagTimes);
+    var tag_durations = std.mem.zeroes(TagTimes);
+    for (timeline.tags, tag_table) |tag_raw, tag| {
+        const tag_time = time - tag_raw.t;
+        const tag_time_remaining = tag_raw.duration - tag_time;
+        if (tag_time > 0 and tag_time_remaining > 0) {
+            @field(tags_active, @tagName(tag)) = true;
+            @field(tag_times, @tagName(tag)) = tag_time;
+            @field(tag_times_remaining, @tagName(tag)) = tag_time_remaining;
+            @field(tag_durations, @tagName(tag)) = tag_raw.duration;
+        }
+    }
 
-    const cam_control_idx = scan(timeline.camera.control, time);
+    const cam_control_idx = scanNonOverlapping(timeline.camera.control, time);
     const cam_control = timeline.camera.control[cam_control_idx];
     const cam_track = timeline.camera.tracks[cam_control.i];
-    const cam_idx = scan(cam_track, time);
+    const cam_idx = scanNonOverlapping(cam_track, time);
     var cam_state = camera.evaluate(
         cam_track,
         cam_entry_table.getSlice(cam_control.i),
@@ -251,10 +293,10 @@ pub fn resolve(time: f32) State {
 
     return .{
         .time = time,
-        .clip = clip,
-        .clip_time = clip_time,
-        .clip_remaining_time = clip_remaining_time,
-        .clip_length = clip_length,
+        .tags_active = tags_active,
+        .tag_times = tag_times,
+        .tag_times_remaining = tag_times_remaining,
+        .tag_durations = tag_durations,
         .camera = cam,
     };
 }
