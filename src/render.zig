@@ -890,15 +890,13 @@ const RenderParameters = struct {
 };
 
 fn computePass(
-    comptime clip: timeline.Clip,
     comptime pass: schema.Render.ComputePass,
     cmdbuf: *c.SDL_GPUCommandBuffer,
+    tags: timeline.TagSet,
 ) !void {
-    // Filter pass by clip id list
-    comptime if (pass.condition) |clip_ids| {
-        const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
-        if (idx == null) return;
-    };
+    // Filter pass by tag requirements list
+    const pass_req: timeline.TagSet = comptime .initMany(pass.require_tags);
+    if (!pass_req.subsetOf(tags)) return;
 
     var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
     for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
@@ -933,73 +931,69 @@ fn computePass(
     );
 
     inline for (pass.dispatches) |dispatch| {
-        // Filter dispatch by clip id list
-        comptime if (dispatch.condition) |clip_ids| {
-            const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
-            if (idx == null) continue;
-        };
+        // Filter dispatch by tag requirements list
+        const dispatch_req: timeline.TagSet = comptime .initMany(dispatch.require_tags);
+        if (dispatch_req.subsetOf(tags)) {
+            for (dispatch.samplers, 0..) |tex, slot| {
+                const reference = comptime compiler.parseIndex(tex.texture) catch |e|
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+                c.SDL_BindGPUComputeSamplers(compute_pass, @intCast(slot), &.{
+                    .texture = if (reference) |result|
+                        @field(@This(), result.ref)[result.idx]
+                    else
+                        textures[@intFromEnum(@field(script.Texture, tex.texture))],
+                    .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
+                }, 1);
+            }
 
-        for (dispatch.samplers, 0..) |tex, slot| {
-            const reference = comptime compiler.parseIndex(tex.texture) catch |e|
-                @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-            c.SDL_BindGPUComputeSamplers(compute_pass, @intCast(slot), &.{
-                .texture = if (reference) |result|
-                    @field(@This(), result.ref)[result.idx]
-                else
-                    textures[@intFromEnum(@field(script.Texture, tex.texture))],
-                .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
-            }, 1);
-        }
+            for (dispatch.readonly_storage_textures, 0..) |name, slot| {
+                const reference = comptime compiler.parseIndex(name) catch |e|
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+                c.SDL_BindGPUComputeStorageTextures(
+                    compute_pass,
+                    @intCast(slot),
+                    if (reference) |result|
+                        &@field(@This(), result.ref)[result.idx]
+                    else
+                        &textures[@intFromEnum(@field(script.Texture, name))],
+                    1,
+                );
+            }
 
-        for (dispatch.readonly_storage_textures, 0..) |name, slot| {
-            const reference = comptime compiler.parseIndex(name) catch |e|
-                @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-            c.SDL_BindGPUComputeStorageTextures(
+            for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
+                const idx = @intFromEnum(@field(script.StorageBuffer, name));
+                c.SDL_BindGPUComputeStorageBuffers(
+                    compute_pass,
+                    @intCast(slot),
+                    &storage_buffers[idx],
+                    1,
+                );
+            }
+
+            const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch);
+            const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
+            c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
+
+            c.SDL_DispatchGPUCompute(
                 compute_pass,
-                @intCast(slot),
-                if (reference) |result|
-                    &@field(@This(), result.ref)[result.idx]
-                else
-                    &textures[@intFromEnum(@field(script.Texture, name))],
-                1,
+                dispatch.groupcount.x,
+                dispatch.groupcount.y,
+                dispatch.groupcount.z,
             );
         }
-
-        for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
-            const idx = @intFromEnum(@field(script.StorageBuffer, name));
-            c.SDL_BindGPUComputeStorageBuffers(
-                compute_pass,
-                @intCast(slot),
-                &storage_buffers[idx],
-                1,
-            );
-        }
-
-        const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch);
-        const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
-        c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
-
-        c.SDL_DispatchGPUCompute(
-            compute_pass,
-            dispatch.groupcount.x,
-            dispatch.groupcount.y,
-            dispatch.groupcount.z,
-        );
     }
 
     c.SDL_EndGPUComputePass(compute_pass);
 }
 
 fn renderPass(
-    comptime clip: timeline.Clip,
     comptime pass: schema.Render.RenderPass,
     parm: RenderParameters,
+    tags: timeline.TagSet,
 ) !void {
-    // Filter pass by clip id list
-    comptime if (pass.condition) |clip_ids| {
-        const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
-        if (idx == null) return;
-    };
+    // Filter pass by tag requirements list
+    const pass_req: timeline.TagSet = comptime .initMany(pass.require_tags);
+    if (!pass_req.subsetOf(tags)) return;
 
     // Initialize color target infos
     const color_target_infos = blk: {
@@ -1079,137 +1073,135 @@ fn renderPass(
 
     // Record drawcalls
     inline for (pass.drawcalls) |drawcall| {
-        // Filter drawcall by clip id list
-        comptime if (drawcall.condition) |clip_ids| {
-            const idx = std.mem.findScalar(timeline.Clip, clip_ids, clip);
-            if (idx == null) continue;
-        };
+        // Filter drawcall by tag requirements list
+        const draw_req: timeline.TagSet = comptime .initMany(drawcall.require_tags);
+        if (draw_req.subsetOf(tags)) {
+            // Bind vertex buffer, storing number of instances to draw
+            var num_buffers: u32 = 0;
+            var num_vertices: u32 = drawcall.num_vertices orelse 3;
+            var first_vertex: u32 = 0;
+            if (drawcall.vertex_buffer) |name| {
+                const idx = @intFromEnum(@field(script.Buffer, name));
+                if (buffer_sizes[idx] > 0) {
+                    c.SDL_BindGPUVertexBuffers(
+                        render_pass,
+                        num_buffers,
+                        &.{ .buffer = buffers[idx], .offset = 0 },
+                        1,
+                    );
+                    num_buffers += 1;
+                }
+                if (drawcall.num_vertices == null) {
+                    num_vertices = buffer_infos[idx].num_elements;
+                }
+                first_vertex = buffer_infos[idx].first_element;
+            }
 
-        // Bind vertex buffer, storing number of instances to draw
-        var num_buffers: u32 = 0;
-        var num_vertices: u32 = drawcall.num_vertices orelse 3;
-        var first_vertex: u32 = 0;
-        if (drawcall.vertex_buffer) |name| {
-            const idx = @intFromEnum(@field(script.Buffer, name));
-            if (buffer_sizes[idx] > 0) {
-                c.SDL_BindGPUVertexBuffers(
+            // Bind instance buffer, storing number of instances to draw
+            var num_instances: u32 = drawcall.num_instances orelse 1;
+            var first_instance: u32 = 0;
+            if (drawcall.instance_buffer) |name| {
+                const idx = @intFromEnum(@field(script.Buffer, name));
+                if (buffer_sizes[idx] > 0) {
+                    c.SDL_BindGPUVertexBuffers(
+                        render_pass,
+                        num_buffers,
+                        &.{ .buffer = buffers[idx], .offset = 0 },
+                        1,
+                    );
+                    num_buffers += 1;
+                }
+                if (drawcall.num_instances == null) {
+                    num_instances = buffer_infos[idx].num_elements;
+                }
+                first_instance = buffer_infos[idx].first_element;
+            }
+
+            // Bind index buffer, overriding num_vertices
+            if (drawcall.index_buffer) |name| {
+                const idx = @intFromEnum(@field(script.Buffer, name));
+                const info = @typeInfo(@field(script.buffer, name).Layout);
+                std.debug.assert(info.int.signedness == .unsigned);
+                const element_size = switch (info.int.bits) {
+                    16 => c.SDL_GPU_INDEXELEMENTSIZE_16BIT,
+                    32 => c.SDL_GPU_INDEXELEMENTSIZE_32BIT,
+                    else => unreachable,
+                };
+                c.SDL_BindGPUIndexBuffer(
                     render_pass,
-                    num_buffers,
                     &.{ .buffer = buffers[idx], .offset = 0 },
-                    1,
+                    element_size,
                 );
-                num_buffers += 1;
+                if (drawcall.num_vertices == null) {
+                    num_vertices = buffer_infos[idx].num_elements;
+                }
+                first_vertex = buffer_infos[idx].first_element;
             }
-            if (drawcall.num_vertices == null) {
-                num_vertices = buffer_infos[idx].num_elements;
-            }
-            first_vertex = buffer_infos[idx].first_element;
-        }
 
-        // Bind instance buffer, storing number of instances to draw
-        var num_instances: u32 = drawcall.num_instances orelse 1;
-        var first_instance: u32 = 0;
-        if (drawcall.instance_buffer) |name| {
-            const idx = @intFromEnum(@field(script.Buffer, name));
-            if (buffer_sizes[idx] > 0) {
-                c.SDL_BindGPUVertexBuffers(
-                    render_pass,
-                    num_buffers,
-                    &.{ .buffer = buffers[idx], .offset = 0 },
-                    1,
-                );
-                num_buffers += 1;
+            // Bind textures
+            inline for (.{
+                .{
+                    .bind = c.SDL_BindGPUVertexSamplers,
+                    .tex = drawcall.vertex_samplers,
+                },
+                .{
+                    .bind = c.SDL_BindGPUFragmentSamplers,
+                    .tex = drawcall.fragment_samplers,
+                },
+            }) |stage| {
+                inline for (stage.tex, 0..) |tex, slot| {
+                    const reference = comptime compiler.parseIndex(tex.texture) catch |e|
+                        @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+                    stage.bind(render_pass, @intCast(slot), &.{
+                        .texture = if (reference) |result|
+                            @field(@This(), result.ref)[result.idx]
+                        else
+                            textures[@intFromEnum(@field(script.Texture, tex.texture))],
+                        .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
+                    }, 1);
+                }
             }
-            if (drawcall.num_instances == null) {
-                num_instances = buffer_infos[idx].num_elements;
-            }
-            first_instance = buffer_infos[idx].first_element;
-        }
 
-        // Bind index buffer, overriding num_vertices
-        if (drawcall.index_buffer) |name| {
-            const idx = @intFromEnum(@field(script.Buffer, name));
-            const info = @typeInfo(@field(script.buffer, name).Layout);
-            std.debug.assert(info.int.signedness == .unsigned);
-            const element_size = switch (info.int.bits) {
-                16 => c.SDL_GPU_INDEXELEMENTSIZE_16BIT,
-                32 => c.SDL_GPU_INDEXELEMENTSIZE_32BIT,
-                else => unreachable,
-            };
-            c.SDL_BindGPUIndexBuffer(
-                render_pass,
-                &.{ .buffer = buffers[idx], .offset = 0 },
-                element_size,
-            );
-            if (drawcall.num_vertices == null) {
-                num_vertices = buffer_infos[idx].num_elements;
+            // Bind storage buffers
+            inline for (.{
+                .{
+                    .bind = c.SDL_BindGPUVertexStorageBuffers,
+                    .storage_buffers = drawcall.vertex_storage_buffers,
+                },
+                .{
+                    .bind = c.SDL_BindGPUFragmentStorageBuffers,
+                    .storage_buffers = drawcall.fragment_storage_buffers,
+                },
+            }) |stage| {
+                inline for (stage.storage_buffers, 0..) |name, slot| {
+                    const idx = @intFromEnum(@field(script.StorageBuffer, name));
+                    stage.bind(render_pass, @intCast(slot), &storage_buffers[idx], 1);
+                }
             }
-            first_vertex = buffer_infos[idx].first_element;
-        }
 
-        // Bind textures
-        inline for (.{
-            .{
-                .bind = c.SDL_BindGPUVertexSamplers,
-                .tex = drawcall.vertex_samplers,
-            },
-            .{
-                .bind = c.SDL_BindGPUFragmentSamplers,
-                .tex = drawcall.fragment_samplers,
-            },
-        }) |stage| {
-            inline for (stage.tex, 0..) |tex, slot| {
-                const reference = comptime compiler.parseIndex(tex.texture) catch |e|
-                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-                stage.bind(render_pass, @intCast(slot), &.{
-                    .texture = if (reference) |result|
-                        @field(@This(), result.ref)[result.idx]
-                    else
-                        textures[@intFromEnum(@field(script.Texture, tex.texture))],
-                    .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
-                }, 1);
-            }
-        }
-
-        // Bind storage buffers
-        inline for (.{
-            .{
-                .bind = c.SDL_BindGPUVertexStorageBuffers,
-                .storage_buffers = drawcall.vertex_storage_buffers,
-            },
-            .{
-                .bind = c.SDL_BindGPUFragmentStorageBuffers,
-                .storage_buffers = drawcall.fragment_storage_buffers,
-            },
-        }) |stage| {
-            inline for (stage.storage_buffers, 0..) |name, slot| {
-                const idx = @intFromEnum(@field(script.StorageBuffer, name));
-                stage.bind(render_pass, @intCast(slot), &storage_buffers[idx], 1);
-            }
-        }
-
-        inline for (drawcall.pipelines) |pipeline| {
-            // Find matching pipeline index from pipeline_keys at compile time
-            const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline);
-            const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
-            c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
-            if (drawcall.index_buffer == null) {
-                c.SDL_DrawGPUPrimitives(
-                    render_pass,
-                    num_vertices,
-                    num_instances,
-                    first_vertex,
-                    first_instance,
-                );
-            } else {
-                c.SDL_DrawGPUIndexedPrimitives(
-                    render_pass,
-                    num_vertices,
-                    num_instances,
-                    first_vertex,
-                    0,
-                    first_instance,
-                );
+            inline for (drawcall.pipelines) |pipeline| {
+                // Find matching pipeline index from pipeline_keys at compile time
+                const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline);
+                const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
+                c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
+                if (drawcall.index_buffer == null) {
+                    c.SDL_DrawGPUPrimitives(
+                        render_pass,
+                        num_vertices,
+                        num_instances,
+                        first_vertex,
+                        first_instance,
+                    );
+                } else {
+                    c.SDL_DrawGPUIndexedPrimitives(
+                        render_pass,
+                        num_vertices,
+                        num_instances,
+                        first_vertex,
+                        0,
+                        first_instance,
+                    );
+                }
             }
         }
     }
@@ -1218,13 +1210,13 @@ fn renderPass(
 }
 
 fn recordPasses(
-    comptime clip: timeline.Clip,
     parm: RenderParameters,
+    tags: timeline.TagSet,
 ) !void {
     inline for (config.passes) |pass| {
         switch (pass) {
-            .render => |rpass| try renderPass(clip, rpass, parm),
-            .compute => |cpass| try computePass(clip, cpass, parm.cmdbuf),
+            .render => |rpass| try renderPass(rpass, parm, tags),
+            .compute => |cpass| try computePass(cpass, parm.cmdbuf, tags),
         }
     }
 }
@@ -1313,16 +1305,13 @@ pub fn render() !void {
         // Reminder, per shader uniform counts are hardcoded at shader creation:
         comptime std.debug.assert(compiler.num_fragment_uniform_buffers == 2);
 
-        // Record passes (specializes the renderer for each clip configuration)
-        switch (frame_state.clip) {
-            .end => {},
-            inline else => |clip| try recordPasses(clip, .{
-                .cmdbuf = cmdbuf,
-                .swapchain_texture = swapchain_texture,
-                .swapchain_viewport = &swapchain_viewport,
-                .resolution_match = resolution_match,
-            }),
-        }
+        // Record passes
+        try recordPasses(.{
+            .cmdbuf = cmdbuf,
+            .swapchain_texture = swapchain_texture,
+            .swapchain_viewport = &swapchain_viewport,
+            .resolution_match = resolution_match,
+        }, frame_state.tags_active);
 
         // Blit output_buffer to swapchain when necessary
         if (!resolution_match) {

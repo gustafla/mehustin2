@@ -10,25 +10,33 @@ const timeline = @import("timeline.zig");
 
 var frames: u32 = 0;
 var fps_ticks: u64 = 0;
-var debug_str_buf: [128]u8 = undefined;
+var debug_str_buf: [1024]u8 = undefined;
 
 pub fn updateDebugStrings(state: timeline.State, fps_str: *[]const u8, time_str: *[]const u8) void {
-    var buf: []u8 = &debug_str_buf;
+    var writer = std.Io.Writer.fixed(&debug_str_buf);
+
     if (options.show_fps) {
         frames += 1;
         const ticks = c.SDL_GetTicksNS();
         if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
-            fps_str.* = std.fmt.bufPrint(buf, "FPS: {}", .{frames}) catch unreachable;
+            writer.print("FPS: {}", .{frames}) catch unreachable;
+            fps_str.* = writer.buffered();
             fps_ticks = ticks;
             frames = 0;
         }
-        buf = buf[fps_str.len..];
     }
+    writer = .fixed(writer.buffer[fps_str.len..]);
 
     if (builtin.mode == .Debug) {
-        time_str.* = std.fmt.bufPrint(buf, "{t} {:.1}", .{ state.clip, state.time }) catch unreachable;
-        buf = buf[time_str.len..];
+        writer.print("t={:.1} ", .{state.time}) catch unreachable;
+        var iterator = state.tags_active.iterator();
+        while (iterator.next()) |tag| {
+            const t = state.tag_times.get(tag);
+            writer.print("{t}={:.1}", .{ tag, t }) catch unreachable;
+        }
+        time_str.* = writer.buffered();
     }
+    writer = .fixed(writer.buffer[fps_str.len..]);
 }
 
 pub fn interleave(

@@ -29,10 +29,10 @@ pub const duration = blk: {
 
 pub const State = struct {
     time: f32,
-    tags_active: Tags,
-    tag_times: TagTimes,
-    tag_times_remaining: TagTimes,
-    tag_durations: TagTimes,
+    tags_active: TagSet,
+    tag_times: TagVector,
+    tag_times_remaining: TagVector,
+    tag_durations: TagVector,
     camera: camera.State,
 
     pub fn uniforms(self: *const @This()) types.FrameUniforms {
@@ -62,9 +62,6 @@ pub const State = struct {
             },
             .fragment = .{
                 .global_time = self.time,
-                .clip_time = self.clip_time,
-                .clip_remaining_time = self.clip_remaining_time,
-                .clip_length = self.clip_length,
             },
         };
     }
@@ -92,42 +89,8 @@ pub const Tag = blk: {
     );
 };
 
-pub const Tags = blk: {
-    const info = @typeInfo(Tag).@"enum";
-    var field_names: [info.fields.len][]const u8 = undefined;
-
-    for (&field_names, info.fields) |*name, field| name.* = field.name;
-
-    break :blk @Struct(
-        .@"packed",
-        @Int(.unsigned, info.fields.len),
-        &field_names,
-        &@splat(bool),
-        &@splat(.{}),
-    );
-};
-
-pub const TagTimes = blk: {
-    const info = @typeInfo(Tag).@"enum";
-    const fours = std.mem.alignForward(usize, info.fields.len, 4);
-    var field_names: [fours][]const u8 = undefined;
-
-    for (field_names[0..info.fields.len], info.fields) |*name, field| {
-        name.* = field.name;
-    }
-
-    for (field_names[info.fields.len..fours], 0..) |*name, i| {
-        name.* = std.fmt.comptimePrint("padding{}", .{i});
-    }
-
-    break :blk @Struct(
-        .@"extern",
-        null,
-        &field_names,
-        &@splat(f32),
-        &@splat(.{}),
-    );
-};
+pub const TagSet = std.EnumSet(Tag);
+pub const TagVector = std.EnumArray(Tag, f32);
 
 const tag_table = blk: {
     var tags: [timeline.tags.len]Tag = undefined;
@@ -209,18 +172,18 @@ fn scanNonOverlapping(slice: anytype, time: f32) usize {
 }
 
 pub fn resolve(time: f32) State {
-    var tags_active = std.mem.zeroes(Tags);
-    var tag_times = std.mem.zeroes(TagTimes);
-    var tag_times_remaining = std.mem.zeroes(TagTimes);
-    var tag_durations = std.mem.zeroes(TagTimes);
+    var tags_active: TagSet = .empty;
+    var tag_times: TagVector = .initFill(-1);
+    var tag_times_remaining: TagVector = .initFill(-1);
+    var tag_durations: TagVector = .initFill(-1);
     for (timeline.tags, tag_table) |tag_raw, tag| {
         const tag_time = time - tag_raw.t;
         const tag_time_remaining = tag_raw.duration - tag_time;
         if (tag_time > 0 and tag_time_remaining > 0) {
-            @field(tags_active, @tagName(tag)) = true;
-            @field(tag_times, @tagName(tag)) = tag_time;
-            @field(tag_times_remaining, @tagName(tag)) = tag_time_remaining;
-            @field(tag_durations, @tagName(tag)) = tag_raw.duration;
+            tags_active.insert(tag);
+            tag_times.set(tag, tag_time);
+            tag_times_remaining.set(tag, tag_time_remaining);
+            tag_durations.set(tag, tag_raw.duration);
         }
     }
 

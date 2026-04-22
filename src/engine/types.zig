@@ -186,9 +186,6 @@ pub const VertexUniforms = extern struct {
 
 pub const FragmentUniforms = extern struct {
     global_time: f32,
-    clip_time: f32,
-    clip_remaining_time: f32,
-    clip_length: f32,
 };
 
 pub const FrameUniforms = struct {
