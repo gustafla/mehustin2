@@ -22,8 +22,9 @@ else
 pub const spb = 1.0 / bps;
 
 pub const duration = blk: {
-    const clip_track = script.config.timeline.clip_track;
-    break :blk clip_track[clip_track.len - 1].t * spb;
+    var last = 0.0;
+    for (timeline.tags) |tag| last = @max(last, tag.t + tag.duration);
+    break :blk last;
 };
 
 pub const State = struct {
@@ -75,9 +76,9 @@ pub const Tag = blk: {
     var num_fields = 0;
     outer: for (timeline.tags) |tag| {
         for (field_names[0..num_fields]) |name| {
-            if (std.mem.eql(u8, tag.id, name)) continue :outer;
+            if (std.mem.eql(u8, tag.name, name)) continue :outer;
         }
-        field_names[num_fields] = tag.id;
+        field_names[num_fields] = tag.name;
         num_fields += 1;
     }
 
@@ -100,7 +101,7 @@ pub const Tags = blk: {
     break :blk @Struct(
         .@"packed",
         @Int(.unsigned, info.fields.len),
-        field_names,
+        &field_names,
         &@splat(bool),
         &@splat(.{}),
     );
@@ -122,7 +123,7 @@ pub const TagTimes = blk: {
     break :blk @Struct(
         .@"extern",
         null,
-        field_names,
+        &field_names,
         &@splat(f32),
         &@splat(.{}),
     );
@@ -131,7 +132,7 @@ pub const TagTimes = blk: {
 const tag_table = blk: {
     var tags: [timeline.tags.len]Tag = undefined;
     for (&tags, timeline.tags) |*tag, tag_raw| {
-        tag.* = @field(Tag, tag_raw.id);
+        tag.* = @field(Tag, tag_raw.name);
     }
     break :blk tags;
 };

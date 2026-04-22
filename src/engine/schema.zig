@@ -75,7 +75,7 @@ pub const Render = struct {
     };
 
     pub const Drawcall = struct {
-        condition: ?[]const timeline.Clip = null,
+        require_tags: []const timeline.Tag = &.{},
         pipelines: []const GraphicsPipeline,
         index_buffer: ?[]const u8 = null,
         vertex_buffer: ?[]const u8 = null,
@@ -95,7 +95,7 @@ pub const Render = struct {
     };
 
     pub const ComputeDispatch = struct {
-        condition: ?[]const timeline.Clip = null,
+        require_tags: []const timeline.Tag = &.{},
         comp: Shader,
         threadcount: ComputeDimensions,
         groupcount: ComputeDimensions,
@@ -110,14 +110,14 @@ pub const Render = struct {
     };
 
     pub const RenderPass = struct {
-        condition: ?[]const timeline.Clip = null,
+        require_tags: []const timeline.Tag = &.{},
         drawcalls: []const Drawcall,
         color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
         depth_target: ?RenderTarget(usize) = null,
     };
 
     pub const ComputePass = struct {
-        condition: ?[]const timeline.Clip = null,
+        require_tags: []const timeline.Tag = &.{},
         dispatches: []const ComputeDispatch,
         readwrite_storage_textures: []const []const u8 = &.{},
         readwrite_storage_buffers: []const []const u8 = &.{},
@@ -147,7 +147,7 @@ pub const Timeline = struct {
     pub const Tag = struct {
         t: f32,
         duration: f32 = 0,
-        id: []const u8,
+        name: []const u8,
     };
 
     pub const CameraControl = struct {

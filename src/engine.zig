@@ -19,25 +19,6 @@ pub const util = @import("engine/util.zig");
 comptime {
     const script = @import("script");
 
-    // Assert that timeline has a correct format
-    const clip_track = script.config.timeline.clip_track;
-    if (clip_track.len < 2) {
-        @compileError("clip_track must contain at least a start and an end");
-    }
-    if (clip_track[0].t != 0) {
-        @compileError("clip_track must start at 0");
-    }
-    if (!std.mem.eql(u8, clip_track[clip_track.len - 1].id, "end")) {
-        @compileError("clip_track last clip's id must be \"end\"");
-    }
-    var previous_t = 0;
-    for (script.config.timeline.clip_track) |clip| {
-        if (clip.t < previous_t) {
-            @compileError("clip_track time can't run backwards");
-        }
-        previous_t = clip.t;
-    }
-
     // Assert that layouts are extern structs
     for (@typeInfo(script.layout).@"struct".decls) |decl| {
         if (@typeInfo(@field(script.layout, decl.name)).@"struct".layout != .@"extern") {

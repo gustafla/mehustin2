@@ -14,10 +14,9 @@
   - [ ] Render.zon schema changes:
     - [ ] Support dot path separator syntax for all binds
     - [ ] Accommodate a generic "bind all stuff in resource X"
-    - [ ] Id-based render.zon schema:
+    - [ ] Name-based render.zon schema:
       - [ ] color_targets
       - [ ] depth_targets
-      - [ ] rename samplers.name to .id
       - [ ] Implement resource id resolution ("render"-namespace for internals)
 
 # Backlog
