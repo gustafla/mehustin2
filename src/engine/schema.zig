@@ -137,82 +137,106 @@ pub const Render = struct {
 
 pub const Timeline = struct {
     tags: []const Tag,
-    camera: struct {
-        control: []const CameraControl,
-        tracks: []const []const camera.Segment,
-        effects: []const camera.Effect,
-    },
-    text: struct {
-        atlas_size: u32 = 1024,
-        fonts: []const Font,
-        track: []const TextSegment,
-    },
+    camera: Camera,
+    text: Text,
 
     pub const Tag = struct {
         name: []const u8,
         duration: f32,
-        t: TagTime,
+        t: Time,
+
+        pub const Time = union(enum) {
+            abs: f32,
+            rel: struct {
+                to: enum { start, end } = .start,
+                of: []const u8,
+                by: f32 = 0,
+            },
+            seq,
+        };
     };
 
-    pub const TagTime = union(enum) {
+    pub const EventTime = union(enum) {
         abs: f32,
-        rel: struct {
-            to: enum { start, end } = .start,
-            of: []const u8,
-            by: f32 = 0,
-        },
-        seq,
+        rel: struct { tag: []const u8, by: f32 = 0 },
     };
 
-    pub const CameraControl = struct {
-        t: f32,
-        i: u32,
-        position_lock: ?script.Anchor = null,
-        target_lock: ?script.Anchor = null,
-        blend: f32 = 0,
+    pub const Camera = struct {
+        control: []const Control,
+        tracks: []const []const Segment,
+        effects: []const Effect,
+
+        pub const Control = struct {
+            t: EventTime,
+            i: u32,
+            position_lock: ?script.Anchor = null,
+            target_lock: ?script.Anchor = null,
+            blend: f32 = 0,
+        };
+
+        pub const Segment = struct {
+            t: EventTime,
+            motion: []const camera.Motion = &.{},
+            entry: ?camera.State = null,
+            blend: f32 = 1,
+        };
+
+        pub const Effect = struct {
+            t: EventTime = .{ .abs = 0 },
+            duration: f32 = std.math.inf(f32),
+            motion: camera.Motion,
+            fade_in: f32 = 1,
+            fade_out: f32 = 1,
+        };
     };
 
-    pub const Font = struct {
-        name: []const u8,
-        size: f32,
-        padding: u32,
-        dist_scale: f32 = 4,
-    };
+    pub const Text = struct {
+        atlas_size: u32 = 1024,
+        fonts: []const Font,
+        track: []const Segment,
 
-    pub const TextSegment = struct {
-        t: f32 = 0,
-        duration: f32 = std.math.inf(f32),
-        text: union(enum) {
-            str: []const u8, // Inline string
-            ref: script.String, // script.zig reflection
-        },
-        font: usize = 0,
-        pos: math.Vec2, // NDC position
-        scale: f32 = 0.1, // Fraction of screen height
-        origin: TextOrigin = .top_left,
-        color: math.Vec4 = @splat(1),
-        effect: enum(u8) {
-            none,
-            uv_ripple,
-        } = .none,
-        anim: ?union(enum) {
-            fade: math.Vec4, // Fade from a color value
-            slide: math.Vec2, // Slide from an NDC position
-            typewriter, // Reveal text letter by letter
-        } = null,
-        fade_in: f32 = 0,
-        fade_out: f32 = 0,
-    };
+        pub const Font = struct {
+            name: []const u8,
+            size: f32,
+            padding: u32,
+            dist_scale: f32 = 4,
+        };
 
-    pub const TextOrigin = enum {
-        left,
-        right,
-        top,
-        bottom,
-        top_left,
-        top_right,
-        bottom_left,
-        bottom_right,
-        center,
+        pub const Segment = struct {
+            t: EventTime = .{ .abs = 0 },
+            duration: f32 = std.math.inf(f32),
+            text: union(enum) {
+                str: []const u8, // Inline string
+                ref: script.String, // script.zig reflection
+            },
+            font: usize = 0,
+            pos: math.Vec2, // NDC position
+            scale: f32 = 0.1, // Fraction of screen height
+            origin: Origin = .top_left,
+            color: math.Vec4 = @splat(1),
+            effect: enum(u8) {
+                none,
+                uv_ripple,
+            } = .none,
+            anim: ?union(enum) {
+                fade: math.Vec4, // Fade from a color value
+                slide: math.Vec2, // Slide from an NDC position
+                typewriter, // Reveal text letter by letter
+            } = null,
+            fade_in: f32 = 0,
+            fade_out: f32 = 0,
+        };
+
+        pub const Origin = enum {
+            left,
+            right,
+            top,
+            bottom,
+            top_left,
+            top_right,
+            bottom_left,
+            bottom_right,
+            center,
+        };
     };
 };

@@ -10,6 +10,9 @@ const math = @import("math.zig");
 const Vec2 = math.Vec2;
 const Vec3 = math.Vec3;
 const schema = @import("schema.zig");
+const EventTime = schema.Timeline.EventTime;
+const Text = schema.Timeline.Text;
+const Camera = schema.Timeline.Camera;
 const types = @import("types.zig");
 const BufferInfo = types.BufferInfo;
 const TextureInfo = types.TextureInfo;
@@ -145,6 +148,40 @@ const tag_time_table = blk: {
     break :blk times;
 };
 
+fn resolveEventTime(comptime t: EventTime) f32 {
+    switch (t) {
+        .abs => |abs| return abs,
+        .rel => |rel| {
+            for (timeline.tags, 0..) |tag_raw, i| {
+                if (std.mem.eql(u8, tag_raw.name, rel.tag)) {
+                    return tag_time_table[i] + rel.by;
+                }
+            }
+            @compileError("Could not find tag \"" ++ rel.tag ++ "\"");
+        },
+    }
+}
+
+const cam_control_time_table = blk: {
+    var times: [timeline.camera.control.len]f32 = undefined;
+    for (&times, timeline.camera.control) |*time, control| {
+        time.* = resolveEventTime(control.t);
+    }
+    // Cam control segments are non-overlapping, assert monotonicity
+    for (times[0 .. times.len - 1], times[1..]) |time0, time1| {
+        std.debug.assert(time0 <= time1);
+    }
+    break :blk times;
+};
+
+const text_time_table = blk: {
+    var times: [timeline.text.track.len]f32 = undefined;
+    for (&times, timeline.text.track) |*time, text| {
+        time.* = resolveEventTime(text.t);
+    }
+    break :blk times;
+};
+
 fn sumLen(comptime slices: anytype) usize {
     var sum = 0;
     for (slices) |slice| {
@@ -153,31 +190,49 @@ fn sumLen(comptime slices: anytype) usize {
     return sum;
 }
 
-const cam_entry_table = blk: {
+const cam_track_table = blk: {
     const tracks = timeline.camera.tracks;
+
     var offset_buf: [tracks.len + 1]usize = undefined;
     var entry_buf: [sumLen(tracks)]camera.State = undefined;
+    var time_buf: [sumLen(tracks)]f32 = undefined;
     var running_sum = 0;
 
     for (tracks, offset_buf[0..tracks.len]) |track, *offset| {
-        const table = entry_buf[running_sum..][0..track.len];
+        const entry_table = entry_buf[running_sum..][0..track.len];
+        const time_table = time_buf[running_sum..][0..track.len];
+
         offset.* = running_sum;
-        table.*[0] = .{
+        entry_table.*[0] = .{
             .pos = .{ 0, 0, 1 },
             .target = .{ 0, 0, 0 },
         };
+        time_table.*[0] = resolveEventTime(track[0].t);
+
         for (1..track.len) |i| {
             const next = track[i];
+            const next_t = resolveEventTime(next.t);
+
             const prev = track[i - 1];
+            const prev_t = time_table[i - 1];
             const prev_shift = if (i > 1) track[i - 2].blend else 0;
-            table.*[i] = prev.evaluate(
-                &table[i - 1],
+
+            // Cam segments are non-overlapping, assert monotonicity
+            std.debug.assert(prev_t <= next_t);
+
+            entry_table.*[i] = evaluateCameraSegment(
+                prev,
+                &entry_table[i - 1],
+                prev_t,
                 null,
                 null,
-                next.t,
+                null,
+                next_t,
                 prev_shift,
             );
+            time_table.*[i] = next_t;
         }
+
         running_sum += track.len;
     }
 
@@ -186,18 +241,168 @@ const cam_entry_table = blk: {
 
     const offset_table = offset_buf[0..].*;
     const entry_table = entry_buf[0..].*;
+    const time_table = time_buf[0..].*;
 
     break :blk struct {
         const offsets = offset_table;
         const entries = entry_table;
+        const times = time_table;
 
-        pub fn getSlice(i: usize) []const camera.State {
+        pub fn getEntries(i: usize) []const camera.State {
             const start = offsets[i];
             const end = offsets[i + 1];
             return entries[start..end];
         }
+
+        pub fn getTimes(i: usize) []const f32 {
+            const start = offsets[i];
+            const end = offsets[i + 1];
+            return times[start..end];
+        }
     };
 };
+
+pub fn evaluateCameraSegment(
+    segment: Camera.Segment,
+    segment_entry: *const camera.State,
+    segment_t: f32,
+    next: ?*const Camera.Segment,
+    next_entry: ?*const camera.State,
+    next_t: ?f32,
+    time: f32,
+    time_shift: f32,
+) camera.State {
+    const relative_time = time - segment_t;
+    var current_state = segment.entry orelse segment_entry.*;
+
+    for (segment.motion) |motion| {
+        current_state = switch (motion) {
+            inline else => |param, tag| blk: {
+                const func = @field(camera.fns, @tagName(tag));
+                const t = relative_time + time_shift;
+                break :blk func(t, current_state, param);
+            },
+        };
+    }
+
+    // Blend with next segment
+    const blend_target = next orelse return current_state;
+    const blend_target_entry = next_entry.?;
+    const blend_target_t = next_t.?;
+
+    const blend = if (segment.blend < 0) blend_target_t - segment_t else segment.blend;
+    const blend_start = blend_target_t - blend;
+
+    if (blend > 0 and time >= blend_start) {
+        const elapsed_in_blend = time - blend_start;
+        const t = std.math.clamp(elapsed_in_blend / blend, 0.0, 1.0);
+        const alpha = math.smoothstep(t);
+
+        const next_state = evaluateCameraSegment(
+            blend_target.*,
+            blend_target_entry,
+            blend_target_t,
+            null, // No "next next". Blend periods should not overlap.
+            null,
+            null,
+            time,
+            blend,
+        );
+        current_state = current_state.lerp(next_state, alpha);
+    }
+
+    return current_state;
+}
+
+pub fn evaluateCamera(
+    track: []const Camera.Segment,
+    entries: []const camera.State,
+    times: []const f32,
+    idx: usize,
+    time: f32,
+) camera.State {
+    const segment = track[idx];
+    const next: struct {
+        segment: ?*const Camera.Segment,
+        entry: ?*const camera.State,
+        t: ?f32,
+    } =
+        if (idx + 1 < track.len)
+            .{ .segment = &track[idx + 1], .entry = &entries[idx + 1], .t = times[idx + 1] }
+        else
+            .{ .segment = null, .entry = null, .t = null };
+
+    // Time shift avoids negative interpolation on movements.
+    // Otherwise the segment-relative time must be clamped non-negative,
+    // so that the camera track doesn't make unexpected inverse movements
+    // during blending, but then accelerations would look bad.
+    const time_shift = if (idx > 0) track[idx - 1].blend else 0;
+
+    return evaluateCameraSegment(
+        segment,
+        &entries[idx],
+        times[idx],
+        next.segment,
+        next.entry,
+        next.t,
+        time,
+        time_shift,
+    );
+}
+
+const cam_effect_time_table = blk: {
+    var times: [timeline.camera.effects.len]f32 = undefined;
+    for (&times, timeline.camera.effects) |*time, effect| {
+        time.* = resolveEventTime(effect.t);
+    }
+    break :blk times;
+};
+
+pub fn applyCameraEffects(
+    effects: []const Camera.Effect,
+    base_state: camera.State,
+    time: f32,
+) camera.State {
+    var state = base_state;
+
+    for (effects, cam_effect_time_table) |effect, effect_t| {
+        const start = effect_t;
+        const end = start + effect.duration;
+
+        if (time < start or time >= end) continue;
+
+        const time_in = time - start;
+        const time_left = end - time;
+
+        var intensity: f32 = 1.0;
+        if (effect.fade_in > 0 and time_in < effect.fade_in) {
+            intensity = time_in / effect.fade_in;
+        } else if (effect.fade_out > 0 and time_left < effect.fade_out) {
+            intensity = time_left / effect.fade_out;
+        }
+        intensity = math.smoothstep(intensity);
+
+        state = switch (effect.motion) {
+            inline else => |param, tag| blk: {
+                const func = @field(camera.fns, @tagName(tag));
+
+                var mod_param = param;
+                if (hasParam(param, "amp")) mod_param.amp *= intensity; // shake, wave, swivel
+                if (hasParam(param, "angle")) mod_param.angle *= intensity; // bank
+                if (hasParam(param, "roll")) mod_param.roll *= intensity; // shake roll
+
+                break :blk func(time, state, mod_param);
+            },
+        };
+    }
+
+    return state;
+}
+
+inline fn hasParam(p: anytype, comptime name: []const u8) bool {
+    const P = @TypeOf(p);
+    return P != void and @hasField(P, name);
+}
 
 inline fn getAnchor(a: Anchor) Vec3 {
     if (@typeInfo(Anchor).@"enum".fields.len == 0) unreachable;
@@ -206,14 +411,14 @@ inline fn getAnchor(a: Anchor) Vec3 {
     };
 }
 
-fn scanNonOverlapping(slice: anytype, time: f32) usize {
-    for (slice, 0..) |unit, i| {
-        if (time < unit.t) {
+fn scanNonOverlapping(time_table: []const f32, time: f32) usize {
+    for (time_table, 0..) |t, i| {
+        if (time < t) {
             return i -| 1;
         }
     }
 
-    return slice.len - 1;
+    return time_table.len - 1;
 }
 
 pub fn resolve(time: f32) State {
@@ -233,13 +438,16 @@ pub fn resolve(time: f32) State {
         }
     }
 
-    const cam_control_idx = scanNonOverlapping(timeline.camera.control, time);
+    const cam_control_idx = scanNonOverlapping(&cam_control_time_table, time);
     const cam_control = timeline.camera.control[cam_control_idx];
     const cam_track = timeline.camera.tracks[cam_control.i];
-    const cam_idx = scanNonOverlapping(cam_track, time);
-    var cam_state = camera.evaluate(
+    const cam_entries = cam_track_table.getEntries(cam_control.i);
+    const cam_times = cam_track_table.getTimes(cam_control.i);
+    const cam_idx = scanNonOverlapping(cam_times, time);
+    var cam_state = evaluateCamera(
         cam_track,
-        cam_entry_table.getSlice(cam_control.i),
+        cam_entries,
+        cam_times,
         cam_idx,
         time,
     );
@@ -249,8 +457,8 @@ pub fn resolve(time: f32) State {
 
     // Check if we are transitioning to the next control segment
     if (next_control_idx < timeline.camera.control.len) {
-        const next_ctrl = timeline.camera.control[next_control_idx];
-        const blend_start = next_ctrl.t - cam_control.blend;
+        const next_ctrl_t = cam_control_time_table[next_control_idx];
+        const blend_start = next_ctrl_t - cam_control.blend;
 
         if (cam_control.blend > 0 and time >= blend_start) {
             const t = std.math.clamp(
@@ -299,7 +507,7 @@ pub fn resolve(time: f32) State {
     cam_state.target = look_target;
 
     // Finally, apply effects
-    const cam = camera.applyEffects(timeline.camera.effects, cam_state, time);
+    const cam = applyCameraEffects(timeline.camera.effects, cam_state, time);
 
     return .{
         .time = time,
@@ -369,7 +577,7 @@ fn genText(
     dst: []InstanceText,
     str: []const u8,
     height_scale: f32,
-    origin: schema.Timeline.TextOrigin,
+    origin: Text.Origin,
     pos_ndc: [2]f32,
     color: [4]f32,
     font_idx: usize,
@@ -491,10 +699,10 @@ pub const text_instances = struct {
         num_elements = 0;
         const time = script.frame.state.time;
 
-        for (timeline.text.track) |track| {
-            if (time < track.t or time >= track.t + track.duration) continue;
+        for (timeline.text.track, text_time_table) |track, track_t| {
+            if (time < track_t or time >= track_t + track.duration) continue;
 
-            const local_t = time - track.t;
+            const local_t = time - track_t;
             const remaining = track.duration - local_t;
 
             // Resolve string

@@ -28,12 +28,12 @@
     },
     .camera = .{
         .control = .{
-            .{ .t = 0, .i = 0 },
+            .{ .i = 0, .t = .{ .abs = 0 } },
         },
         .tracks = .{
             .{ // TRACK 0
                 .{
-                    .t = 0,
+                    .t = .{ .abs = 0 },
                     .entry = .{ .pos = .{ -3, -3, -3 }, .target = .{ 0, 0, 0 }, .fov = 90 },
                     .motion = .{
                         .{ .orbit = .{ .axis = .{ 0, 1, 0 }, .speed = 1.2 } },
