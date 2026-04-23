@@ -23,7 +23,9 @@ pub const spb = 1.0 / bps;
 
 pub const duration = blk: {
     var last = 0.0;
-    for (timeline.tags) |tag| last = @max(last, tag.t + tag.duration);
+    for (timeline.tags, tag_time_table) |tag_raw, tag_t| {
+        last = @max(last, tag_t + tag_raw.duration);
+    }
     break :blk last * spb;
 };
 
@@ -92,29 +94,37 @@ pub const Tag = blk: {
 pub const TagSet = std.EnumSet(Tag);
 pub const TagVector = std.EnumArray(Tag, f32);
 
-fn resolveTagTime(comptime i: usize, comptime field: []const u8) f32 {
+fn resolveTagTime(comptime i: usize) f32 {
     const tag_raw = timeline.tags[i];
-    const t = @field(tag_raw, field);
-    switch (t) {
+    switch (tag_raw.t) {
         .abs => |abs| return abs,
         .rel => |rel| {
             var iterator = std.mem.reverseIterator(timeline.tags[0..i]);
             while (iterator.next()) |tag_other| {
-                if (std.mem.eql(u8, tag_other.name, rel.to)) {
-                    const time = resolveTagTime(
-                        iterator.index,
-                        field,
-                    ) + rel.by;
+                if (std.mem.eql(u8, tag_other.name, rel.of)) {
+                    const time = resolveTagTime(iterator.index) +
+                        switch (rel.to) {
+                            .start => 0,
+                            .end => tag_other.duration,
+                        } + rel.by;
+
                     if (time < 0) {
                         @compileError(std.fmt.comptimePrint(
-                            "Tag \"{s}\" at index {} yields negative {s} value",
-                            .{ tag_raw.name, i, field },
+                            "Tag \"{s}\" at index {} has negative time value",
+                            .{ tag_raw.name, i },
                         ));
                     }
+
                     return time;
                 }
             }
-            @compileError("Could not find tag \"" ++ rel.to ++ "\"");
+            @compileError("Could not find tag \"" ++ rel.of ++ "\"");
+        },
+        .seq => {
+            if (i == 0) return 0.0;
+            const prev_start = resolveTagTime(i - 1);
+            const prev_duration = timeline.tags[i - 1].duration;
+            return prev_start + prev_duration;
         },
     }
 }
@@ -130,15 +140,7 @@ const tag_table = blk: {
 const tag_time_table = blk: {
     var times: [timeline.tags.len]f32 = undefined;
     for (&times, 0..) |*time, i| {
-        time.* = resolveTagTime(i, "t");
-    }
-    break :blk times;
-};
-
-const tag_duration_table = blk: {
-    var times: [timeline.tags.len]f32 = undefined;
-    for (&times, 0..) |*time, i| {
-        time.* = resolveTagTime(i, "duration");
+        time.* = resolveTagTime(i);
     }
     break :blk times;
 };
@@ -219,10 +221,11 @@ pub fn resolve(time: f32) State {
     var tag_times: TagVector = .initFill(-1);
     var tag_times_remaining: TagVector = .initFill(-1);
     var tag_durations: TagVector = .initFill(-1);
-    for (tag_table, tag_time_table, tag_duration_table) |tag, tag_t, tag_duration| {
+    for (timeline.tags, tag_table, tag_time_table) |tag_raw, tag, tag_t| {
         const tag_time = time - tag_t;
+        const tag_duration = tag_raw.duration;
         const tag_time_remaining = tag_duration - tag_time;
-        if (tag_time > 0 and tag_time_remaining > 0) {
+        if (tag_time >= 0 and tag_time_remaining > 0) {
             tags_active.insert(tag);
             tag_times.set(tag, tag_time);
             tag_times_remaining.set(tag, tag_time_remaining);
