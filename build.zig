@@ -29,7 +29,7 @@ fn compileShader(
     shader: Shader,
     comptime stage: Shader.Stage,
     comptime config: anytype,
-    tags_map: anytype,
+    tag_map: anytype,
 ) void {
     const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
     const output_path = allocPrint(arena, "{s}.{s}.{s}.spv", .{
@@ -76,9 +76,9 @@ fn compileShader(
     }
 
     // Add tag indices
-    var tags_iterator = tags_map.iterator();
+    var tag_iterator = tag_map.iterator();
     var num_tags: u32 = 0;
-    while (tags_iterator.next()) |entry| {
+    while (tag_iterator.next()) |entry| {
         shaderc_run.addArg(allocPrint(
             arena,
             "-DTAG_{s}={}",
@@ -135,10 +135,10 @@ pub fn compileShaders(
     }, b, "src/timeline.zon");
 
     // Find tag indices
-    var tags: std.StringHashMapUnmanaged(u32) = .empty;
+    var tag_set: std.StringHashMapUnmanaged(u32) = .empty;
     for (timeline.tags) |tag| {
-        const num_tags = tags.count();
-        _ = tags.getOrPutValue(b.allocator, tag.name, num_tags) catch @panic("OOM");
+        const num_tags = tag_set.count();
+        _ = tag_set.getOrPutValue(b.allocator, tag.name, num_tags) catch @panic("OOM");
     }
 
     // Traverse the render.zon tree
@@ -147,12 +147,12 @@ pub fn compileShaders(
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    compileShader(b.allocator, b, d, stages.vert, .vertex, config, &tags);
-                    compileShader(b.allocator, b, d, stages.frag, .fragment, config, &tags);
+                    compileShader(b.allocator, b, d, stages.vert, .vertex, config, &tag_set);
+                    compileShader(b.allocator, b, d, stages.frag, .fragment, config, &tag_set);
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                compileShader(b.allocator, b, d, disp.comp, .compute, config, &tags);
+                compileShader(b.allocator, b, d, disp.comp, .compute, config, &tag_set);
             },
         }
     }
