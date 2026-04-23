@@ -882,6 +882,13 @@ fn uploadStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
     return offset;
 }
 
+inline fn tagsRender(comptime node: anytype, tags: timeline.TagSet) bool {
+    const all: timeline.TagSet = comptime .initMany(node.require_all_tags);
+    const any: timeline.TagSet = comptime .initMany(node.require_any_tags);
+    return all.subsetOf(tags) and
+        (any.eql(.empty) or !any.intersectWith(tags).eql(.empty));
+}
+
 const RenderParameters = struct {
     cmdbuf: *c.SDL_GPUCommandBuffer,
     swapchain_texture: *c.SDL_GPUTexture,
@@ -895,8 +902,7 @@ fn computePass(
     tags: timeline.TagSet,
 ) !void {
     // Filter pass by tag requirements list
-    const pass_req: timeline.TagSet = comptime .initMany(pass.require_tags);
-    if (!pass_req.subsetOf(tags)) return;
+    if (!tagsRender(pass, tags)) return;
 
     var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
     for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
@@ -932,8 +938,7 @@ fn computePass(
 
     inline for (pass.dispatches) |dispatch| {
         // Filter dispatch by tag requirements list
-        const dispatch_req: timeline.TagSet = comptime .initMany(dispatch.require_tags);
-        if (dispatch_req.subsetOf(tags)) {
+        if (tagsRender(dispatch, tags)) {
             for (dispatch.samplers, 0..) |tex, slot| {
                 const reference = comptime compiler.parseIndex(tex.texture) catch |e|
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
@@ -992,8 +997,7 @@ fn renderPass(
     tags: timeline.TagSet,
 ) !void {
     // Filter pass by tag requirements list
-    const pass_req: timeline.TagSet = comptime .initMany(pass.require_tags);
-    if (!pass_req.subsetOf(tags)) return;
+    if (!tagsRender(pass, tags)) return;
 
     // Initialize color target infos
     const color_target_infos = blk: {
@@ -1074,8 +1078,7 @@ fn renderPass(
     // Record drawcalls
     inline for (pass.drawcalls) |drawcall| {
         // Filter drawcall by tag requirements list
-        const draw_req: timeline.TagSet = comptime .initMany(drawcall.require_tags);
-        if (draw_req.subsetOf(tags)) {
+        if (tagsRender(drawcall, tags)) {
             // Bind vertex buffer, storing number of instances to draw
             var num_buffers: u32 = 0;
             var num_vertices: u32 = drawcall.num_vertices orelse 3;
@@ -1311,7 +1314,7 @@ pub fn render() !void {
             .swapchain_texture = swapchain_texture,
             .swapchain_viewport = &swapchain_viewport,
             .resolution_match = resolution_match,
-        }, frame_state.tags_active);
+        }, frame_state.tags);
 
         // Blit output_buffer to swapchain when necessary
         if (!resolution_match) {

@@ -29,7 +29,7 @@ pub const duration = blk: {
 
 pub const State = struct {
     time: f32,
-    tags_active: TagSet,
+    tags: TagSet,
     tag_times: TagVector,
     tag_times_remaining: TagVector,
     tag_durations: TagVector,
@@ -257,7 +257,7 @@ pub fn resolve(time: f32) State {
 
     return .{
         .time = time,
-        .tags_active = tags_active,
+        .tags = tags_active,
         .tag_times = tag_times,
         .tag_times_remaining = tag_times_remaining,
         .tag_durations = tag_durations,

@@ -75,7 +75,8 @@ pub const Render = struct {
     };
 
     pub const Drawcall = struct {
-        require_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const timeline.Tag = &.{},
+        require_any_tags: []const timeline.Tag = &.{},
         pipelines: []const GraphicsPipeline,
         index_buffer: ?[]const u8 = null,
         vertex_buffer: ?[]const u8 = null,
@@ -95,7 +96,8 @@ pub const Render = struct {
     };
 
     pub const ComputeDispatch = struct {
-        require_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const timeline.Tag = &.{},
+        require_any_tags: []const timeline.Tag = &.{},
         comp: Shader,
         threadcount: ComputeDimensions,
         groupcount: ComputeDimensions,
@@ -110,14 +112,16 @@ pub const Render = struct {
     };
 
     pub const RenderPass = struct {
-        require_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const timeline.Tag = &.{},
+        require_any_tags: []const timeline.Tag = &.{},
         drawcalls: []const Drawcall,
         color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
         depth_target: ?RenderTarget(usize) = null,
     };
 
     pub const ComputePass = struct {
-        require_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const timeline.Tag = &.{},
+        require_any_tags: []const timeline.Tag = &.{},
         dispatches: []const ComputeDispatch,
         readwrite_storage_textures: []const []const u8 = &.{},
         readwrite_storage_buffers: []const []const u8 = &.{},
