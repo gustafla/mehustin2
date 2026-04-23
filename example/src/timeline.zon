@@ -1,6 +1,6 @@
 .{
     .tags = .{
-        .{ .t = 0.0, .duration = 600, .name = "default" },
+        .{ .t = .{ .abs = 0.0 }, .duration = .{ .abs = 600 }, .name = "default" },
     },
     .text = .{
         .atlas_size = 1024,

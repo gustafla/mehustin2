@@ -32,7 +32,7 @@ pub fn updateDebugStrings(state: timeline.State, fps_str: *[]const u8, time_str:
         var iterator = state.tags.iterator();
         while (iterator.next()) |tag| {
             const t = state.tag_times.get(tag);
-            writer.print("{t}={:.1}", .{ tag, t }) catch unreachable;
+            writer.print("{t}={:.1} ", .{ tag, t }) catch unreachable;
         }
         time_str.* = writer.buffered();
     }

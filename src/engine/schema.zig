@@ -149,9 +149,14 @@ pub const Timeline = struct {
     },
 
     pub const Tag = struct {
-        t: f32,
-        duration: f32 = 0,
+        t: TagTime,
+        duration: TagTime = .{ .abs = 0 },
         name: []const u8,
+    };
+
+    pub const TagTime = union(enum) {
+        abs: f32,
+        rel: struct { to: []const u8, by: f32 = 0 },
     };
 
     pub const CameraControl = struct {

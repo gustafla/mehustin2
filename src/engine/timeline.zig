@@ -92,12 +92,55 @@ pub const Tag = blk: {
 pub const TagSet = std.EnumSet(Tag);
 pub const TagVector = std.EnumArray(Tag, f32);
 
+fn resolveTagTime(comptime i: usize, comptime field: []const u8) f32 {
+    const tag_raw = timeline.tags[i];
+    const t = @field(tag_raw, field);
+    switch (t) {
+        .abs => |abs| return abs,
+        .rel => |rel| {
+            var iterator = std.mem.reverseIterator(timeline.tags[0..i]);
+            while (iterator.next()) |tag_other| {
+                if (std.mem.eql(u8, tag_other.name, rel.to)) {
+                    const time = resolveTagTime(
+                        iterator.index,
+                        field,
+                    ) + rel.by;
+                    if (time < 0) {
+                        @compileError(std.fmt.comptimePrint(
+                            "Tag \"{s}\" at index {} yields negative {s} value",
+                            .{ tag_raw.name, i, field },
+                        ));
+                    }
+                    return time;
+                }
+            }
+            @compileError("Could not find tag \"" ++ rel.to ++ "\"");
+        },
+    }
+}
+
 const tag_table = blk: {
     var tags: [timeline.tags.len]Tag = undefined;
     for (&tags, timeline.tags) |*tag, tag_raw| {
         tag.* = @field(Tag, tag_raw.name);
     }
     break :blk tags;
+};
+
+const tag_time_table = blk: {
+    var times: [timeline.tags.len]f32 = undefined;
+    for (&times, 0..) |*time, i| {
+        time.* = resolveTagTime(i, "t");
+    }
+    break :blk times;
+};
+
+const tag_duration_table = blk: {
+    var times: [timeline.tags.len]f32 = undefined;
+    for (&times, 0..) |*time, i| {
+        time.* = resolveTagTime(i, "duration");
+    }
+    break :blk times;
 };
 
 fn sumLen(comptime slices: anytype) usize {
@@ -176,14 +219,14 @@ pub fn resolve(time: f32) State {
     var tag_times: TagVector = .initFill(-1);
     var tag_times_remaining: TagVector = .initFill(-1);
     var tag_durations: TagVector = .initFill(-1);
-    for (timeline.tags, tag_table) |tag_raw, tag| {
-        const tag_time = time - tag_raw.t;
-        const tag_time_remaining = tag_raw.duration - tag_time;
+    for (tag_table, tag_time_table, tag_duration_table) |tag, tag_t, tag_duration| {
+        const tag_time = time - tag_t;
+        const tag_time_remaining = tag_duration - tag_time;
         if (tag_time > 0 and tag_time_remaining > 0) {
             tags_active.insert(tag);
             tag_times.set(tag, tag_time);
             tag_times_remaining.set(tag, tag_time_remaining);
-            tag_durations.set(tag, tag_raw.duration);
+            tag_durations.set(tag, tag_duration);
         }
     }
 
