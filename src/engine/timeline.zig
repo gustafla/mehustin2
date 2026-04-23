@@ -24,7 +24,7 @@ pub const spb = 1.0 / bps;
 pub const duration = blk: {
     var last = 0.0;
     for (timeline.tags) |tag| last = @max(last, tag.t + tag.duration);
-    break :blk last;
+    break :blk last * spb;
 };
 
 pub const State = struct {
