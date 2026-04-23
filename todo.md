@@ -1,8 +1,5 @@
 # High priority
 
-- [ ] Tag times, remaining and durations should be an SSBO array
-  - [ ] Add tags and number of tags as glslc macros
-  - [ ] Add reserved global bind slots and user slot starting index
 - [ ] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [ ] Call msdf-atlas-gen at build-time
@@ -20,6 +17,7 @@
 
 # Backlog
 
+- [ ] Add reserved global bind slots (tag times etc.) and user slot starting index
 - [ ] Add win32 icon resource
 - [ ] Reorganize uniforms
   - 128 bytes per uniform slot per shader stage (4 slots per stage)
@@ -50,6 +48,8 @@
 
 # Done
 
+- [X] Tag times, remaining and durations should be an SSBO array
+  - [X] Add tags and number of tags as glslc macros
 - [X] Make clips able to overlap (rename to e.g. logics)
   - [X] Tags currently active as a bit mask
   - [X] Render.zon condition must be processed with runtime branches

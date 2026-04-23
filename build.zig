@@ -29,6 +29,7 @@ fn compileShader(
     shader: Shader,
     comptime stage: Shader.Stage,
     comptime config: anytype,
+    tags_map: anytype,
 ) void {
     const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
     const output_path = allocPrint(arena, "{s}.{s}.{s}.spv", .{
@@ -74,6 +75,19 @@ fn compileShader(
         }
     }
 
+    // Add tag indices
+    var tags_iterator = tags_map.iterator();
+    var num_tags: u32 = 0;
+    while (tags_iterator.next()) |entry| {
+        shaderc_run.addArg(allocPrint(
+            arena,
+            "-DTAG_{s}={}",
+            .{ toUpper(arena, entry.key_ptr.*), entry.value_ptr.* },
+        ));
+        num_tags += 1;
+    }
+    shaderc_run.addArg(allocPrint(arena, "-DNUM_TAGS={}", .{num_tags}));
+
     const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
     shaderc_run.addFileArg(b.path(input_path));
 
@@ -86,6 +100,17 @@ fn compileShader(
     b.getInstallStep().dependOn(&shader_install.step);
 }
 
+fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
+    var buffer: [1024]u8 = undefined;
+    const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch @panic("Can't open " ++ path);
+    defer file.close(b.graph.io);
+    var reader = file.reader(b.graph.io, &buffer);
+    const data = reader.interface.allocRemainingAlignedSentinel(b.allocator, .unlimited, .of(u8), 0) catch @panic("OOM");
+    return std.zon.parse.fromSliceAlloc(T, b.allocator, data, null, .{
+        .ignore_unknown_fields = true,
+    }) catch @panic("Failed to parse " ++ path);
+}
+
 /// Sets up glslc steps for all shader combinations in the caller project's render.zon
 pub fn compileShaders(
     b: *std.Build,
@@ -93,21 +118,7 @@ pub fn compileShaders(
     comptime config: anytype,
 ) void {
     // Load and parse render.zon at runtime
-    var buffer: [1024]u8 = undefined;
-    const file = b.build_root.handle.openFile(
-        b.graph.io,
-        "src/render.zon",
-        .{},
-    ) catch @panic("Can't open src/render.zon");
-    defer file.close(b.graph.io);
-    var reader = file.reader(b.graph.io, &buffer);
-    const data = reader.interface.allocRemainingAlignedSentinel(
-        b.allocator,
-        .unlimited,
-        .of(u8),
-        0,
-    ) catch @panic("OOM");
-    const render = std.zon.parse.fromSliceAlloc(struct { passes: []const union(enum) {
+    const render = parseZon(struct { passes: []const union(enum) {
         render: struct { drawcalls: []const struct {
             pipelines: []const struct {
                 shader: Shader.Graphics,
@@ -116,9 +127,19 @@ pub fn compileShaders(
         compute: struct { dispatches: []const struct {
             comp: Shader,
         } },
-    } }, b.allocator, data, null, .{
-        .ignore_unknown_fields = true,
-    }) catch @panic("Failed to parse src/render.zon");
+    } }, b, "src/render.zon");
+
+    // Load and parse timeline.zon at runtime
+    const timeline = parseZon(struct {
+        tags: []const struct { name: []const u8 },
+    }, b, "src/timeline.zon");
+
+    // Find tag indices
+    var tags: std.StringHashMapUnmanaged(u32) = .empty;
+    for (timeline.tags) |tag| {
+        const num_tags = tags.count();
+        _ = tags.getOrPutValue(b.allocator, tag.name, num_tags) catch @panic("OOM");
+    }
 
     // Traverse the render.zon tree
     for (render.passes) |pass| {
@@ -126,12 +147,12 @@ pub fn compileShaders(
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    compileShader(b.allocator, b, d, stages.vert, .vertex, config);
-                    compileShader(b.allocator, b, d, stages.frag, .fragment, config);
+                    compileShader(b.allocator, b, d, stages.vert, .vertex, config, &tags);
+                    compileShader(b.allocator, b, d, stages.frag, .fragment, config, &tags);
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                compileShader(b.allocator, b, d, disp.comp, .compute, config);
+                compileShader(b.allocator, b, d, disp.comp, .compute, config, &tags);
             },
         }
     }
