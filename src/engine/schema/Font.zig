@@ -15,7 +15,7 @@ pub const Origin = enum {
     center,
 };
 
-const Atlas = struct {
+pub const Atlas = struct {
     atlas: Parameters,
     metrics: Metrics,
     glyphs: []const Glyph,
@@ -45,8 +45,8 @@ const Atlas = struct {
     pub const Glyph = struct {
         unicode: u32,
         advance: f32,
-        plane_bounds: Bounds,
-        atlas_bounds: Bounds,
+        plane_bounds: ?Bounds,
+        atlas_bounds: ?Bounds,
     };
 
     pub const Bounds = struct {

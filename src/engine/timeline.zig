@@ -5,7 +5,6 @@ const Anchor = script.Anchor;
 const timeline = script.config.timeline;
 
 const camera = @import("camera.zig");
-const font = @import("font.zig");
 const math = @import("math.zig");
 const Vec2 = math.Vec2;
 const Vec3 = math.Vec3;
@@ -530,7 +529,7 @@ pub const InstanceText = extern struct {
 };
 
 var font_sizes: [timeline.text.fonts.len]f32 = undefined;
-var font_glyphs: [timeline.text.fonts.len][128]font.GlyphInfo = undefined;
+var font_glyphs: [timeline.text.fonts.len][128]Font.Atlas.Glyph = undefined;
 
 pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
     return struct {

@@ -11,4 +11,3 @@
 
 #include <par_shapes.h>
 #include <stb_image.h>
-#include <stb_truetype.h>

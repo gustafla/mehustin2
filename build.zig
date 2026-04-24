@@ -168,13 +168,9 @@ pub fn build(b: *std.Build) void {
     // Link SDL
     if (options.system_sdl) {
         engine_mod.linkSystemLibrary("SDL3", .{});
-        render_mod.linkSystemLibrary("SDL3", .{});
-        exe_mod.linkSystemLibrary("SDL3", .{});
     } else {
         const sdl_lib = sdl_dep.artifact("SDL3");
         engine_mod.linkLibrary(sdl_lib);
-        render_mod.linkLibrary(sdl_lib);
-        exe_mod.linkLibrary(sdl_lib);
     }
 
     // Add stb_vorbis to exe
@@ -192,12 +188,6 @@ pub fn build(b: *std.Build) void {
     );
     engine_mod.addIncludePath(stb_dep.path("."));
     engine_mod.addCSourceFile(.{ .file = stb_image_c });
-    const stb_truetype_c = c_write.add("stb_truetype.c",
-        \\#define STB_TRUETYPE_IMPLEMENTATION
-        \\#include <stb_truetype.h>
-        \\
-    );
-    engine_mod.addCSourceFile(.{ .file = stb_truetype_c });
     const par_shapes_c = c_write.add("par_shapes.c",
         \\#define PAR_SHAPES_IMPLEMENTATION
         \\#include <par_shapes.h>
