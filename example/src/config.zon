@@ -1,6 +1,7 @@
 .{
     .data_dir = "data",
     .shader_dir = "shaders",
+    .font_dir = "fonts",
 
     .width = 1920,
     .height = 1080,

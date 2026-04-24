@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     // Initialize options and dependency
     const options = engine.Options.init(b);
     const engine_dep = b.dependency("mehustin2", options);
+    const config = @import("src/config.zon");
 
     // Create script module
     const script_mod = b.createModule(.{
@@ -15,11 +16,10 @@ pub fn build(b: *std.Build) void {
     engine.importScript(engine_dep, script_mod);
 
     // Compile and install shaders
-    engine.compileShaders(
-        b,
-        engine_dep,
-        @import("src/config.zon"),
-    );
+    engine.compileShaders(b, engine_dep, config);
+
+    // Bake font atlases
+    engine.bakeFontAtlases(b, engine_dep, config);
 
     // Install the build artifacts
     engine.install(b, engine_dep, options);

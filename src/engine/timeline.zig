@@ -13,6 +13,7 @@ const schema = @import("schema.zig");
 const EventTime = schema.Timeline.EventTime;
 const Text = schema.Timeline.Text;
 const Camera = schema.Timeline.Camera;
+const Font = schema.Font;
 const types = @import("types.zig");
 const BufferInfo = types.BufferInfo;
 const TextureInfo = types.TextureInfo;
@@ -537,16 +538,14 @@ pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
             return .{
                 .tex_type = .@"2d_array",
                 .format = .r8_unorm,
-                .width = timeline.text.atlas_size,
-                .height = timeline.text.atlas_size,
+                .width = 1024, // TODO: will be replaced soon
+                .height = 1024,
                 .depth = @intCast(timeline.text.fonts.len),
             };
         }
 
         pub fn init(dst: []u8) !void {
-            const layer_size =
-                timeline.text.atlas_size *
-                timeline.text.atlas_size;
+            const layer_size = 1024 * 1024;
 
             for (
                 timeline.text.fonts,
@@ -555,16 +554,16 @@ pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
                 0..,
             ) |def, *size, *glyph_info, i| {
                 size.* = def.size;
-                const ttf = try util.loadFile(io.*, gpa.*, def.name);
+                const ttf = try util.loadFile(io.*, gpa.*, def.file);
                 defer gpa.free(ttf);
 
                 try font.bakeSDFAtlas(
                     ttf.ptr,
                     def.size,
-                    def.padding,
-                    def.dist_scale,
-                    timeline.text.atlas_size,
-                    timeline.text.atlas_size,
+                    10, // TODO: will be replaced soon
+                    8,
+                    1024,
+                    1024,
                     glyph_info,
                     dst.ptr + layer_size * i,
                 );
@@ -577,7 +576,7 @@ fn genText(
     dst: []InstanceText,
     str: []const u8,
     height_scale: f32,
-    origin: Text.Origin,
+    origin: Font.Origin,
     pos_ndc: [2]f32,
     color: [4]f32,
     font_idx: usize,

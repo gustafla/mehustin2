@@ -4,7 +4,9 @@ const script = @import("script");
 
 const camera = @import("camera.zig");
 const math = @import("math.zig");
+pub const Font = @import("schema/Font.zig");
 pub const Shader = @import("schema/Shader.zig");
+pub const transform = @import("schema/transform.zig");
 const timeline = @import("timeline.zig");
 const types = @import("types.zig");
 const PrimitiveType = types.PrimitiveType;
@@ -191,16 +193,8 @@ pub const Timeline = struct {
     };
 
     pub const Text = struct {
-        atlas_size: u32 = 1024,
         fonts: []const Font,
         track: []const Segment,
-
-        pub const Font = struct {
-            name: []const u8,
-            size: f32,
-            padding: u32,
-            dist_scale: f32 = 4,
-        };
 
         pub const Segment = struct {
             t: EventTime = .{ .abs = 0 },
@@ -212,7 +206,7 @@ pub const Timeline = struct {
             font: usize = 0,
             pos: math.Vec2, // NDC position
             scale: f32 = 0.1, // Fraction of screen height
-            origin: Origin = .top_left,
+            origin: Font.Origin = .top_left,
             color: math.Vec4 = @splat(1),
             effect: enum(u8) {
                 none,
@@ -225,18 +219,6 @@ pub const Timeline = struct {
             } = null,
             fade_in: f32 = 0,
             fade_out: f32 = 0,
-        };
-
-        pub const Origin = enum {
-            left,
-            right,
-            top,
-            bottom,
-            top_left,
-            top_right,
-            bottom_left,
-            bottom_right,
-            center,
         };
     };
 };

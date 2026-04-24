@@ -1,162 +1,7 @@
 const std = @import("std");
 
 const Shader = @import("src/engine/schema/Shader.zig");
-
-fn addScript(
-    engine_mod: *std.Build.Module,
-    render_mod: *std.Build.Module,
-    exe_mod: *std.Build.Module,
-    script_mod: *std.Build.Module,
-) void {
-    script_mod.addImport("engine", engine_mod);
-    engine_mod.addImport("script", script_mod);
-    render_mod.addImport("script", script_mod);
-    exe_mod.addImport("script", script_mod);
-}
-
-// Hooks up module dependencies in the caller project's build graph.
-pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) void {
-    const engine_mod = d.module("engine");
-    const render_mod = d.module("render");
-    const exe_mod = d.module("exe");
-    addScript(engine_mod, render_mod, exe_mod, script_mod);
-}
-
-fn compileShader(
-    arena: std.mem.Allocator,
-    b: *std.Build,
-    d: *std.Build.Dependency,
-    shader: Shader,
-    comptime stage: Shader.Stage,
-    comptime config: anytype,
-    tag_map: anytype,
-) void {
-    const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
-    const output_path = allocPrint(arena, "{s}.{s}.{s}.spv", .{
-        b.pathJoin(&.{ config.data_dir, shader.file }),
-        @tagName(stage),
-        shader.entrypoint,
-    });
-
-    // Create run step
-    const shaderc_run = b.addSystemCommand(&.{
-        "glslc",
-        "-O",
-        "-MD",
-        "-MF",
-    });
-
-    _ = shaderc_run.addDepFileOutputArg("shader.d");
-    shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
-    shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
-
-    // Set the stage
-    shaderc_run.addArg(allocPrint(arena, "-fshader-stage={s}", .{
-        @tagName(stage),
-    }));
-
-    // Enable the stage and entry point macros
-    const STAGE = toUpper(arena, @tagName(stage));
-    const ENTRYPOINT = toUpper(arena, shader.entrypoint);
-    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{STAGE}));
-    shaderc_run.addArg(allocPrint(arena, "-D{s}", .{ENTRYPOINT}));
-    shaderc_run.addArg(allocPrint(arena, "-D{s}_{s}", .{ ENTRYPOINT, STAGE }));
-
-    // Add args from conf
-    inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
-        const upper = toUpper(arena, field.name);
-        switch (@typeInfo(field.type)) {
-            .comptime_float, .comptime_int, .float, .int => {
-                shaderc_run.addArg(allocPrint(arena, "-D{s}={}", .{
-                    upper, @field(config, field.name),
-                }));
-            },
-            else => {},
-        }
-    }
-
-    // Add tag indices
-    var tag_iterator = tag_map.iterator();
-    var num_tags: u32 = 0;
-    while (tag_iterator.next()) |entry| {
-        shaderc_run.addArg(allocPrint(
-            arena,
-            "-DTAG_{s}={}",
-            .{ toUpper(arena, entry.key_ptr.*), entry.value_ptr.* },
-        ));
-        num_tags += 1;
-    }
-    shaderc_run.addArg(allocPrint(arena, "-DNUM_TAGS={}", .{num_tags}));
-
-    const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
-    shaderc_run.addFileArg(b.path(input_path));
-
-    // Create install step
-    const shader_install = b.addInstallBinFile(
-        shaderc_output,
-        output_path,
-    );
-    shader_install.step.dependOn(&shaderc_run.step);
-    b.getInstallStep().dependOn(&shader_install.step);
-}
-
-fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
-    var buffer: [1024]u8 = undefined;
-    const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch @panic("Can't open " ++ path);
-    defer file.close(b.graph.io);
-    var reader = file.reader(b.graph.io, &buffer);
-    const data = reader.interface.allocRemainingAlignedSentinel(b.allocator, .unlimited, .of(u8), 0) catch @panic("OOM");
-    return std.zon.parse.fromSliceAlloc(T, b.allocator, data, null, .{
-        .ignore_unknown_fields = true,
-    }) catch @panic("Failed to parse " ++ path);
-}
-
-/// Sets up glslc steps for all shader combinations in the caller project's render.zon
-pub fn compileShaders(
-    b: *std.Build,
-    d: *std.Build.Dependency,
-    comptime config: anytype,
-) void {
-    // Load and parse render.zon at runtime
-    const render = parseZon(struct { passes: []const union(enum) {
-        render: struct { drawcalls: []const struct {
-            pipelines: []const struct {
-                shader: Shader.Graphics,
-            },
-        } },
-        compute: struct { dispatches: []const struct {
-            comp: Shader,
-        } },
-    } }, b, "src/render.zon");
-
-    // Load and parse timeline.zon at runtime
-    const timeline = parseZon(struct {
-        tags: []const struct { name: []const u8 },
-    }, b, "src/timeline.zon");
-
-    // Find tag indices
-    var tag_set: std.StringHashMapUnmanaged(u32) = .empty;
-    for (timeline.tags) |tag| {
-        const num_tags = tag_set.count();
-        _ = tag_set.getOrPutValue(b.allocator, tag.name, num_tags) catch @panic("OOM");
-    }
-
-    // Traverse the render.zon tree
-    for (render.passes) |pass| {
-        switch (pass) {
-            .render => |rpass| for (rpass.drawcalls) |draw| {
-                for (draw.pipelines) |pipe| {
-                    const stages = pipe.shader.resolve();
-                    compileShader(b.allocator, b, d, stages.vert, .vertex, config, &tag_set);
-                    compileShader(b.allocator, b, d, stages.frag, .fragment, config, &tag_set);
-                }
-            },
-            .compute => |cpass| for (cpass.dispatches) |disp| {
-                compileShader(b.allocator, b, d, disp.comp, .compute, config, &tag_set);
-            },
-        }
-    }
-}
+const Font = @import("src/engine/schema/Font.zig");
 
 pub const PresentationMode = enum { vsync, mailbox };
 
@@ -231,61 +76,6 @@ pub const Options = struct {
         return options_mod.createModule();
     }
 };
-
-pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
-    // Add data files to bin
-    const install_data_dir = b.addInstallDirectory(.{
-        .source_dir = b.path("data"),
-        .install_dir = .bin,
-        .install_subdir = "data",
-    });
-    b.getInstallStep().dependOn(&install_data_dir.step);
-
-    // Test run of msdf-atlas-gen
-    // const msdf = d.artifact("msdf-atlas-gen");
-    // const msdf_run = b.addRunArtifact(msdf);
-    // msdf_run.addArg("-font");
-    // msdf_run.addFileArg(b.path("data/Inter-VariableFont_opsz,wght.ttf"));
-    // msdf_run.addArg("-imageout");
-    // const msdf_png = msdf_run.addOutputFileArg("atlas.png");
-    // b.getInstallStep().dependOn(&b.addInstallBinFile(msdf_png, "data/atlas.png").step);
-
-    // Add README.md to bin
-    b.getInstallStep().dependOn(&b.addInstallBinFile(
-        b.path("README.md"),
-        "README.md",
-    ).step);
-
-    // Add THIRD-PARTY-LICENSES.md to bin
-    b.getInstallStep().dependOn(&b.addInstallBinFile(
-        d.path("vendor/LICENSES.md"),
-        "THIRD-PARTY-LICENSES.md",
-    ).step);
-
-    // Set exe rpath
-    if (options.render_dynlib) {
-        const exe_mod = d.module("exe");
-        const lib_path = b.getInstallPath(.lib, ".");
-        exe_mod.addRPath(.{ .cwd_relative = lib_path });
-    }
-
-    // Add exe to bin
-    const exe = d.artifact(options.exe_name);
-    b.installArtifact(exe);
-
-    // Add lib to lib
-    if (options.render_dynlib) {
-        const render_lib = d.artifact("render");
-        b.installArtifact(render_lib);
-    }
-
-    // Add run step
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.setCwd(.{ .cwd_relative = b.exe_dir });
-    run_cmd.step.dependOn(b.getInstallStep());
-    const run_step = b.step("run", "Run the demo");
-    run_step.dependOn(&run_cmd.step);
-}
 
 pub fn build(b: *std.Build) void {
     const options = Options.init(b);
@@ -439,6 +229,247 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(msdf_atlas_gen);
 }
 
+// Hooks up module dependencies in the caller project's build graph.
+pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) void {
+    const engine_mod = d.module("engine");
+    const render_mod = d.module("render");
+    const exe_mod = d.module("exe");
+    addScript(engine_mod, render_mod, exe_mod, script_mod);
+}
+
+/// Sets up glslc steps for all shader combinations in the caller project's render.zon
+pub fn compileShaders(
+    b: *std.Build,
+    d: *std.Build.Dependency,
+    comptime config: anytype,
+) void {
+    // Load and parse render.zon at runtime
+    const render = parseZon(struct { passes: []const union(enum) {
+        render: struct { drawcalls: []const struct {
+            pipelines: []const struct {
+                shader: Shader.Graphics,
+            },
+        } },
+        compute: struct { dispatches: []const struct {
+            comp: Shader,
+        } },
+    } }, b, "src/render.zon");
+
+    // Load and parse timeline.zon at runtime
+    const timeline = parseZon(struct {
+        tags: []const struct { name: []const u8 },
+    }, b, "src/timeline.zon");
+
+    // Find tag indices
+    var tag_set: std.StringHashMapUnmanaged(u32) = .empty;
+    for (timeline.tags) |tag| {
+        const num_tags = tag_set.count();
+        _ = tag_set.getOrPutValue(b.allocator, tag.name, num_tags) catch @panic("OOM");
+    }
+
+    // Traverse the render.zon tree
+    for (render.passes) |pass| {
+        switch (pass) {
+            .render => |rpass| for (rpass.drawcalls) |draw| {
+                for (draw.pipelines) |pipe| {
+                    const stages = pipe.shader.resolve();
+                    compileShader(b, d, stages.vert, .vertex, config, &tag_set);
+                    compileShader(b, d, stages.frag, .fragment, config, &tag_set);
+                }
+            },
+            .compute => |cpass| for (cpass.dispatches) |disp| {
+                compileShader(b, d, disp.comp, .compute, config, &tag_set);
+            },
+        }
+    }
+}
+
+pub fn bakeFontAtlases(
+    b: *std.Build,
+    d: *std.Build.Dependency,
+    comptime config: anytype,
+) void {
+    const arena = b.allocator;
+    const msdf_atlas_gen = d.artifact("msdf-atlas-gen");
+
+    // Load and parse timeline.zon at runtime
+    const timeline = parseZon(struct {
+        text: struct {
+            fonts: []const Font,
+        },
+    }, b, "src/timeline.zon");
+
+    for (timeline.text.fonts, 0..) |font, i| {
+        const input_path = b.pathJoin(&.{ config.font_dir, font.file });
+        const output_path = b.pathJoin(&.{ config.data_dir, b.fmt("font{}", .{i}) });
+        const output_path_json = b.fmt("{s}.json", .{output_path});
+        const output_path_png = b.fmt("{s}.png", .{output_path});
+
+        const msdf_run = b.addRunArtifact(msdf_atlas_gen);
+        msdf_run.setCwd(b.path("."));
+        msdf_run.addFileInput(b.path(input_path));
+        if (font.variables.len == 0) {
+            msdf_run.addArgs(&.{ "-font", input_path });
+        } else {
+            const variables = std.mem.join(arena, "&", font.variables) catch @panic("OOM");
+            const spec = b.fmt("{s}?{s}", .{ input_path, variables });
+            msdf_run.addArgs(&.{ "-varfont", spec });
+        }
+        msdf_run.addArgs(&.{ "-type", "mtsdf" });
+        msdf_run.addArg("-potr");
+        msdf_run.addArgs(&.{ "-size", b.fmt("{}", .{font.size}) });
+        msdf_run.addArgs(&.{ "-empadding", b.fmt("{}", .{font.padding_em}) });
+
+        msdf_run.addArg("-json");
+        const json_output = msdf_run.addOutputFileArg(output_path_json);
+        const json_install = b.addInstallBinFile(json_output, output_path_json);
+        json_install.step.dependOn(&msdf_run.step);
+        b.getInstallStep().dependOn(&json_install.step);
+
+        msdf_run.addArg("-imageout");
+        const png_output = msdf_run.addOutputFileArg(output_path_png);
+        const png_install = b.addInstallBinFile(png_output, output_path_png);
+        png_install.step.dependOn(&msdf_run.step);
+        b.getInstallStep().dependOn(&png_install.step);
+    }
+}
+
+// Sets up shader and asset compilation in the caller project's build graph.
+pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
+    // Add data files to bin
+    const install_data_dir = b.addInstallDirectory(.{
+        .source_dir = b.path("data"),
+        .install_dir = .bin,
+        .install_subdir = "data",
+    });
+    b.getInstallStep().dependOn(&install_data_dir.step);
+
+    // Add README.md to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
+        b.path("README.md"),
+        "README.md",
+    ).step);
+
+    // Add THIRD-PARTY-LICENSES.md to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
+        d.path("vendor/LICENSES.md"),
+        "THIRD-PARTY-LICENSES.md",
+    ).step);
+
+    // Set exe rpath
+    if (options.render_dynlib) {
+        const exe_mod = d.module("exe");
+        const lib_path = b.getInstallPath(.lib, ".");
+        exe_mod.addRPath(.{ .cwd_relative = lib_path });
+    }
+
+    // Add exe to bin
+    const exe = d.artifact(options.exe_name);
+    b.installArtifact(exe);
+
+    // Add lib to lib
+    if (options.render_dynlib) {
+        const render_lib = d.artifact("render");
+        b.installArtifact(render_lib);
+    }
+
+    // Add run step
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.setCwd(.{ .cwd_relative = b.exe_dir });
+    run_cmd.step.dependOn(b.getInstallStep());
+    const run_step = b.step("run", "Run the demo");
+    run_step.dependOn(&run_cmd.step);
+}
+
+fn addScript(
+    engine_mod: *std.Build.Module,
+    render_mod: *std.Build.Module,
+    exe_mod: *std.Build.Module,
+    script_mod: *std.Build.Module,
+) void {
+    script_mod.addImport("engine", engine_mod);
+    engine_mod.addImport("script", script_mod);
+    render_mod.addImport("script", script_mod);
+    exe_mod.addImport("script", script_mod);
+}
+
+fn compileShader(
+    b: *std.Build,
+    d: *std.Build.Dependency,
+    shader: Shader,
+    comptime stage: Shader.Stage,
+    comptime config: anytype,
+    tag_map: anytype,
+) void {
+    const arena = b.allocator;
+    const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
+    const output_path = b.fmt("{s}.{s}.{s}.spv", .{
+        b.pathJoin(&.{ config.data_dir, shader.file }),
+        @tagName(stage),
+        shader.entrypoint,
+    });
+
+    // Create run step
+    const shaderc_run = b.addSystemCommand(&.{
+        "glslc",
+        "-O",
+        "-MD",
+        "-MF",
+    });
+
+    _ = shaderc_run.addDepFileOutputArg("shader.d");
+    shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
+    shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
+
+    // Set the stage
+    shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{
+        @tagName(stage),
+    }));
+
+    // Enable the stage and entry point macros
+    const STAGE = toUpper(arena, @tagName(stage));
+    const ENTRYPOINT = toUpper(arena, shader.entrypoint);
+    shaderc_run.addArg(b.fmt("-D{s}", .{STAGE}));
+    shaderc_run.addArg(b.fmt("-D{s}", .{ENTRYPOINT}));
+    shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ ENTRYPOINT, STAGE }));
+
+    // Add args from conf
+    inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
+        const upper = toUpper(arena, field.name);
+        switch (@typeInfo(field.type)) {
+            .comptime_float, .comptime_int, .float, .int => {
+                shaderc_run.addArg(b.fmt("-D{s}={}", .{
+                    upper, @field(config, field.name),
+                }));
+            },
+            else => {},
+        }
+    }
+
+    // Add tag indices
+    var tag_iterator = tag_map.iterator();
+    var num_tags: u32 = 0;
+    while (tag_iterator.next()) |entry| {
+        shaderc_run.addArg(b.fmt(
+            "-DTAG_{s}={}",
+            .{ toUpper(arena, entry.key_ptr.*), entry.value_ptr.* },
+        ));
+        num_tags += 1;
+    }
+    shaderc_run.addArg(b.fmt("-DNUM_TAGS={}", .{num_tags}));
+
+    const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
+    shaderc_run.addFileArg(b.path(input_path));
+
+    // Create install step
+    const shader_install = b.addInstallBinFile(
+        shaderc_output,
+        output_path,
+    );
+    shader_install.step.dependOn(&shaderc_run.step);
+    b.getInstallStep().dependOn(&shader_install.step);
+}
+
 fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
     var buffer = arena.alloc(u8, str.len) catch @panic("OOM");
     for (str, 0..) |c, i| {
@@ -447,10 +478,13 @@ fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
     return buffer;
 }
 
-fn allocPrint(
-    allocator: std.mem.Allocator,
-    comptime fmt: []const u8,
-    args: anytype,
-) []const u8 {
-    return std.fmt.allocPrint(allocator, fmt, args) catch @panic("OOM");
+fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
+    var buffer: [1024]u8 = undefined;
+    const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch @panic("Can't open " ++ path);
+    defer file.close(b.graph.io);
+    var reader = file.reader(b.graph.io, &buffer);
+    const data = reader.interface.allocRemainingAlignedSentinel(b.allocator, .unlimited, .of(u8), 0) catch @panic("OOM");
+    return std.zon.parse.fromSliceAlloc(T, b.allocator, data, null, .{
+        .ignore_unknown_fields = true,
+    }) catch @panic("Failed to parse " ++ path);
 }
