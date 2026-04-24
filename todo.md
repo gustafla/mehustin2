@@ -14,6 +14,8 @@
       - [ ] color_targets
       - [ ] depth_targets
       - [ ] Implement resource id resolution ("render"-namespace for internals)
+- [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
+  - [ ] Overrides for pipeline parameters and binds
 
 # Backlog
 
