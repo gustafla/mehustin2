@@ -15,29 +15,29 @@ pub const Origin = enum {
     center,
 };
 
-pub const Atlas = struct {
-    atlas: Parameters,
+pub const MsdfJson = struct {
+    atlas: Atlas,
     metrics: Metrics,
     glyphs: []const Glyph,
     kerning: []const Kerning,
 
-    pub const Parameters = struct {
+    pub const Atlas = struct {
         type: Type,
-        distance_range: f32,
-        distance_range_middle: f32,
+        distanceRange: f32,
+        distanceRangeMiddle: f32,
         size: u32,
         width: u32,
         height: u32,
-        y_origin: Origin,
+        yOrigin: Origin,
     };
 
     pub const Metrics = struct {
-        em_size: f32,
-        line_height: f32,
+        emSize: f32,
+        lineHeight: f32,
         ascender: f32,
         descender: f32,
-        underline_y: f32,
-        underline_thickness: f32,
+        underlineY: f32,
+        underlineThickness: f32,
     };
 
     pub const Kerning = struct {};
@@ -45,8 +45,8 @@ pub const Atlas = struct {
     pub const Glyph = struct {
         unicode: u32,
         advance: f32,
-        plane_bounds: ?Bounds,
-        atlas_bounds: ?Bounds,
+        planeBounds: ?Bounds = null,
+        atlasBounds: ?Bounds = null,
     };
 
     pub const Bounds = struct {

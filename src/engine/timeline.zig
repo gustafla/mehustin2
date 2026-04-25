@@ -528,45 +528,46 @@ pub const InstanceText = extern struct {
     pub const locations = .{ 8, 9, 10, 11 };
 };
 
-var font_sizes: [timeline.text.fonts.len]f32 = undefined;
-var font_glyphs: [timeline.text.fonts.len][128]Font.Atlas.Glyph = undefined;
+var atlas_width: u32 = 0;
+var atlas_height: u32 = 0;
+var msdfs: [timeline.text.fonts.len]std.json.Parsed(Font.MsdfJson) = undefined;
 
 pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
     return struct {
         pub fn create() !TextureInfo {
+            for (&msdfs, 0..) |*msdf, i| {
+                const filename = try std.fmt.allocPrint(gpa.*, "font{}.json", .{i});
+                const json = try util.loadFile(io.*, gpa.*, filename);
+                defer gpa.free(json);
+                msdf.* = try std.json.parseFromSlice(
+                    Font.MsdfJson,
+                    gpa.*,
+                    json,
+                    .{},
+                );
+            }
+
+            for (msdfs) |msdf| {
+                const atlas = msdf.value.atlas;
+                atlas_width = @max(atlas_width, atlas.width);
+                atlas_height = @max(atlas_width, atlas.height);
+            }
+
             return .{
                 .tex_type = .@"2d_array",
                 .format = .r8_unorm,
-                .width = 1024, // TODO: will be replaced soon
-                .height = 1024,
-                .depth = @intCast(timeline.text.fonts.len),
+                .width = atlas_width,
+                .height = atlas_height,
+                .depth = @intCast(msdfs.len),
             };
         }
 
         pub fn init(dst: []u8) !void {
-            const layer_size = 1024 * 1024;
+            _ = dst; // autofix
+            // const layer_size = atlas_width * atlas_height;
+            // TODO: Load atlas png files, blit to dst
 
-            for (
-                timeline.text.fonts,
-                &font_sizes,
-                &font_glyphs,
-                0..,
-            ) |def, *size, *glyph_info, i| {
-                size.* = def.size;
-                const ttf = try util.loadFile(io.*, gpa.*, def.file);
-                defer gpa.free(ttf);
-
-                try font.bakeSDFAtlas(
-                    ttf.ptr,
-                    def.size,
-                    10, // TODO: will be replaced soon
-                    8,
-                    1024,
-                    1024,
-                    glyph_info,
-                    dst.ptr + layer_size * i,
-                );
-            }
+            unreachable;
         }
     };
 }
@@ -581,106 +582,115 @@ fn genText(
     font_idx: usize,
     effect: u8,
 ) u32 {
-    const ndc_per_pixel_y = (height_scale * 2.0) / font_sizes[font_idx];
-    const ndc_per_pixel_x = ndc_per_pixel_y / util.aspectRatio(script.config.main);
-    const line_height = font_sizes[font_idx] * ndc_per_pixel_y;
+    _ = dst; // autofix
+    _ = str; // autofix
+    _ = height_scale; // autofix
+    _ = origin; // autofix
+    _ = pos_ndc; // autofix
+    _ = color; // autofix
+    _ = font_idx; // autofix
+    _ = effect; // autofix
+    unreachable;
+    // const ndc_per_pixel_y = (height_scale * 2.0) / font_sizes[font_idx];
+    // const ndc_per_pixel_x = ndc_per_pixel_y / util.aspectRatio(script.config.main);
+    // const line_height = font_sizes[font_idx] * ndc_per_pixel_y;
 
-    // Measure bounding box
-    var max_width: f32 = 0;
-    var line_width: f32 = 0;
-    var num_lines: f32 = 1;
+    // // Measure bounding box
+    // var max_width: f32 = 0;
+    // var line_width: f32 = 0;
+    // var num_lines: f32 = 1;
 
-    for (str) |char| {
-        if (char == '\n') {
-            max_width = @max(max_width, line_width);
-            line_width = 0;
-            num_lines += 1;
-            continue;
-        }
-        if (char == ' ') {
-            line_width += (font_sizes[font_idx] / 2.0) * ndc_per_pixel_x;
-        } else {
-            line_width += font_glyphs[font_idx][char].advance * ndc_per_pixel_x;
-        }
-    }
-    max_width = @max(max_width, line_width);
-    const total_height = num_lines * line_height;
+    // for (str) |char| {
+    //     if (char == '\n') {
+    //         max_width = @max(max_width, line_width);
+    //         line_width = 0;
+    //         num_lines += 1;
+    //         continue;
+    //     }
+    //     if (char == ' ') {
+    //         line_width += (font_sizes[font_idx] / 2.0) * ndc_per_pixel_x;
+    //     } else {
+    //         line_width += font_glyphs[font_idx][char].advance * ndc_per_pixel_x;
+    //     }
+    // }
+    // max_width = @max(max_width, line_width);
+    // const total_height = num_lines * line_height;
 
-    // Calculate origin
-    var cursor_x = pos_ndc[0];
-    var cursor_y = pos_ndc[1] - line_height;
+    // // Calculate origin
+    // var cursor_x = pos_ndc[0];
+    // var cursor_y = pos_ndc[1] - line_height;
 
-    switch (origin) {
-        .left => {
-            cursor_y += total_height * 0.5;
-        },
-        .right => {
-            cursor_x -= max_width;
-            cursor_y += total_height * 0.5;
-        },
-        .top => {
-            cursor_x -= max_width * 0.5;
-        },
-        .bottom => {
-            cursor_x -= max_width * 0.5;
-            cursor_y += total_height;
-        },
-        .top_left => {},
-        .top_right => {
-            cursor_x -= max_width;
-        },
-        .bottom_left => {
-            cursor_y += total_height;
-        },
-        .bottom_right => {
-            cursor_x -= max_width;
-            cursor_y += total_height;
-        },
-        .center => {
-            cursor_x -= max_width * 0.5;
-            cursor_y += (total_height * 0.5);
-        },
-    }
+    // switch (origin) {
+    //     .left => {
+    //         cursor_y += total_height * 0.5;
+    //     },
+    //     .right => {
+    //         cursor_x -= max_width;
+    //         cursor_y += total_height * 0.5;
+    //     },
+    //     .top => {
+    //         cursor_x -= max_width * 0.5;
+    //     },
+    //     .bottom => {
+    //         cursor_x -= max_width * 0.5;
+    //         cursor_y += total_height;
+    //     },
+    //     .top_left => {},
+    //     .top_right => {
+    //         cursor_x -= max_width;
+    //     },
+    //     .bottom_left => {
+    //         cursor_y += total_height;
+    //     },
+    //     .bottom_right => {
+    //         cursor_x -= max_width;
+    //         cursor_y += total_height;
+    //     },
+    //     .center => {
+    //         cursor_x -= max_width * 0.5;
+    //         cursor_y += (total_height * 0.5);
+    //     },
+    // }
 
-    const start_x = cursor_x;
+    // const start_x = cursor_x;
 
-    // Generate instances
-    @memset(dst, std.mem.zeroes(InstanceText));
-    var instances: u32 = 0;
+    // // Generate instances
+    // @memset(dst, std.mem.zeroes(InstanceText));
+    // var instances: u32 = 0;
 
-    for (str) |char| {
-        if (instances >= dst.len) break;
+    // for (str) |char| {
+    //     if (instances >= dst.len) break;
 
-        if (char == '\n') {
-            cursor_y -= line_height;
-            cursor_x = start_x;
-            continue;
-        }
+    //     if (char == '\n') {
+    //         cursor_y -= line_height;
+    //         cursor_x = start_x;
+    //         continue;
+    //     }
 
-        if (char == ' ') {
-            cursor_x += (font_sizes[font_idx] / 2.0) * ndc_per_pixel_x;
-            continue;
-        }
+    //     if (char == ' ') {
+    //         cursor_x += (font_sizes[font_idx] / 2.0) * ndc_per_pixel_x;
+    //         continue;
+    //     }
 
-        const g = font_glyphs[font_idx][char];
+    //     const g = font_glyphs[font_idx][char];
 
-        const top = cursor_y - (g.y_off * ndc_per_pixel_y);
-        const bottom = top - (g.height * ndc_per_pixel_y);
-        const left = cursor_x + (g.x_off * ndc_per_pixel_x);
-        const right = left + (g.width * ndc_per_pixel_x);
+    //     const top = cursor_y - (g.y_off * ndc_per_pixel_y);
+    //     const bottom = top - (g.height * ndc_per_pixel_y);
+    //     const left = cursor_x + (g.x_off * ndc_per_pixel_x);
+    //     const right = left + (g.width * ndc_per_pixel_x);
 
-        dst[instances] = .{
-            .uv = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
-            .position = .{ left, top, right, bottom },
-            .color = color,
-            .style = .{ @intCast(font_idx), effect },
-        };
+    //     dst[instances] = .{
+    //         .uv = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
+    //         .position = .{ left, top, right, bottom },
+    //         .color = color,
+    //         .style = .{ @intCast(font_idx), effect },
+    //     };
 
-        cursor_x += g.advance * ndc_per_pixel_x;
-        instances += 1;
-    }
+    //     cursor_x += g.advance * ndc_per_pixel_x;
+    //     instances += 1;
+    // }
 
-    return instances;
+    // return instances;
 }
 
 pub const text_instances = struct {

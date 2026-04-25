@@ -6,7 +6,6 @@ const camera = @import("camera.zig");
 const math = @import("math.zig");
 pub const Font = @import("schema/Font.zig");
 pub const Shader = @import("schema/Shader.zig");
-pub const transform = @import("schema/transform.zig");
 const timeline = @import("timeline.zig");
 const types = @import("types.zig");
 const PrimitiveType = types.PrimitiveType;
