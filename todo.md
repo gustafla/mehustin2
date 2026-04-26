@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] Fix transfer buffer alignment issues, e.g. https://wiki.libsdl.org/SDL3/SDL_UploadToGPUTexture
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:

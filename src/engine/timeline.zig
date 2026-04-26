@@ -632,6 +632,7 @@ fn genText(
     effect: u8,
 ) u32 {
     const msdf = msdfs[font_idx];
+    const atlas = msdf.value.atlas;
     const metrics = msdf.value.metrics;
     const glyphs = msdf.value.glyphs;
 
@@ -709,19 +710,20 @@ fn genText(
         const plane_bounds = glyph.planeBounds orelse continue;
         const atlas_bounds = glyph.atlasBounds orelse continue;
 
+        const w: f32 = @floatFromInt(atlas_width);
+        const h: f32 = @floatFromInt(atlas_height);
+        const layer_h: f32 = @floatFromInt(atlas.height);
+
         const top = cursor_y + (plane_bounds.top * ndc_per_em_y);
         const bottom = cursor_y + (plane_bounds.bottom * ndc_per_em_y);
         const left = cursor_x + (plane_bounds.left * ndc_per_em_x);
         const right = cursor_x + (plane_bounds.right * ndc_per_em_x);
-
-        const w: f32 = @floatFromInt(atlas_width);
-        const h: f32 = @floatFromInt(atlas_height);
         dst[instances] = .{
             .uv = .{
                 atlas_bounds.left / w,
-                1.0 - atlas_bounds.top / h,
+                (layer_h - atlas_bounds.top) / h,
                 atlas_bounds.right / w,
-                1.0 - atlas_bounds.bottom / h,
+                (layer_h - atlas_bounds.bottom) / h,
             },
             .position = .{
                 left,

@@ -332,29 +332,35 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     ) |id, texture, info, size| {
         if (!@hasDecl(@field(script.texture, id.name), "init")) continue;
         if (size > 0) {
-            c.SDL_UploadToGPUTexture(
-                copy_pass,
-                &.{
-                    .transfer_buffer = transfer_buffer,
-                    .offset = offset,
-                    .pixels_per_row = info.width,
-                    .rows_per_layer = info.height,
-                },
-                &.{
-                    .texture = texture,
-                    .mip_level = 0,
-                    .layer = 0,
-                    .x = 0,
-                    .y = 0,
-                    .z = 0,
-                    .w = info.width,
-                    .h = info.height,
-                    .d = info.depth,
-                },
-                false,
-            );
+            const is_array = info.tex_type == .@"2d_array" or info.tex_type == .cube;
+            const num_layers = if (is_array) info.depth else 1;
+            const layer_size = size / num_layers;
+
+            for (0..num_layers) |layer_idx| {
+                c.SDL_UploadToGPUTexture(
+                    copy_pass,
+                    &.{
+                        .transfer_buffer = transfer_buffer,
+                        .offset = offset + @as(u32, @intCast(layer_idx * layer_size)),
+                        .pixels_per_row = info.width,
+                        .rows_per_layer = info.height,
+                    },
+                    &.{
+                        .texture = texture,
+                        .mip_level = 0,
+                        .layer = @intCast(layer_idx),
+                        .x = 0,
+                        .y = 0,
+                        .z = 0,
+                        .w = info.width,
+                        .h = info.height,
+                        .d = if (is_array) 1 else info.depth,
+                    },
+                    false,
+                );
+            }
+            offset += size;
         }
-        offset += size;
     }
 
     return update_transfer_buffer_size;
@@ -762,22 +768,28 @@ fn uploadTextures(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
         if (!@hasDecl(texture_src, "updateData")) continue;
 
         if (size > 0) {
-            c.SDL_UploadToGPUTexture(copy_pass, &.{
-                .transfer_buffer = update_transfer_buffer,
-                .offset = offset,
-                .pixels_per_row = info.width,
-                .rows_per_layer = info.height,
-            }, &.{
-                .texture = texture,
-                .mip_level = 0,
-                .layer = 0,
-                .x = 0,
-                .y = 0,
-                .z = 0,
-                .w = info.width,
-                .h = info.height,
-                .d = info.depth,
-            }, true);
+            const is_array = info.tex_type == .@"2d_array" or info.tex_type == .cube;
+            const num_layers = if (is_array) info.depth else 1;
+            const layer_size = size / num_layers;
+
+            for (0..num_layers) |layer_idx| {
+                c.SDL_UploadToGPUTexture(copy_pass, &.{
+                    .transfer_buffer = update_transfer_buffer,
+                    .offset = offset + @as(u32, @intCast(layer_idx * layer_size)),
+                    .pixels_per_row = info.width,
+                    .rows_per_layer = info.height,
+                }, &.{
+                    .texture = texture,
+                    .mip_level = 0,
+                    .layer = @intCast(layer_idx),
+                    .x = 0,
+                    .y = 0,
+                    .z = 0,
+                    .w = info.width,
+                    .h = info.height,
+                    .d = if (is_array) 1 else info.depth,
+                }, true);
+            }
         }
 
         offset += size;
