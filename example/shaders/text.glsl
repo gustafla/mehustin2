@@ -42,9 +42,10 @@ layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
 void main() {
     vec3 coord = vec3(in_uv, float(in_style.x));
 
-    float dist = texture(u_font_atlas, coord).r;
+    vec4 msdf = texture(u_font_atlas, coord);
+    float dist = max(min(msdf.r, msdf.g), min(max(msdf.r, msdf.g), msdf.b));
 
-    float smoothing = fwidth(dist) * 0.5;
+    float smoothing = fwidth(msdf.a) * 0.5;
     float alpha = smoothstep(0.5 - smoothing, 0.5 + smoothing, dist);
 
     if (alpha <= 0.01) {

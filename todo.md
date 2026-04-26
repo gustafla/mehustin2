@@ -1,10 +1,5 @@
 # High priority
 
-- [ ] Build-time font generation
-  - [X] Build msdf-atlas-gen
-  - [ ] Call msdf-atlas-gen at build-time
-  - [ ] Parse msdf-atlas-gen JSON at comptime
-  - [ ] Implement MSDF rendering
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
@@ -14,6 +9,7 @@
       - [ ] color_targets
       - [ ] depth_targets
       - [ ] Implement resource id resolution ("render"-namespace for internals)
+- [ ] 3D text
 - [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
   - [ ] Overrides for pipeline parameters and binds
 
@@ -50,6 +46,11 @@
 
 # Done
 
+- [X] Build-time font generation
+  - [X] Build msdf-atlas-gen
+  - [X] Call msdf-atlas-gen at build-time
+  - [X] Parse msdf-atlas-gen JSON at ~comptime~ **runtime**
+  - [X] Implement MSDF rendering
 - [X] Tag times, remaining and durations should be an SSBO array
   - [X] Add tags and number of tags as glslc macros
 - [X] Make clips able to overlap (rename to e.g. logics)

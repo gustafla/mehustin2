@@ -1,8 +1,10 @@
 const std = @import("std");
 
+const c = @import("c");
 const script = @import("script");
 const Anchor = script.Anchor;
 const timeline = script.config.timeline;
+const num_fonts = timeline.text.fonts.len;
 
 const camera = @import("camera.zig");
 const math = @import("math.zig");
@@ -530,9 +532,13 @@ pub const InstanceText = extern struct {
 
 var atlas_width: u32 = 0;
 var atlas_height: u32 = 0;
-var msdfs: [timeline.text.fonts.len]std.json.Parsed(Font.MsdfJson) = undefined;
+var msdfs: [num_fonts]std.json.Parsed(Font.MsdfJson) = undefined;
+var unicode_to_glyph_index: std.AutoHashMapUnmanaged(u32, u32) = .empty;
 
 pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
+    const format: types.TextureFormat = .r8g8b8a8_unorm;
+    const bytes_per_pixel = 4;
+
     return struct {
         pub fn create() !TextureInfo {
             for (&msdfs, 0..) |*msdf, i| {
@@ -547,15 +553,21 @@ pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
                 );
             }
 
+            const msdf0 = msdfs[0].value;
             for (msdfs) |msdf| {
                 const atlas = msdf.value.atlas;
                 atlas_width = @max(atlas_width, atlas.width);
-                atlas_height = @max(atlas_width, atlas.height);
+                atlas_height = @max(atlas_height, atlas.height);
+                std.debug.assert(msdf.value.glyphs.len == msdf0.glyphs.len);
+            }
+
+            for (msdf0.glyphs, 0..) |glyph, i| {
+                try unicode_to_glyph_index.put(gpa.*, glyph.unicode, @intCast(i));
             }
 
             return .{
                 .tex_type = .@"2d_array",
-                .format = .r8_unorm,
+                .format = format,
                 .width = atlas_width,
                 .height = atlas_height,
                 .depth = @intCast(msdfs.len),
@@ -563,11 +575,48 @@ pub fn FontAtlas(io: *const std.Io, gpa: *const std.mem.Allocator) type {
         }
 
         pub fn init(dst: []u8) !void {
-            _ = dst; // autofix
-            // const layer_size = atlas_width * atlas_height;
-            // TODO: Load atlas png files, blit to dst
+            @memset(dst, 0);
+            const layer_size = c.SDL_CalculateGPUTextureFormatSize(
+                @intFromEnum(format),
+                atlas_width,
+                atlas_height,
+                1,
+            );
 
-            unreachable;
+            for (msdfs, 0..) |msdf, i| {
+                const dst_layer = dst[i * layer_size ..][0..layer_size];
+                const filename = try std.fmt.allocPrint(gpa.*, "font{}.png", .{i});
+                const png = try util.loadFile(io.*, gpa.*, filename);
+                defer gpa.free(png);
+
+                var lw: c_int = 0;
+                var lh: c_int = 0;
+                var lc: c_int = 0;
+                const data = c.stbi_load_from_memory(
+                    png,
+                    @intCast(png.len),
+                    &lw,
+                    &lh,
+                    &lc,
+                    bytes_per_pixel,
+                );
+                if (data == null) return error.ImageDecodeFailed;
+                defer c.stbi_image_free(data);
+
+                const src_width: usize = @intCast(lw);
+                const src_height: usize = @intCast(lh);
+                const src_pixels: [*][bytes_per_pixel]u8 = @ptrCast(data);
+                const dst_pixels: [][bytes_per_pixel]u8 = @ptrCast(dst_layer);
+
+                const atlas = msdf.value.atlas;
+                std.debug.assert(src_width == atlas.width and src_height == atlas.height);
+
+                for (0..src_height) |y| {
+                    const src_line = src_pixels[y * src_width ..][0..src_width];
+                    const dst_line = dst_pixels[y * atlas_width ..][0..src_width];
+                    @memcpy(dst_line, src_line);
+                }
+            }
         }
     };
 }
@@ -582,115 +631,112 @@ fn genText(
     font_idx: usize,
     effect: u8,
 ) u32 {
-    _ = dst; // autofix
-    _ = str; // autofix
-    _ = height_scale; // autofix
-    _ = origin; // autofix
-    _ = pos_ndc; // autofix
-    _ = color; // autofix
-    _ = font_idx; // autofix
-    _ = effect; // autofix
-    unreachable;
-    // const ndc_per_pixel_y = (height_scale * 2.0) / font_sizes[font_idx];
-    // const ndc_per_pixel_x = ndc_per_pixel_y / util.aspectRatio(script.config.main);
-    // const line_height = font_sizes[font_idx] * ndc_per_pixel_y;
+    const msdf = msdfs[font_idx];
+    const metrics = msdf.value.metrics;
+    const glyphs = msdf.value.glyphs;
 
-    // // Measure bounding box
-    // var max_width: f32 = 0;
-    // var line_width: f32 = 0;
-    // var num_lines: f32 = 1;
+    const ndc_per_em_y = height_scale * 2.0;
+    const ndc_per_em_x = ndc_per_em_y / util.aspectRatio(script.config.main);
+    const line_height = metrics.lineHeight * ndc_per_em_y;
 
-    // for (str) |char| {
-    //     if (char == '\n') {
-    //         max_width = @max(max_width, line_width);
-    //         line_width = 0;
-    //         num_lines += 1;
-    //         continue;
-    //     }
-    //     if (char == ' ') {
-    //         line_width += (font_sizes[font_idx] / 2.0) * ndc_per_pixel_x;
-    //     } else {
-    //         line_width += font_glyphs[font_idx][char].advance * ndc_per_pixel_x;
-    //     }
-    // }
-    // max_width = @max(max_width, line_width);
-    // const total_height = num_lines * line_height;
+    // Measure bounding box
+    var max_width: f32 = 0;
+    var line_width: f32 = 0;
+    var num_lines: f32 = 1;
 
-    // // Calculate origin
-    // var cursor_x = pos_ndc[0];
-    // var cursor_y = pos_ndc[1] - line_height;
+    for (str) |char| {
+        if (char == '\n') {
+            max_width = @max(max_width, line_width);
+            line_width = 0;
+            num_lines += 1;
+            continue;
+        }
+        const idx = unicode_to_glyph_index.get(char) orelse unreachable;
+        line_width += glyphs[idx].advance * ndc_per_em_x;
+    }
+    max_width = @max(max_width, line_width);
 
-    // switch (origin) {
-    //     .left => {
-    //         cursor_y += total_height * 0.5;
-    //     },
-    //     .right => {
-    //         cursor_x -= max_width;
-    //         cursor_y += total_height * 0.5;
-    //     },
-    //     .top => {
-    //         cursor_x -= max_width * 0.5;
-    //     },
-    //     .bottom => {
-    //         cursor_x -= max_width * 0.5;
-    //         cursor_y += total_height;
-    //     },
-    //     .top_left => {},
-    //     .top_right => {
-    //         cursor_x -= max_width;
-    //     },
-    //     .bottom_left => {
-    //         cursor_y += total_height;
-    //     },
-    //     .bottom_right => {
-    //         cursor_x -= max_width;
-    //         cursor_y += total_height;
-    //     },
-    //     .center => {
-    //         cursor_x -= max_width * 0.5;
-    //         cursor_y += (total_height * 0.5);
-    //     },
-    // }
+    const ascender = metrics.ascender * ndc_per_em_y;
+    const descender = metrics.descender * ndc_per_em_y;
+    const total_height = (num_lines - 1) * line_height + (ascender - descender);
 
-    // const start_x = cursor_x;
+    // Calculate origin
+    var cursor_x = pos_ndc[0];
+    var cursor_y = pos_ndc[1];
 
-    // // Generate instances
-    // @memset(dst, std.mem.zeroes(InstanceText));
-    // var instances: u32 = 0;
+    switch (origin) {
+        .top_left, .top, .top_right => {
+            cursor_y = pos_ndc[1] - ascender;
+        },
+        .bottom_left, .bottom, .bottom_right => {
+            cursor_y = pos_ndc[1] - descender + ((num_lines - 1) * line_height);
+        },
+        .left, .center, .right => {
+            const mid_offset = ascender - (total_height * 0.5);
+            cursor_y = pos_ndc[1] - mid_offset;
+        },
+    }
 
-    // for (str) |char| {
-    //     if (instances >= dst.len) break;
+    switch (origin) {
+        .top_left, .left, .bottom_left => {},
+        .top, .center, .bottom => {
+            cursor_x -= max_width * 0.5;
+        },
+        .top_right, .right, .bottom_right => {
+            cursor_x -= max_width;
+        },
+    }
 
-    //     if (char == '\n') {
-    //         cursor_y -= line_height;
-    //         cursor_x = start_x;
-    //         continue;
-    //     }
+    const start_x = cursor_x;
 
-    //     if (char == ' ') {
-    //         cursor_x += (font_sizes[font_idx] / 2.0) * ndc_per_pixel_x;
-    //         continue;
-    //     }
+    // Generate instances
+    @memset(dst, std.mem.zeroes(InstanceText));
+    var instances: u32 = 0;
 
-    //     const g = font_glyphs[font_idx][char];
+    for (str) |char| {
+        if (instances >= dst.len) break;
 
-    //     const top = cursor_y - (g.y_off * ndc_per_pixel_y);
-    //     const bottom = top - (g.height * ndc_per_pixel_y);
-    //     const left = cursor_x + (g.x_off * ndc_per_pixel_x);
-    //     const right = left + (g.width * ndc_per_pixel_x);
+        if (char == '\n') {
+            cursor_y -= line_height;
+            cursor_x = start_x;
+            continue;
+        }
 
-    //     dst[instances] = .{
-    //         .uv = .{ g.uv_min[0], g.uv_min[1], g.uv_max[0], g.uv_max[1] },
-    //         .position = .{ left, top, right, bottom },
-    //         .color = color,
-    //         .style = .{ @intCast(font_idx), effect },
-    //     };
+        const idx = unicode_to_glyph_index.get(char) orelse unreachable;
+        const glyph = glyphs[idx];
+        defer cursor_x += glyph.advance * ndc_per_em_x;
 
-    //     cursor_x += g.advance * ndc_per_pixel_x;
-    //     instances += 1;
-    // }
+        const plane_bounds = glyph.planeBounds orelse continue;
+        const atlas_bounds = glyph.atlasBounds orelse continue;
 
-    // return instances;
+        const top = cursor_y + (plane_bounds.top * ndc_per_em_y);
+        const bottom = cursor_y + (plane_bounds.bottom * ndc_per_em_y);
+        const left = cursor_x + (plane_bounds.left * ndc_per_em_x);
+        const right = cursor_x + (plane_bounds.right * ndc_per_em_x);
+
+        const w: f32 = @floatFromInt(atlas_width);
+        const h: f32 = @floatFromInt(atlas_height);
+        dst[instances] = .{
+            .uv = .{
+                atlas_bounds.left / w,
+                1.0 - atlas_bounds.top / h,
+                atlas_bounds.right / w,
+                1.0 - atlas_bounds.bottom / h,
+            },
+            .position = .{
+                left,
+                top,
+                right,
+                bottom,
+            },
+            .color = color,
+            .style = .{ @intCast(font_idx), effect },
+        };
+
+        instances += 1;
+    }
+
+    return instances;
 }
 
 pub const text_instances = struct {

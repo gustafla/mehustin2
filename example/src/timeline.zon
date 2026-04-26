@@ -5,14 +5,14 @@
     .text = .{
         .fonts = .{.{
             .file = "Unitblock.ttf",
-            .size = 120,
-            .padding_em = 1,
+            .size = 32,
+            .padding_em = 0.2,
         }},
         .track = .{
             // FPS
             .{
                 .text = .{ .ref = .fps },
-                .pos = .{ -0.99, 1.02 },
+                .pos = .{ -0.99, 0.99 },
                 .scale = 0.03,
             },
             // Time
