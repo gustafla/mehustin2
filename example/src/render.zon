@@ -6,7 +6,14 @@
         .{ .format = .d16_unorm, .sample_count = .@"4" },
     },
     .samplers = .{
-        .{ .name = "linear", .min_filter = .linear, .mag_filter = .linear },
+        .{
+            .name = "linear",
+            .min_filter = .linear,
+            .mag_filter = .linear,
+            .address_mode_u = .clamp_to_edge,
+            .address_mode_v = .clamp_to_edge,
+            .address_mode_w = .clamp_to_edge,
+        },
     },
     .passes = .{
         // Main render pass

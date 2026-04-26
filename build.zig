@@ -318,7 +318,9 @@ pub fn bakeFontAtlases(
         msdf_run.addArgs(&.{ "-type", "mtsdf" });
         msdf_run.addArg("-potr");
         msdf_run.addArgs(&.{ "-size", b.fmt("{}", .{font.size}) });
+        msdf_run.addArgs(&.{ "-emrange", "1" });
         msdf_run.addArgs(&.{ "-empadding", b.fmt("{}", .{font.padding_em}) });
+        msdf_run.addArg("-scanline");
 
         msdf_run.addArg("-json");
         const json_output = msdf_run.addOutputFileArg(output_path_json);
