@@ -290,14 +290,24 @@ pub fn bakeFontAtlases(
     }, b, "src/timeline.zon");
 
     for (timeline.text.fonts, 0..) |font, i| {
-        const input_path = b.pathJoin(&.{ config.font_dir, font.file });
+        const input_path, const project_font = blk: {
+            const path = b.pathJoin(&.{ config.font_dir, font.file });
+            if (b.build_root.handle.access(b.graph.io, path, .{}) == error.FileNotFound) {
+                break :blk .{ b.pathJoin(&.{ "font_lib", font.file }), false };
+            }
+            break :blk .{ path, true };
+        };
+
         const output_path = b.pathJoin(&.{ config.data_dir, b.fmt("font{}", .{i}) });
         const output_path_json = b.fmt("{s}.json", .{output_path});
         const output_path_png = b.fmt("{s}.png", .{output_path});
 
         const msdf_run = b.addRunArtifact(msdf_atlas_gen);
-        msdf_run.setCwd(b.path("."));
-        msdf_run.addFileInput(b.path(input_path));
+        msdf_run.setCwd(if (project_font) b.path(".") else d.path("."));
+        _ = msdf_run.captureStdErr(.{});
+        _ = msdf_run.captureStdOut(.{});
+
+        msdf_run.addFileInput(if (project_font) b.path(input_path) else d.path(input_path));
         if (font.variables.len == 0) {
             msdf_run.addArgs(&.{ "-font", input_path });
         } else {
@@ -392,7 +402,13 @@ fn compileShader(
     tag_map: anytype,
 ) void {
     const arena = b.allocator;
-    const input_path = b.pathJoin(&.{ config.shader_dir, shader.file });
+    const input_path = blk: {
+        const path = b.pathJoin(&.{ config.shader_dir, shader.file });
+        if (b.build_root.handle.access(b.graph.io, path, .{}) == error.FileNotFound) {
+            break :blk d.path(b.pathJoin(&.{ "shader_lib", shader.file }));
+        }
+        break :blk b.path(path);
+    };
     const output_path = b.fmt("{s}.{s}.{s}.spv", .{
         b.pathJoin(&.{ config.data_dir, shader.file }),
         @tagName(stage),
@@ -449,7 +465,7 @@ fn compileShader(
     shaderc_run.addArg(b.fmt("-DNUM_TAGS={}", .{num_tags}));
 
     const shaderc_output = shaderc_run.addPrefixedOutputFileArg("-o", output_path);
-    shaderc_run.addFileArg(b.path(input_path));
+    shaderc_run.addFileArg(input_path);
 
     // Create install step
     const shader_install = b.addInstallBinFile(

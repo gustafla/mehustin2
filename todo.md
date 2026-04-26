@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Build shaders from engine shader_lib too, not just project shaders
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
@@ -47,6 +46,7 @@
 
 # Done
 
+- [X] Build shaders and fonts from engine *_lib too, not just project
 - [X] Build-time font generation
   - [X] Build msdf-atlas-gen
   - [X] Call msdf-atlas-gen at build-time
