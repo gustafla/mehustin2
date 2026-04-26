@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] Build shaders from engine shader_lib too, not just project shaders
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
