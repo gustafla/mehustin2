@@ -51,6 +51,8 @@ const max_attributes = blk: {
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 
+const transfer_buffer_alignment = 256;
+
 var update_transfer_buffer: ?*c.SDL_GPUTransferBuffer = null;
 var samplers: [config.samplers.len]?*c.SDL_GPUSampler = @splat(null);
 var output_buffer: ?*c.SDL_GPUTexture = null;
@@ -270,6 +272,11 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             info.height,
             info.depth,
         );
+        const tb_aligned_size = std.mem.alignForward(
+            u32,
+            size.*,
+            transfer_buffer_alignment,
+        );
 
         // Guard against zero size
         if (size.* > 0) {
@@ -289,11 +296,11 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         }
 
         if (@hasDecl(texture_src, "init")) {
-            init_transfer_buffer_size += size.*;
+            init_transfer_buffer_size += tb_aligned_size;
         }
 
         if (@hasDecl(texture_src, "updateData")) {
-            update_transfer_buffer_size += size.*;
+            update_transfer_buffer_size += tb_aligned_size;
         }
     }
 
@@ -316,7 +323,7 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         const texture_src = @field(script.texture, id.name);
         if (!@hasDecl(texture_src, "init")) continue;
         try texture_src.init(tbp[0..size]);
-        tbp += size;
+        tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -359,7 +366,7 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                     false,
                 );
             }
-            offset += size;
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
         }
     }
 
@@ -397,6 +404,11 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             try buffer_src.create();
         info.* = .{ .num_elements = num_elements };
         size.* = num_elements * layout_size;
+        const tb_aligned_size = std.mem.alignForward(
+            u32,
+            size.*,
+            transfer_buffer_alignment,
+        );
 
         // Guard against zero elements returned
         if (size.* > 0) {
@@ -417,11 +429,11 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         }
 
         if (@hasDecl(buffer_src, "data") or @hasDecl(buffer_src, "init")) {
-            init_transfer_buffer_size += size.*;
+            init_transfer_buffer_size += tb_aligned_size;
         }
 
         if (@hasDecl(buffer_src, "updateData")) {
-            update_transfer_buffer_size += size.*;
+            update_transfer_buffer_size += tb_aligned_size;
         }
     }
 
@@ -454,7 +466,7 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         } else if (@hasDecl(buffer_src, "init")) {
             try buffer_src.init(@ptrCast(@alignCast(tbp[0..size])), info);
         } else continue;
-        tbp += size;
+        tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -481,7 +493,7 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                 false,
             );
         }
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return update_transfer_buffer_size;
@@ -510,6 +522,11 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         const header_size = @sizeOf(storage_buffer_src.Header);
         const layout_size = @sizeOf(storage_buffer_src.Element);
         size.* = header_size + (layout_size * num_elements);
+        const tb_aligned_size = std.mem.alignForward(
+            u32,
+            size.*,
+            transfer_buffer_alignment,
+        );
 
         // Guard against zero size
         if (size.* > 0) {
@@ -530,11 +547,11 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
             @hasDecl(storage_buffer_src, "data")) or
             @hasDecl(storage_buffer_src, "init"))
         {
-            init_transfer_buffer_size += size.*;
+            init_transfer_buffer_size += tb_aligned_size;
         }
 
         if (@hasDecl(storage_buffer_src, "updateData")) {
-            update_transfer_buffer_size += size.*;
+            update_transfer_buffer_size += tb_aligned_size;
         }
     }
 
@@ -573,7 +590,7 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         } else if (@hasDecl(storage_buffer_src, "init")) {
             try storage_buffer_src.init(tbp[0..size]);
         } else continue;
-        tbp += size;
+        tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -605,7 +622,7 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                 false,
             );
         }
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return update_transfer_buffer_size;
@@ -748,7 +765,7 @@ fn updateTextureData(tbp: [*]u8, base: u32) !u32 {
         if (!@hasDecl(texture_src, "updateData")) continue;
 
         try texture_src.updateData(tbp[offset..][0..size]);
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
@@ -792,7 +809,7 @@ fn uploadTextures(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
             }
         }
 
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
@@ -808,7 +825,7 @@ fn updateBufferData(tbp: [*]u8, base: u32) !u32 {
 
         try buffer_src.updateData(@ptrCast(@alignCast(tbp[offset..][0..size])));
 
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     // Update buffer infos
@@ -840,7 +857,7 @@ fn uploadBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
             }, true);
         }
 
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
@@ -859,7 +876,7 @@ fn updateStorageBufferData(tbp: [*]u8, base: u32) !u32 {
 
         try storage_buffer_src.updateData(tbp[offset..][0..size]);
 
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
@@ -888,7 +905,7 @@ fn uploadStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
             }, true);
         }
 
-        offset += size;
+        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
