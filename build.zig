@@ -430,9 +430,7 @@ fn compileShader(
     shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
 
     // Set the stage
-    shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{
-        @tagName(stage),
-    }));
+    shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{@tagName(stage)}));
 
     // Add stage and entrypoint macros
     const STAGE = toUpper(arena, @tagName(stage));

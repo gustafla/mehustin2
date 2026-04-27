@@ -61,3 +61,45 @@ void main() {
     out_color = vec4(lighting * io.emissive, 1.0);
 }
 #endif // FRAGMENT_MAIN
+
+#ifdef COMPUTE_MAIN
+#extension GL_EXT_samplerless_texture_functions: require
+layout(set = 0, binding = 0) uniform texture2D in_texture;
+layout(set = 1, binding = 0, rgba16f) writeonly uniform image2D out_texture;
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+void main() {
+    ivec2 texel_coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 img_size = textureSize(in_texture, 0);
+
+    if (texel_coord.x >= img_size.x || texel_coord.y >= img_size.y) {
+        return;
+    }
+
+    vec4 pixel = texelFetch(in_texture, texel_coord, 0);
+
+    pixel.rgb = vec3(1.0) - pixel.rgb; // Invert colors
+
+    imageStore(out_texture, texel_coord, pixel);
+}
+#endif // COMPUTE_MAIN
+
+#ifdef FRAGMENT_POST
+layout(location = 0) in vec2 in_uv;
+
+layout(location = 0) out vec4 out_color;
+
+layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
+layout(set = 2, binding = 1) uniform sampler2D u_bloom_texture;
+
+#include <color.glsl>
+
+void main() {
+    vec3 color = texture(u_input_texture, in_uv).rgb;
+
+    // Bloom
+    color = texture(u_bloom_texture, in_uv).rgb;
+    out_color = vec4(reinhard(max(color, 0.)), 1.);
+}
+#endif // FRAGMENT_POST

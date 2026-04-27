@@ -1,11 +1,14 @@
 .{
     .color_targets = .{
-        .{ .format = .swapchain, .sample_count = .@"4" },
+        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
+        .{ .format = .r16g16b16a16_float },
+        .{ .format = .r16g16b16a16_float },
     },
     .depth_targets = .{
         .{ .format = .d16_unorm, .sample_count = .@"4" },
     },
     .samplers = .{
+        .{ .name = "nearest" },
         .{
             .name = "linear",
             .min_filter = .linear,
@@ -17,37 +20,59 @@
     },
     .passes = .{
         // Main render pass
-        .{
-            .render = .{
-                .drawcalls = .{
-                    .{
-                        .pipelines = .{.{
-                            .shader = .{ .entrypoint = "main" },
-                            .depth_test = .{},
-                        }},
-                        .vertex_buffer = "cube",
-                        .instance_buffer = "cube_instances",
-                    },
-                    .{
-                        .pipelines = .{.{
-                            .shader = .{ .file = "text.glsl" },
-                            .primitive_type = .trianglestrip,
-                            .blend_states = .{.{
-                                .enable = true,
-                            }},
-                        }},
-                        .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
-                        .instance_buffer = "text_instances",
-                        .num_vertices = 4,
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{.{
+                        .shader = .{ .entrypoint = "main" },
+                        .depth_test = .{},
+                    }},
+                    .vertex_buffer = "cube",
+                    .instance_buffer = "cube_instances",
+                },
+            },
+            .color_targets = .{.{
+                .target = .{ .index = 0 },
+                .resolve_target = .{ .index = 1 },
+                .store_op = .resolve,
+            }},
+            .depth_target = .{ .target = 0, .store_op = .dont_care },
+        } },
+        .{ .compute = .{
+            .dispatches = .{.{
+                .comp = .{
+                    .entrypoint = "main",
+                },
+                .threadcount = .{ .x = 8, .y = 8 },
+                .groupcount = .{ .x = 240, .y = 135 },
+                .readonly_storage_textures = .{"color_targets[1]"},
+            }},
+            .readwrite_storage_textures = .{"color_targets[2]"},
+        } },
+        .{ .render = .{
+            .drawcalls = .{
+                .{
+                    .pipelines = .{.{
+                        .shader = .{ .stages = .{ .frag = .{ .entrypoint = "post" } } },
+                    }},
+                    .fragment_samplers = .{
+                        .{ .texture = "color_targets[1]", .sampler = "nearest" },
+                        .{ .texture = "color_targets[2]", .sampler = "nearest" },
                     },
                 },
-                .color_targets = .{.{
-                    .target = .{ .index = 0 },
-                    .resolve_target = .swapchain,
-                    .store_op = .resolve,
-                }},
-                .depth_target = .{ .target = 0, .store_op = .dont_care },
+                .{
+                    .pipelines = .{.{
+                        .shader = .{ .file = "text.glsl" },
+                        .primitive_type = .trianglestrip,
+                        .blend_states = .{.{
+                            .enable = true,
+                        }},
+                    }},
+                    .fragment_samplers = .{.{ .texture = "font_atlas", .sampler = "linear" }},
+                    .instance_buffer = "text_instances",
+                    .num_vertices = 4,
+                },
             },
-        },
+        } },
     },
 }
