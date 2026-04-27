@@ -4,13 +4,13 @@
     .fingerprint = 0x8303b2648d39746,
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
-        .msdf_atlas_gen = .{
-            .url = "https://github.com/Chlumsky/msdf-atlas-gen/archive/refs/tags/v1.4.tar.gz",
-            .hash = "N-V-__8AAF7pBAB4yjm7dIRymiQ9QdpMsBrH3EU6m-VyLE5i",
-        },
         .msdfgen = .{
             .url = "https://github.com/Chlumsky/msdfgen/archive/refs/tags/v1.13.tar.gz",
             .hash = "N-V-__8AACyUBwCQGRHpKwDSxzd2DHqHkeRj0UJs58fhHS9w",
+        },
+        .msdf_atlas_gen = .{
+            .url = "https://github.com/Veritaris/msdf-atlas-gen/archive/fe64f52542a4952b9205f1dfff533bf64bd627ae.tar.gz",
+            .hash = "N-V-__8AAPnpBAD3BoPzEsLKe0bf78eqFdeEmFXXkWtr1XKV",
         },
     },
     .paths = .{

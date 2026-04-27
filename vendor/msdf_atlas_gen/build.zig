@@ -49,7 +49,7 @@ pub fn build(b: *std.Build) void {
             "GridAtlasPacker.cpp",
             "image-encode.cpp",
             "json-export.cpp",
-            // "main.cpp",
+            "main.cpp",
             "Padding.cpp",
             "RectanglePacker.cpp",
             "shadron-preview-generator.cpp",
@@ -102,12 +102,6 @@ pub fn build(b: *std.Build) void {
             "resolve-shape-geometry.cpp",
             "save-png.cpp",
         },
-        .flags = cxx_flags,
-    });
-
-    // Add patched main
-    exe_mod.addCSourceFile(.{
-        .file = b.path("src/main.cpp"),
         .flags = cxx_flags,
     });
 
