@@ -267,6 +267,7 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
             comptime pass: schema.Render.ComputePass,
             comptime dispatch: schema.Render.ComputeDispatch,
         ) @This() {
+            const dimensions = dispatch.dimensions.resolve();
             return .{
                 .comp = dispatch.comp,
                 .comp_info = .{
@@ -275,9 +276,9 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
                     .num_readonly_storage_buffers = dispatch.readonly_storage_buffers.len,
                     .num_readwrite_storage_textures = pass.readwrite_storage_textures.len,
                     .num_readwrite_storage_buffers = pass.readwrite_storage_buffers.len,
-                    .threadcount_x = dispatch.threadcount.x,
-                    .threadcount_y = dispatch.threadcount.y,
-                    .threadcount_z = dispatch.threadcount.z,
+                    .threadcount_x = dimensions.threads.x,
+                    .threadcount_y = dimensions.threads.y,
+                    .threadcount_z = dimensions.threads.z,
                 },
             };
         }

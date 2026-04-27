@@ -47,6 +47,8 @@
 
 # Done
 
+- [X] Add compute shader dimension macros
+- [X] schema: add compute shader groupcount `resolution_by_threadcount`
 - [X] Fix transfer buffer alignment issues, e.g. https://wiki.libsdl.org/SDL3/SDL_UploadToGPUTexture
 - [X] Build shaders and fonts from engine *_lib too, not just project
 - [X] Build-time font generation

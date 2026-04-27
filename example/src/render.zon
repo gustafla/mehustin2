@@ -43,8 +43,10 @@
                 .comp = .{
                     .entrypoint = "main",
                 },
-                .threadcount = .{ .x = 8, .y = 8 },
-                .groupcount = .{ .x = 240, .y = 135 },
+                .dimensions = .{
+                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
+                    .groups = .resolution_by_core,
+                },
                 .readonly_storage_textures = .{"color_targets[1]"},
             }},
             .readwrite_storage_textures = .{"color_targets[2]"},

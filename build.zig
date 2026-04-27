@@ -242,6 +242,7 @@ pub fn compileShaders(
         } },
         compute: struct { dispatches: []const struct {
             comp: Shader,
+            dimensions: Shader.Dimensions(config),
         } },
     } }, b, "src/render.zon");
 
@@ -263,12 +264,12 @@ pub fn compileShaders(
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    compileShader(b, d, stages.vert, .vertex, config, &tag_set);
-                    compileShader(b, d, stages.frag, .fragment, config, &tag_set);
+                    compileShader(b, d, stages.vert, .vertex, config, &tag_set, null);
+                    compileShader(b, d, stages.frag, .fragment, config, &tag_set, null);
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                compileShader(b, d, disp.comp, .compute, config, &tag_set);
+                compileShader(b, d, disp.comp, .compute, config, &tag_set, disp.dimensions);
             },
         }
     }
@@ -402,7 +403,11 @@ fn compileShader(
     comptime stage: Shader.Stage,
     comptime config: anytype,
     tag_map: anytype,
+    dimensions: ?Shader.Dimensions(config),
 ) void {
+    const resolved = if (dimensions) |dim| dim.resolve() else null;
+    const threads = if (resolved) |res| res.threads else null;
+
     const arena = b.allocator;
     const input_path = blk: {
         const path = b.pathJoin(&.{ config.shader_dir, shader.file });
@@ -411,10 +416,9 @@ fn compileShader(
         }
         break :blk b.path(path);
     };
-    const output_path = b.fmt("{s}.{s}.{s}.spv", .{
-        b.pathJoin(&.{ config.data_dir, shader.file }),
-        @tagName(stage),
-        shader.entrypoint,
+    const output_path = b.pathJoin(&.{
+        config.data_dir,
+        shader.spvFilename(arena, stage, threads) catch @panic("OOM"),
     });
 
     // Create run step
@@ -438,16 +442,32 @@ fn compileShader(
     shaderc_run.addArg(b.fmt("-D{s}", .{STAGE}));
     shaderc_run.addArg(b.fmt("-D{s}", .{ENTRYPOINT}));
     shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ STAGE, ENTRYPOINT }));
-    const PIPELINE = switch (stage) {
-        .vertex, .fragment => "GRAPHICS",
-        .compute => "COMPUTE",
-    };
-    shaderc_run.addArg(b.fmt("-D{s}", .{PIPELINE}));
-    shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ PIPELINE, ENTRYPOINT }));
+    switch (stage) {
+        .vertex, .fragment => {
+            shaderc_run.addArg("-DGRAPHICS");
+            shaderc_run.addArg(b.fmt("-DGRAPHICS_{s}", .{ENTRYPOINT}));
+        },
+        .compute => {}, // Already covered by the stage macros
+    }
     switch (stage) {
         .vertex => shaderc_run.addArg("-DIO=out"),
         .fragment => shaderc_run.addArg("-DIO=in"),
-        else => {},
+        .compute => {
+            const core = dimensions.?.threads.core;
+            const apron = dimensions.?.threads.apron;
+
+            shaderc_run.addArg(b.fmt("-DDIM_CORE_X={}", .{core.x}));
+            shaderc_run.addArg(b.fmt("-DDIM_CORE_Y={}", .{core.y}));
+            shaderc_run.addArg(b.fmt("-DDIM_CORE_Z={}", .{core.z}));
+
+            shaderc_run.addArg(b.fmt("-DDIM_APRON_X={}", .{apron.x}));
+            shaderc_run.addArg(b.fmt("-DDIM_APRON_Y={}", .{apron.y}));
+            shaderc_run.addArg(b.fmt("-DDIM_APRON_Z={}", .{apron.z}));
+
+            shaderc_run.addArg(b.fmt("-DDIM_TOTAL_X={}", .{threads.?.x}));
+            shaderc_run.addArg(b.fmt("-DDIM_TOTAL_Y={}", .{threads.?.y}));
+            shaderc_run.addArg(b.fmt("-DDIM_TOTAL_Z={}", .{threads.?.z}));
+        },
     }
 
     // Add args from conf

@@ -90,18 +90,11 @@ pub const Render = struct {
         num_instances: ?u32 = null,
     };
 
-    pub const ComputeDimensions = struct {
-        x: u32,
-        y: u32 = 1,
-        z: u32 = 1,
-    };
-
     pub const ComputeDispatch = struct {
         require_all_tags: []const timeline.Tag = &.{},
         require_any_tags: []const timeline.Tag = &.{},
         comp: Shader,
-        threadcount: ComputeDimensions,
-        groupcount: ComputeDimensions,
+        dimensions: Shader.Dimensions(script.config.main),
         samplers: []const TextureSamplerBinding = &.{},
         readonly_storage_textures: []const []const u8 = &.{},
         readonly_storage_buffers: []const []const u8 = &.{},

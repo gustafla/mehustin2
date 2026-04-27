@@ -133,7 +133,11 @@ fn initComputePipeline(
     log.debug("Initializing comp: {s}.{s}", .{ key.comp.file, key.comp.entrypoint });
 
     // Allocate SPIR-V file name
-    const spirv_name = try shader.fileName(arena, "compute", key.comp);
+    const spirv_name = try key.comp.spvFilename(arena, .compute, .{
+        .x = key.comp_info.threadcount_x,
+        .y = key.comp_info.threadcount_y,
+        .z = key.comp_info.threadcount_z,
+    });
 
     // Load SPIR-V binary
     const path = try resource.dataFilePath(arena, spirv_name);
@@ -1008,11 +1012,12 @@ fn computePass(
             const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
             c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
 
+            const dimensions = dispatch.dimensions.resolve();
             c.SDL_DispatchGPUCompute(
                 compute_pass,
-                dispatch.groupcount.x,
-                dispatch.groupcount.y,
-                dispatch.groupcount.z,
+                dimensions.groups.x,
+                dimensions.groups.y,
+                dimensions.groups.z,
             );
         }
     }
