@@ -40,7 +40,7 @@ pub fn loadShader(
     var create_info = std.mem.zeroInit(c.SDL_GPUShaderCreateInfo, info);
     create_info.code_size = data.len;
     create_info.code = data.ptr;
-    create_info.entrypoint = shader.entrypoint.ptr;
+    create_info.entrypoint = "main"; // GLSL entry point name must be "main"
     create_info.format = c.SDL_GPU_SHADERFORMAT_SPIRV;
     create_info.stage = @intFromEnum(stage);
 

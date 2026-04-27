@@ -142,7 +142,7 @@ fn initComputePipeline(
     var create_info = std.mem.zeroInit(c.SDL_GPUComputePipelineCreateInfo, key.comp_info);
     create_info.code_size = data.len;
     create_info.code = data.ptr;
-    create_info.entrypoint = key.comp.entrypoint.ptr;
+    create_info.entrypoint = "main"; // GLSL entry point name must be "main"
     create_info.format = c.SDL_GPU_SHADERFORMAT_SPIRV;
     return try sdlerr(c.SDL_CreateGPUComputePipeline(device, &create_info));
 }
@@ -934,7 +934,7 @@ fn computePass(
     if (!tagsRender(pass, tags)) return;
 
     var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
-    for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
+    inline for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
         const reference = comptime compiler.parseIndex(name) catch |e|
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
         texture.* = .{
@@ -949,7 +949,7 @@ fn computePass(
     }
 
     var storage_buffer_bindings: [pass.readwrite_storage_buffers.len]c.SDL_GPUStorageBufferReadWriteBinding = undefined;
-    for (pass.readwrite_storage_buffers, &storage_buffer_bindings) |name, *buffer| {
+    inline for (pass.readwrite_storage_buffers, &storage_buffer_bindings) |name, *buffer| {
         const idx = @intFromEnum(@field(script.StorageBuffer, name));
         buffer.* = .{
             .buffer = storage_buffers[idx],
@@ -968,7 +968,7 @@ fn computePass(
     inline for (pass.dispatches) |dispatch| {
         // Filter dispatch by tag requirements list
         if (tagsRender(dispatch, tags)) {
-            for (dispatch.samplers, 0..) |tex, slot| {
+            inline for (dispatch.samplers, 0..) |tex, slot| {
                 const reference = comptime compiler.parseIndex(tex.texture) catch |e|
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
                 c.SDL_BindGPUComputeSamplers(compute_pass, @intCast(slot), &.{
@@ -980,7 +980,7 @@ fn computePass(
                 }, 1);
             }
 
-            for (dispatch.readonly_storage_textures, 0..) |name, slot| {
+            inline for (dispatch.readonly_storage_textures, 0..) |name, slot| {
                 const reference = comptime compiler.parseIndex(name) catch |e|
                     @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
                 c.SDL_BindGPUComputeStorageTextures(
@@ -994,7 +994,7 @@ fn computePass(
                 );
             }
 
-            for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
+            inline for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
                 const idx = @intFromEnum(@field(script.StorageBuffer, name));
                 c.SDL_BindGPUComputeStorageBuffers(
                     compute_pass,
