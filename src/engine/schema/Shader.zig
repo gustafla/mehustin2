@@ -1,7 +1,7 @@
 const default_file = "shaders.glsl";
 const default_entrypoint = "main";
 
-file: []const u8,
+file: []const u8 = default_file,
 entrypoint: []const u8 = default_entrypoint,
 
 const Shader = @This();
@@ -12,7 +12,7 @@ pub const Graphics = union(enum) {
     stages: Stages,
 
     pub const Stages = struct {
-        vert: Shader,
+        vert: Shader = .{ .file = "tri.vert", .entrypoint = default_entrypoint },
         frag: Shader,
     };
 
