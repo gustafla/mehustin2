@@ -434,12 +434,23 @@ fn compileShader(
         @tagName(stage),
     }));
 
-    // Enable the stage and entry point macros
+    // Add stage and entrypoint macros
     const STAGE = toUpper(arena, @tagName(stage));
     const ENTRYPOINT = toUpper(arena, shader.entrypoint);
     shaderc_run.addArg(b.fmt("-D{s}", .{STAGE}));
     shaderc_run.addArg(b.fmt("-D{s}", .{ENTRYPOINT}));
-    shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ ENTRYPOINT, STAGE }));
+    shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ STAGE, ENTRYPOINT }));
+    const PIPELINE = switch (stage) {
+        .vertex, .fragment => "GRAPHICS",
+        .compute => "COMPUTE",
+    };
+    shaderc_run.addArg(b.fmt("-D{s}", .{PIPELINE}));
+    shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ PIPELINE, ENTRYPOINT }));
+    switch (stage) {
+        .vertex => shaderc_run.addArg("-DIO=out"),
+        .fragment => shaderc_run.addArg("-DIO=in"),
+        else => {},
+    }
 
     // Add args from conf
     inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
