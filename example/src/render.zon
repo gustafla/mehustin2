@@ -26,6 +26,7 @@
                             .depth_test = .{},
                         }},
                         .vertex_buffer = "cube",
+                        .instance_buffer = "cube_instances",
                     },
                     .{
                         .pipelines = .{.{
