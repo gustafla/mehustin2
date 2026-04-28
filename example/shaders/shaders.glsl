@@ -82,6 +82,14 @@ void main() {
 }
 #endif // FRAGMENT_POST
 
+#if defined(NAIVE_CONVOLUTION) || \
+    defined(SEPARABLE_HORIZONTAL) || \
+    defined(SEPARABLE_VERTICAL) || \
+    defined(SEPARABLE_SINGLE_PASS)
+const int M = 16;
+const int N = M * 2 + 1;
+#endif // NAIVE or VERTICAL or HORIZONTAL or SINGLE_PASS
+
 #if defined(COMPUTE_NAIVE_CONVOLUTION)
 layout(local_size_x = DIM_TOTAL_X, local_size_y = DIM_TOTAL_Y) in;
 
@@ -99,9 +107,9 @@ void main() {
     vec4 sum = vec4(0.0);
     float coeff = 1.0 / (DIM_TOTAL_X * DIM_TOTAL_Y);
 
-    for (int y = 0; y < DIM_TOTAL_Y; y++) {
-        for (int x = 0; x < DIM_TOTAL_X; x++) {
-            ivec2 sample_coord = texel_coord + ivec2(x - DIM_TOTAL_X / 2, y - DIM_TOTAL_Y / 2);
+    for (int y = 0; y < N; y++) {
+        for (int x = 0; x < N; x++) {
+            ivec2 sample_coord = texel_coord + ivec2(x - M, y - M);
             sample_coord = clamp(sample_coord, ivec2(0, 0), img_size - 1);
             sum += coeff * texelFetch(in_texture, sample_coord, 0);
         }
