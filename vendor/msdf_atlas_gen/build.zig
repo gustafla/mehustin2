@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.linkSystemLibrary("pthread", .{});
 
     const cxx_flags = &[_][]const u8{
-        "-std=c++11",
+        "-std=c++17",
     };
 
     // msdf-atlas-gen sources

@@ -9,8 +9,8 @@
             .hash = "N-V-__8AACyUBwCQGRHpKwDSxzd2DHqHkeRj0UJs58fhHS9w",
         },
         .msdf_atlas_gen = .{
-            .url = "https://github.com/Veritaris/msdf-atlas-gen/archive/fe64f52542a4952b9205f1dfff533bf64bd627ae.tar.gz",
-            .hash = "N-V-__8AAPnpBAD3BoPzEsLKe0bf78eqFdeEmFXXkWtr1XKV",
+            .url = "https://github.com/Chlumsky/msdf-atlas-gen/archive/0663c364922f49151b3a764249b5a754074f4e21.tar.gz",
+            .hash = "N-V-__8AAJbvBAAltK7yXYhZTeRG4JCsXOXdtHvSeFUQAiLh",
         },
     },
     .paths = .{
