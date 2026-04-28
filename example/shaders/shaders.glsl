@@ -1,6 +1,7 @@
 #version 450
+#extension GL_EXT_samplerless_texture_functions: require
 
-#ifdef VERTEX
+#if defined(VERTEX)
 layout(std140, set = 1, binding = 0) uniform VertexFrameData {
     mat4 u_view_projection;
     vec4 u_cam_pos;
@@ -10,21 +11,21 @@ layout(std140, set = 1, binding = 0) uniform VertexFrameData {
 };
 #endif // VERTEX
 
-#ifdef FRAGMENT
+#if defined(FRAGMENT)
 layout(std140, set = 3, binding = 0) uniform FragmentFrameData {
     float u_time;
 };
 #endif // FRAGMENT
 
-#ifdef GRAPHICS_MAIN
+#if defined(VERTEX_MAIN) || defined(FRAGMENT_MAIN)
 layout(location = 0) IO Interface {
 vec3 position;
 vec3 normal;
 vec3 emissive;
 } io;
-#endif // GRAPHICS_MAIN
+#endif // VERTEX_MAIN or FRAGMENT_MAIN
 
-#ifdef VERTEX_MAIN
+#if defined(VERTEX_MAIN)
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec3 in_normal;
 
@@ -52,7 +53,7 @@ void main() {
 }
 #endif // VERTEX_MAIN
 
-#ifdef FRAGMENT_MAIN
+#if defined(FRAGMENT_MAIN)
 layout(location = 0) out vec4 out_color;
 
 void main() {
@@ -62,8 +63,7 @@ void main() {
 }
 #endif // FRAGMENT_MAIN
 
-#ifdef COMPUTE_MAIN
-#extension GL_EXT_samplerless_texture_functions: require
+#if defined(COMPUTE_MAIN)
 layout(set = 0, binding = 0) uniform texture2D in_texture;
 layout(set = 1, binding = 0, rgba16f) writeonly uniform image2D out_texture;
 
@@ -85,7 +85,7 @@ void main() {
 }
 #endif // COMPUTE_MAIN
 
-#ifdef FRAGMENT_POST
+#if defined(FRAGMENT_POST)
 layout(location = 0) in vec2 in_uv;
 
 layout(location = 0) out vec4 out_color;

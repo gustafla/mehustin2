@@ -443,13 +443,6 @@ fn compileShader(
     shaderc_run.addArg(b.fmt("-D{s}", .{ENTRYPOINT}));
     shaderc_run.addArg(b.fmt("-D{s}_{s}", .{ STAGE, ENTRYPOINT }));
     switch (stage) {
-        .vertex, .fragment => {
-            shaderc_run.addArg("-DGRAPHICS");
-            shaderc_run.addArg(b.fmt("-DGRAPHICS_{s}", .{ENTRYPOINT}));
-        },
-        .compute => {}, // Already covered by the stage macros
-    }
-    switch (stage) {
         .vertex => shaderc_run.addArg("-DIO=out"),
         .fragment => shaderc_run.addArg("-DIO=in"),
         .compute => {

@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Add glsl preamble
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
