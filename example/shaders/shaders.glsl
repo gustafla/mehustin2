@@ -63,28 +63,6 @@ void main() {
 }
 #endif // FRAGMENT_MAIN
 
-#if defined(COMPUTE_MAIN)
-layout(set = 0, binding = 0) uniform texture2D in_texture;
-layout(set = 1, binding = 0, rgba16f) writeonly uniform image2D out_texture;
-
-layout(local_size_x = DIM_TOTAL_X, local_size_y = DIM_TOTAL_Y, local_size_z = DIM_TOTAL_Z) in;
-
-void main() {
-    ivec2 texel_coord = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 img_size = textureSize(in_texture, 0);
-
-    if (texel_coord.x >= img_size.x || texel_coord.y >= img_size.y) {
-        return;
-    }
-
-    vec4 pixel = texelFetch(in_texture, texel_coord, 0);
-
-    pixel.rgb = vec3(1.0) - pixel.rgb; // Invert colors
-
-    imageStore(out_texture, texel_coord, pixel);
-}
-#endif // COMPUTE_MAIN
-
 #if defined(FRAGMENT_POST)
 layout(location = 0) in vec2 in_uv;
 
@@ -103,3 +81,32 @@ void main() {
     out_color = vec4(reinhard(max(color, 0.)), 1.);
 }
 #endif // FRAGMENT_POST
+
+#if defined(COMPUTE_NAIVE_CONVOLUTION)
+layout(local_size_x = DIM_TOTAL_X, local_size_y = DIM_TOTAL_Y) in;
+
+layout(set = 0, binding = 0) uniform texture2D in_texture;
+layout(set = 1, binding = 0, rgba16f) writeonly uniform image2D out_texture;
+
+void main() {
+    ivec2 texel_coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 img_size = textureSize(in_texture, 0);
+
+    if (texel_coord.x >= img_size.x || texel_coord.y >= img_size.y) {
+        return;
+    }
+
+    vec4 sum = vec4(0.0);
+    float coeff = 1.0 / (DIM_TOTAL_X * DIM_TOTAL_Y);
+
+    for (int y = 0; y < DIM_TOTAL_Y; y++) {
+        for (int x = 0; x < DIM_TOTAL_X; x++) {
+            ivec2 sample_coord = texel_coord + ivec2(x - DIM_TOTAL_X / 2, y - DIM_TOTAL_Y / 2);
+            sample_coord = clamp(sample_coord, ivec2(0, 0), img_size - 1);
+            sum += coeff * texelFetch(in_texture, sample_coord, 0);
+        }
+    }
+
+    imageStore(out_texture, texel_coord, sum);
+}
+#endif // COMPUTE_NAIVE_CONVOLUTION

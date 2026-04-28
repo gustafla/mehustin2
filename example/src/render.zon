@@ -41,10 +41,10 @@
         .{ .compute = .{
             .dispatches = .{.{
                 .comp = .{
-                    .entrypoint = "main",
+                    .entrypoint = "naive_convolution",
                 },
                 .dimensions = .{
-                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
+                    .threads = .{ .core = .{ .x = 16, .y = 16 } },
                     .groups = .resolution_by_core,
                 },
                 .readonly_storage_textures = .{"color_targets[1]"},
