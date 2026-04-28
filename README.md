@@ -15,7 +15,7 @@ Based on SDL3 GPU API and glslc, implemented in [Zig](https://ziglang.org).
 - Runtime dynamic reloading while editing.
 - Shader library and `#include` support.
 - Ogg/vorbis music tracks (with BPM time synchronization).
-- Text rendering with SDF fonts.
+- Text rendering with [MSDF fonts](https://github.com/Chlumsky/msdf-atlas-gen).
 - Seamless multiplatform builds.
 
 ## Quickstart
