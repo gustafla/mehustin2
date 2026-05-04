@@ -11,7 +11,6 @@ pub const resource = @import("engine/resource.zig");
 pub const schema = @import("engine/schema.zig");
 pub const timeline = @import("engine/timeline.zig");
 pub const types = @import("engine/types.zig");
-pub const udp = @import("engine/udp.zig");
 pub const util = @import("engine/util.zig");
 
 // Compile-time script API assertions

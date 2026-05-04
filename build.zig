@@ -13,7 +13,6 @@ pub const Options = struct {
     render_dynlib: bool,
     show_fps: bool,
     present_mode: PresentationMode,
-    udp_client: bool,
 
     pub fn init(b: *std.Build) @This() {
         // Use standard target options
@@ -58,11 +57,6 @@ pub const Options = struct {
                 "present_mode",
                 "Presentation mode",
             ) orelse .vsync,
-            .udp_client = b.option(
-                bool,
-                "udp_client",
-                "Send UDP packets to valot.instanssi.org",
-            ) orelse false,
         };
     }
 
@@ -72,7 +66,6 @@ pub const Options = struct {
         options_mod.addOption(bool, "render_dynlib", self.render_dynlib);
         options_mod.addOption(bool, "show_fps", self.show_fps);
         options_mod.addOption(PresentationMode, "present_mode", self.present_mode);
-        options_mod.addOption(bool, "udp_client", self.udp_client);
         return options_mod.createModule();
     }
 };
