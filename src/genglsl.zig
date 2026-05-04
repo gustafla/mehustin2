@@ -6,25 +6,23 @@ pub fn main(init: std.process.Init) !void {
     var buffer: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout();
     var fwriter = stdout.writer(init.io, &buffer);
-    const writer = &fwriter.interface;
 
-    inline for (@typeInfo(data).@"struct".decls) |namespaces| {
-        const namespace = @field(data, namespaces.name);
-        const T = @TypeOf(namespace);
-        switch (@typeInfo(T)) {
+    inline for (@typeInfo(data).@"struct".decls) |decl_ns| {
+        const Namespace = @field(data, decl_ns.name);
+        switch (@typeInfo(Namespace)) {
             .@"struct" => |info| inline for (info.decls) |decl| {
-                const item = @field(namespace, decl.name);
-                try serializeGlsl(writer, namespace.name, decl.name, item);
+                const item = @field(Namespace, decl.name);
+                try serializeGlsl(&fwriter.interface, decl_ns.name, decl.name, item);
             },
-            else => {},
+            else => @compileError(decl_ns.name ++ " is not a struct"),
         }
     }
 
-    try writer.flush();
+    try fwriter.flush();
 }
 
 fn serializeGlsl(
-    writer: std.Io.Writer,
+    writer: *std.Io.Writer,
     namespace: []const u8,
     decl: []const u8,
     item: anytype,
