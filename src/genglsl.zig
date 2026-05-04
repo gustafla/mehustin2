@@ -1,13 +1,15 @@
 const std = @import("std");
 
+const data = @import("data");
+
 pub fn main(init: std.process.Init) !void {
     var buffer: [1024]u8 = undefined;
     var stdout = std.Io.File.stdout();
-    const fwriter = stdout.writer(init.io, &buffer);
-    const writer = fwriter.interface;
+    var fwriter = stdout.writer(init.io, &buffer);
+    const writer = &fwriter.interface;
 
-    inline for (@typeInfo(@This()).@"struct".decls) |namespaces| {
-        const namespace = @field(@This(), namespaces.name);
+    inline for (@typeInfo(data).@"struct".decls) |namespaces| {
+        const namespace = @field(data, namespaces.name);
         const T = @TypeOf(namespace);
         switch (@typeInfo(T)) {
             .@"struct" => |info| inline for (info.decls) |decl| {

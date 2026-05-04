@@ -226,6 +226,35 @@ pub fn compileShaders(
     d: *std.Build.Dependency,
     comptime config: anytype,
 ) void {
+    var include_paths: std.ArrayList(std.Build.LazyPath) = .empty;
+    include_paths.append(b.allocator, b.path(config.shader_dir)) catch @panic("OOM");
+    include_paths.append(b.allocator, d.path("shader_lib")) catch @panic("OOM");
+
+    // Compile and run genglsl
+    const data_path = b.pathJoin(&.{ config.shader_dir, "data.zig" });
+    if (b.build_root.handle.access(b.graph.io, data_path, .{})) {
+        const genglsl_data_mod = b.createModule(.{
+            .root_source_file = b.path(data_path),
+            .target = b.resolveTargetQuery(.{}), // Native
+            .optimize = .Debug,
+        });
+        const genglsl_exe_mod = b.createModule(.{
+            .root_source_file = d.path("src/genglsl.zig"),
+            .target = b.resolveTargetQuery(.{}), // Native
+            .optimize = .Debug,
+            .imports = &.{.{ .name = "data", .module = genglsl_data_mod }},
+        });
+        const genglsl_exe = b.addExecutable(.{
+            .name = "genglsl",
+            .root_module = genglsl_exe_mod,
+        });
+        const genglsl_run = b.addRunArtifact(genglsl_exe);
+        const stdout = genglsl_run.captureStdOut(.{
+            .basename = "generated_data.glsl",
+        });
+        include_paths.append(b.allocator, stdout.dirname()) catch @panic("OOM");
+    } else |_| {}
+
     // Load and parse render.zon at runtime
     const render = parseZon(struct { passes: []const union(enum) {
         render: struct { drawcalls: []const struct {
@@ -252,17 +281,18 @@ pub fn compileShaders(
     }
 
     // Traverse the render.zon tree
+    const ipath: []const std.Build.LazyPath = include_paths.items;
     for (render.passes) |pass| {
         switch (pass) {
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    compileShader(b, d, stages.vert, .vertex, config, &tag_set, null);
-                    compileShader(b, d, stages.frag, .fragment, config, &tag_set, null);
+                    compileShader(b, d, stages.vert, .vertex, config, &tag_set, null, ipath);
+                    compileShader(b, d, stages.frag, .fragment, config, &tag_set, null, ipath);
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                compileShader(b, d, disp.comp, .compute, config, &tag_set, disp.dimensions);
+                compileShader(b, d, disp.comp, .compute, config, &tag_set, disp.dimensions, ipath);
             },
         }
     }
@@ -395,8 +425,9 @@ fn compileShader(
     shader: Shader,
     comptime stage: Shader.Stage,
     comptime config: anytype,
-    tag_map: anytype,
+    tag_map: *const std.StringHashMapUnmanaged(u32),
     dimensions: ?Shader.Dimensions(config),
+    include_paths: []const std.Build.LazyPath,
 ) void {
     const resolved = if (dimensions) |dim| dim.resolve() else null;
     const threads = if (resolved) |res| res.threads else null;
@@ -423,8 +454,9 @@ fn compileShader(
     });
 
     _ = shaderc_run.addDepFileOutputArg("shader.d");
-    shaderc_run.addPrefixedDirectoryArg("-I", b.path(config.shader_dir));
-    shaderc_run.addPrefixedDirectoryArg("-I", d.path("shader_lib"));
+    for (include_paths) |path| {
+        shaderc_run.addPrefixedDirectoryArg("-I", path);
+    }
 
     // Set the stage
     shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{@tagName(stage)}));
