@@ -637,10 +637,7 @@ pub fn init(
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
 ) !void {
-    errdefer |e| {
-        log.err("{s}", .{@errorName(e)});
-        deinit();
-    }
+    errdefer deinit();
 
     window = win;
     device = dev;
@@ -1259,8 +1256,6 @@ fn recordPasses(
 }
 
 pub fn render() !void {
-    errdefer |e| log.err("{s}", .{@errorName(e)});
-
     // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
 

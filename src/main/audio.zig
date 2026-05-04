@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
 
 const c = @import("c");
 const engine = @import("engine");
@@ -12,10 +13,15 @@ var vorbis: *c.stb_vorbis = undefined;
 var audio: ?*c.SDL_AudioStream = null;
 var info: c.stb_vorbis_info = undefined;
 
-const bufsize = 1024 * 1024;
-var buffer = [_]c_short{0} ** bufsize;
+const bufsize = 1024 * 16;
+var buffer: [bufsize]c_short = undefined;
 
-pub fn audioCallback(_: ?*anyopaque, _: ?*c.SDL_AudioStream, need_bytes: c_int, _: c_int) callconv(.c) void {
+pub fn audioCallback(
+    _: ?*anyopaque,
+    _: ?*c.SDL_AudioStream,
+    need_bytes: c_int,
+    _: c_int,
+) callconv(.c) void {
     const need_shorts = @divFloor(need_bytes, @sizeOf(c_short));
     var put_shorts: c_int = 0;
     var got_samples: c_int = 0;
@@ -31,15 +37,14 @@ pub fn audioCallback(_: ?*anyopaque, _: ?*c.SDL_AudioStream, need_bytes: c_int, 
         }
         const len = got_samples * @sizeOf(c_short) * info.channels;
         sdlerr(c.SDL_PutAudioStreamData(audio, &buffer, len)) catch
-            @panic("SDL_PutAudioStreamData failed");
+            if (builtin.mode == .Debug) @panic("SDL_PutAudioStreamData failed");
     }
 }
 
 pub fn deinit() void {
-    if (audio) |a| {
-        c.SDL_DestroyAudioStream(a);
-        c.stb_vorbis_close(vorbis);
-    }
+    const a = audio orelse return;
+    c.SDL_DestroyAudioStream(a);
+    c.stb_vorbis_close(vorbis);
 }
 
 pub fn init(gpa: Allocator, name: []const u8) !void {
@@ -67,26 +72,23 @@ pub fn init(gpa: Allocator, name: []const u8) !void {
 }
 
 pub fn pause() !void {
-    if (audio) |a| {
-        try sdlerr(c.SDL_PauseAudioStreamDevice(a));
-    }
+    const a = audio orelse return;
+    try sdlerr(c.SDL_PauseAudioStreamDevice(a));
 }
 
 pub fn play() !void {
-    if (audio) |a| {
-        try sdlerr(c.SDL_ResumeAudioStreamDevice(a));
-    }
+    const a = audio orelse return;
+    try sdlerr(c.SDL_ResumeAudioStreamDevice(a));
 }
 
 pub fn seek(to_sec: f32) !void {
-    if (audio) |a| {
-        const num_samples = c.stb_vorbis_stream_length_in_samples(vorbis);
-        const goal: c_uint = @intFromFloat(
-            @as(f32, @floatFromInt(info.sample_rate)) * to_sec,
-        );
-        const samples = @min(num_samples, goal);
-        try sdlerr(c.SDL_LockAudioStream(a));
-        _ = c.stb_vorbis_seek(vorbis, samples);
-        try sdlerr(c.SDL_UnlockAudioStream(a));
-    }
+    const a = audio orelse return;
+    const num_samples = c.stb_vorbis_stream_length_in_samples(vorbis);
+    const goal: c_uint = @intFromFloat(
+        @as(f32, @floatFromInt(info.sample_rate)) * to_sec,
+    );
+    const samples = @min(num_samples, goal);
+    try sdlerr(c.SDL_LockAudioStream(a));
+    _ = c.stb_vorbis_seek(vorbis, samples);
+    try sdlerr(c.SDL_UnlockAudioStream(a));
 }
