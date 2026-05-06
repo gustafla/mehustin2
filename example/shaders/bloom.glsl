@@ -1,13 +1,8 @@
 #version 450
 #extension GL_EXT_samplerless_texture_functions: require
 
-#if defined(NAIVE_CONVOLUTION) || \
-    defined(SEPARABLE_HORIZONTAL) || \
-    defined(SEPARABLE_VERTICAL) || \
-    defined(SEPARABLE_SINGLE_PASS)
 const int M = 100;
 const int N = M * 2 + 1;
-#endif // NAIVE or VERTICAL or HORIZONTAL or SINGLE_PASS
 
 #if defined(COMPUTE_NAIVE_CONVOLUTION)
 layout(local_size_x = DIM_TOTAL_X, local_size_y = DIM_TOTAL_Y) in;
@@ -41,3 +36,11 @@ void main() {
     imageStore(out_texture, texel_coord, sum);
 }
 #endif // COMPUTE_NAIVE_CONVOLUTION
+
+#if defined(COMPUTE_SEPARABLE_HORIZONTAL)
+void main() {}
+#endif // COMPUTE_SEPARABLE_HORIZONTAL
+
+#if defined(COMPUTE_SEPARABLE_VERTICAL)
+void main() {}
+#endif // COMPUTE_SEPARABLE_VERTICAL

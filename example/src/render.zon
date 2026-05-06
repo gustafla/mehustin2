@@ -3,6 +3,7 @@
         .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
         .{ .format = .r16g16b16a16_float },
         .{ .format = .r16g16b16a16_float },
+        .{ .format = .r16g16b16a16_float },
     },
     .depth_targets = .{
         .{ .format = .d16_unorm, .sample_count = .@"4" },
@@ -39,6 +40,7 @@
             .depth_target = .{ .target = 0, .store_op = .dont_care },
         } },
         .{ .compute = .{
+            .require_all_tags = .{.comp_naive},
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
@@ -50,7 +52,37 @@
                 },
                 .readonly_storage_textures = .{"color_targets[1]"},
             }},
+            .readwrite_storage_textures = .{"color_targets[3]"},
+        } },
+        .{ .compute = .{
+            .require_all_tags = .{.comp_2pass_separable},
+            .dispatches = .{.{
+                .comp = .{
+                    .file = "bloom.glsl",
+                    .entrypoint = "separable_horizontal",
+                },
+                .dimensions = .{
+                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
+                    .groups = .resolution_by_core,
+                },
+                .readonly_storage_textures = .{"color_targets[1]"},
+            }},
             .readwrite_storage_textures = .{"color_targets[2]"},
+        } },
+        .{ .compute = .{
+            .require_all_tags = .{.comp_2pass_separable},
+            .dispatches = .{.{
+                .comp = .{
+                    .file = "bloom.glsl",
+                    .entrypoint = "separable_vertical",
+                },
+                .dimensions = .{
+                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
+                    .groups = .resolution_by_core,
+                },
+                .readonly_storage_textures = .{"color_targets[2]"},
+            }},
+            .readwrite_storage_textures = .{"color_targets[3]"},
         } },
         .{ .render = .{
             .drawcalls = .{
@@ -60,7 +92,7 @@
                     }},
                     .fragment_samplers = .{
                         .{ .texture = "color_targets[1]", .sampler = "nearest" },
-                        .{ .texture = "color_targets[2]", .sampler = "nearest" },
+                        .{ .texture = "color_targets[3]", .sampler = "nearest" },
                     },
                 },
                 .{
