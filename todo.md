@@ -44,6 +44,7 @@
   - [ ] Filtering
   - [ ] Cascading
 - [ ] SDL_shadercross support
+- [ ] zig shaders (.zig file extension compiled with zig instead of glslc)
 
 # Done
 
