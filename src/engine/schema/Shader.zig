@@ -1,37 +1,41 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Writer = std.Io.Writer;
 
-const default_file = "shaders.glsl";
-const default_entrypoint = "main";
-
-file: []const u8 = default_file,
-entrypoint: []const u8 = default_entrypoint,
+file: []const u8,
+params: []const Parameter = &.{},
 
 const Shader = @This();
 
 pub const Graphics = union(enum) {
-    file: []const u8, // Implies default_entrypoint
-    entrypoint: []const u8, // Implies default_file
+    all: Shader,
     stages: Stages,
 
     pub const Stages = struct {
-        vert: Shader = .{ .file = "tri.vert", .entrypoint = default_entrypoint },
+        vert: Shader = .{ .file = "tri.vert" },
         frag: Shader,
     };
 
     /// Special function, will be called by render.compiler.serialize
     pub fn resolve(self: @This()) Stages {
         return switch (self) {
-            .file => |name| .{
-                .vert = .{ .file = name, .entrypoint = default_entrypoint },
-                .frag = .{ .file = name, .entrypoint = default_entrypoint },
-            },
-            .entrypoint => |name| .{
-                .vert = .{ .file = default_file, .entrypoint = name },
-                .frag = .{ .file = default_file, .entrypoint = name },
+            .all => |all| .{
+                .vert = all,
+                .frag = all,
             },
             .stages => |stages| stages,
         };
+    }
+};
+
+pub const Parameter = struct {
+    name: []const u8,
+    value: ?i32 = null,
+
+    pub fn format(self: Parameter, writer: *Writer) Writer.Error!void {
+        try writer.writeAll(self.name);
+        const value = self.value orelse return;
+        try writer.print("={}", .{value});
     }
 };
 
@@ -43,34 +47,26 @@ pub const Stage = enum {
 
 pub fn Dimensions(config: anytype) type {
     return struct {
-        threads: struct {
-            core: Vec,
-            apron: struct { x: u32 = 0, y: u32 = 0, z: u32 = 0 } = .{},
-        },
+        threads: Vec,
         groups: union(enum) {
             vec: Vec,
-            vec_by_core: Vec,
-            resolution_by_core,
+            vec_by_threads: Vec,
+            resolution_by_threads,
         },
 
         pub fn resolve(self: @This()) struct { threads: Vec, groups: Vec } {
-            const core = self.threads.core;
             return .{
-                .threads = .{
-                    .x = core.x + self.threads.apron.x * 2,
-                    .y = core.y + self.threads.apron.y * 2,
-                    .z = core.z + self.threads.apron.z * 2,
-                },
+                .threads = self.threads,
                 .groups = switch (self.groups) {
                     .vec => |v| v,
-                    .vec_by_core => |v| .{
-                        .x = (v.x + core.x - 1) / core.x,
-                        .y = (v.y + core.y - 1) / core.y,
-                        .z = (v.z + core.z - 1) / core.z,
+                    .vec_by_threads => |v| .{
+                        .x = (v.x + self.threads.x - 1) / self.threads.x,
+                        .y = (v.y + self.threads.y - 1) / self.threads.y,
+                        .z = (v.z + self.threads.z - 1) / self.threads.z,
                     },
-                    .resolution_by_core => .{
-                        .x = (config.width + core.x - 1) / core.x,
-                        .y = (config.height + core.y - 1) / core.y,
+                    .resolution_by_threads => .{
+                        .x = (config.width + self.threads.x - 1) / self.threads.x,
+                        .y = (config.height + self.threads.y - 1) / self.threads.y,
                         .z = 1,
                     },
                 },
@@ -90,14 +86,16 @@ pub fn spvFilename(
     arena: Allocator,
     stage: Stage,
     threads: ?Vec,
-) Allocator.Error![]const u8 {
-    if (threads) |t| {
-        return std.fmt.allocPrint(arena, "{s}.{s}.{s}.{}.{}.{}.spv", .{
-            self.file, @tagName(stage), self.entrypoint, t.x, t.y, t.z,
-        });
-    } else {
-        return std.fmt.allocPrint(arena, "{s}.{s}.{s}.spv", .{
-            self.file, @tagName(stage), self.entrypoint,
-        });
+) Writer.Error![]const u8 {
+    var alloc_writer: Writer.Allocating = .init(arena);
+    const writer = &alloc_writer.writer;
+    try writer.print("{s}_{s}", .{ self.file, @tagName(stage) });
+    for (self.params) |param| {
+        try writer.print("_{f}", .{param});
     }
+    if (threads) |t| {
+        try writer.print("_{}_{}_{}", .{ t.x, t.y, t.z });
+    }
+    try writer.writeAll(".spv");
+    return alloc_writer.written();
 }

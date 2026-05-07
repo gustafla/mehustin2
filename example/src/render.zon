@@ -25,7 +25,10 @@
             .drawcalls = .{
                 .{
                     .pipelines = .{.{
-                        .shader = .{ .entrypoint = "main" },
+                        .shader = .{ .all = .{
+                            .file = "shaders.glsl",
+                            .params = .{.{ .name = "main" }},
+                        } },
                         .depth_test = .{},
                     }},
                     .vertex_buffer = "cube",
@@ -44,11 +47,11 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .entrypoint = "naive_convolution",
+                    .params = .{.{ .name = "naive" }},
                 },
                 .dimensions = .{
-                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
-                    .groups = .resolution_by_core,
+                    .threads = .{ .x = 8, .y = 8 },
+                    .groups = .resolution_by_threads,
                 },
                 .readonly_storage_textures = .{"color_targets[1]"},
             }},
@@ -59,11 +62,11 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .entrypoint = "separable_horizontal",
+                    .params = .{.{ .name = "horizontal" }},
                 },
                 .dimensions = .{
-                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
-                    .groups = .resolution_by_core,
+                    .threads = .{ .x = 8, .y = 8 },
+                    .groups = .resolution_by_threads,
                 },
                 .readonly_storage_textures = .{"color_targets[1]"},
             }},
@@ -74,11 +77,11 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .entrypoint = "separable_vertical",
+                    .params = .{.{ .name = "vertical" }},
                 },
                 .dimensions = .{
-                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
-                    .groups = .resolution_by_core,
+                    .threads = .{ .x = 8, .y = 8 },
+                    .groups = .resolution_by_threads,
                 },
                 .readonly_storage_textures = .{"color_targets[2]"},
             }},
@@ -89,11 +92,11 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .entrypoint = "separable_horizontal_cache",
+                    .params = .{ .{ .name = "horizontal" }, .{ .name = "cache" } },
                 },
                 .dimensions = .{
-                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
-                    .groups = .resolution_by_core,
+                    .threads = .{ .x = 8, .y = 8 },
+                    .groups = .resolution_by_threads,
                 },
                 .readonly_storage_textures = .{"color_targets[1]"},
             }},
@@ -104,11 +107,11 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .entrypoint = "separable_vertical_cache",
+                    .params = .{ .{ .name = "vertical" }, .{ .name = "cache" } },
                 },
                 .dimensions = .{
-                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
-                    .groups = .resolution_by_core,
+                    .threads = .{ .x = 8, .y = 8 },
+                    .groups = .resolution_by_threads,
                 },
                 .readonly_storage_textures = .{"color_targets[2]"},
             }},
@@ -118,7 +121,10 @@
             .drawcalls = .{
                 .{
                     .pipelines = .{.{
-                        .shader = .{ .stages = .{ .frag = .{ .entrypoint = "post" } } },
+                        .shader = .{ .stages = .{ .frag = .{
+                            .file = "shaders.glsl",
+                            .params = .{.{ .name = "post" }},
+                        } } },
                     }},
                     .fragment_samplers = .{
                         .{ .texture = "color_targets[1]", .sampler = "nearest" },
@@ -127,7 +133,7 @@
                 },
                 .{
                     .pipelines = .{.{
-                        .shader = .{ .file = "text.glsl" },
+                        .shader = .{ .all = .{ .file = "text.glsl" } },
                         .primitive_type = .trianglestrip,
                         .blend_states = .{.{
                             .enable = true,

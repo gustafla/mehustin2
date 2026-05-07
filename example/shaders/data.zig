@@ -1,40 +1,36 @@
 const std = @import("std");
 
+const config = @import("config");
+const params = @import("params");
+
 pub const kernel = struct {
-    fn gaussian(x: f32, sigma: f32) f32 {
+    const size = getParam(.blur_radius);
+    const sigma = getParam(.blur_sigma);
+
+    pub fn gaussian() [size + 1]f32 {
+        var buffer: [size + 1]f32 = undefined;
+
+        for (0..buffer.len) |i| buffer[i] = g(@floatFromInt(i));
+        normalize(&buffer);
+        return buffer;
+    }
+
+    fn g(x: f32) f32 {
         return (1.0 / (sigma * @sqrt(2.0 * std.math.pi))) *
             (@exp((-1.0 / 2.0) * ((x * x) / (sigma * sigma))));
     }
-
-    fn normalize(xs: []f32) void {
-        var sum: f32 = 0;
-        for (xs) |x| sum += x;
-        for (xs) |*x| x.* /= sum;
-    }
-
-    pub fn gaussian101() [101]f32 {
-        var buffer: [101]f32 = undefined;
-
-        const sigma = 30;
-
-        for (0..buffer.len) |i| {
-            const x: f32 = @floatFromInt(i);
-            buffer[i] = gaussian(x, sigma);
-        }
-        normalize(&buffer);
-        return buffer;
-    }
-
-    pub fn gaussian17() [17]f32 {
-        var buffer: [17]f32 = undefined;
-
-        const sigma = 3;
-
-        for (0..buffer.len) |i| {
-            const x: f32 = @floatFromInt(i);
-            buffer[i] = gaussian(x, sigma);
-        }
-        normalize(&buffer);
-        return buffer;
-    }
 };
+
+fn getParam(comptime field: @EnumLiteral()) comptime_int {
+    const name = @tagName(field);
+    if (@hasDecl(params, name)) {
+        return @field(params, name);
+    }
+    return @field(config, name);
+}
+
+fn normalize(xs: []f32) void {
+    var sum: f32 = 0;
+    for (xs) |x| sum += x;
+    for (xs) |*x| x.* /= sum;
+}

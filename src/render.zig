@@ -130,8 +130,6 @@ fn initComputePipeline(
     arena: Allocator,
     comptime key: ComputePipelineKey,
 ) !*c.SDL_GPUComputePipeline {
-    log.debug("Initializing comp: {s}.{s}", .{ key.comp.file, key.comp.entrypoint });
-
     // Allocate SPIR-V file name
     const spirv_name = try key.comp.spvFilename(arena, .compute, .{
         .x = key.comp_info.threadcount_x,
@@ -158,10 +156,6 @@ fn initGraphicsPipeline(
 ) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
     const stages = pipeline.shader.resolve();
-    log.debug("Initializing vert: {s}.{s}, frag: {s}.{s}", .{
-        stages.vert.file, stages.vert.entrypoint,
-        stages.frag.file, stages.frag.entrypoint,
-    });
 
     const vert = try shader.loadShader(io, arena, device, .vertex, stages.vert, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);

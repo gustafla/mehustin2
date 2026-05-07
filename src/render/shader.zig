@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 
 const c = @import("c");
 const engine = @import("engine");
@@ -9,10 +10,10 @@ const sdlerr = engine.err.sdlerr;
 const schema = engine.schema;
 const Shader = schema.Shader;
 
-const Error = error{SdlError} || resource.Error;
+const Error = error{SdlError} || resource.Error || Io.Writer.Error;
 
 pub fn loadShader(
-    io: std.Io,
+    io: Io,
     arena: Allocator,
     device: *c.SDL_GPUDevice,
     comptime stage: Shader.Stage,
