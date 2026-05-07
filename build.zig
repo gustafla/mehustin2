@@ -100,8 +100,8 @@ pub fn build(b: *std.Build) void {
     } else {
         translate_c.addIncludePath(sdl_dep.path("include"));
     }
-    translate_c.addIncludePath(stb_dep.path("."));
-    translate_c.addIncludePath(par_dep.path("."));
+    translate_c.addIncludePath(stb_dep.path(""));
+    translate_c.addIncludePath(par_dep.path(""));
     const translate_c_mod = translate_c.createModule();
 
     // Create a module for engine.zig
@@ -167,7 +167,7 @@ pub fn build(b: *std.Build) void {
     }
 
     // Add stb_vorbis to exe
-    exe_mod.addIncludePath(stb_dep.path("."));
+    exe_mod.addIncludePath(stb_dep.path(""));
     exe_mod.addCSourceFile(.{ .file = stb_dep.path("stb_vorbis.c") });
 
     // Generate C files for C header libraries
@@ -179,14 +179,14 @@ pub fn build(b: *std.Build) void {
         \\#include <stb_image.h>
         \\
     );
-    engine_mod.addIncludePath(stb_dep.path("."));
+    engine_mod.addIncludePath(stb_dep.path(""));
     engine_mod.addCSourceFile(.{ .file = stb_image_c });
     const par_shapes_c = c_write.add("par_shapes.c",
         \\#define PAR_SHAPES_IMPLEMENTATION
         \\#include <par_shapes.h>
         \\
     );
-    engine_mod.addIncludePath(par_dep.path("."));
+    engine_mod.addIncludePath(par_dep.path(""));
     engine_mod.addCSourceFile(.{ .file = par_shapes_c });
 
     // Set up render shared library
@@ -327,7 +327,7 @@ pub fn bakeFontAtlases(
         const output_path_png = b.fmt("{s}.png", .{output_path});
 
         const msdf_run = b.addRunArtifact(msdf_atlas_gen);
-        msdf_run.setCwd(if (project_font) b.path(".") else d.path("."));
+        msdf_run.setCwd(if (project_font) b.path("") else d.path(""));
         _ = msdf_run.captureStdErr(.{});
         _ = msdf_run.captureStdOut(.{});
 
@@ -385,7 +385,7 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     // Set exe rpath
     if (options.render_dynlib) {
         const exe_mod = d.module("exe");
-        const lib_path = b.getInstallPath(.lib, ".");
+        const lib_path = b.getInstallPath(.lib, "");
         exe_mod.addRPath(.{ .cwd_relative = lib_path });
     }
 

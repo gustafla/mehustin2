@@ -20,9 +20,9 @@ pub fn build(b: *std.Build) void {
     const msdfgen_dep = b.dependency("msdfgen", .{});
 
     // Set include directories
-    exe_mod.addIncludePath(msdf_atlas_gen_dep.path("."));
+    exe_mod.addIncludePath(msdf_atlas_gen_dep.path(""));
     exe_mod.addIncludePath(msdf_atlas_gen_dep.path("msdf-atlas-gen"));
-    exe_mod.addIncludePath(msdfgen_dep.path("."));
+    exe_mod.addIncludePath(msdfgen_dep.path(""));
 
     // Link dependencies
     exe_mod.linkSystemLibrary("freetype2", .{});

@@ -84,6 +84,36 @@
             }},
             .readwrite_storage_textures = .{"color_targets[3]"},
         } },
+        .{ .compute = .{
+            .require_all_tags = .{.comp_2pass_separable_cache},
+            .dispatches = .{.{
+                .comp = .{
+                    .file = "bloom.glsl",
+                    .entrypoint = "separable_horizontal_cache",
+                },
+                .dimensions = .{
+                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
+                    .groups = .resolution_by_core,
+                },
+                .readonly_storage_textures = .{"color_targets[1]"},
+            }},
+            .readwrite_storage_textures = .{"color_targets[2]"},
+        } },
+        .{ .compute = .{
+            .require_all_tags = .{.comp_2pass_separable_cache},
+            .dispatches = .{.{
+                .comp = .{
+                    .file = "bloom.glsl",
+                    .entrypoint = "separable_vertical_cache",
+                },
+                .dimensions = .{
+                    .threads = .{ .core = .{ .x = 8, .y = 8 } },
+                    .groups = .resolution_by_core,
+                },
+                .readonly_storage_textures = .{"color_targets[2]"},
+            }},
+            .readwrite_storage_textures = .{"color_targets[3]"},
+        } },
         .{ .render = .{
             .drawcalls = .{
                 .{
