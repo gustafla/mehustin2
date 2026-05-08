@@ -1,11 +1,10 @@
 const std = @import("std");
 
-const config = @import("config");
-const params = @import("params");
+const getParam = @import("genglsl").getParam;
 
 pub const kernel = struct {
-    const size = getParam(.blur_radius);
-    const sigma = getParam(.blur_sigma);
+    const size = getParam("blur_radius");
+    const sigma: comptime_float = getParam("blur_sigma");
 
     pub fn gaussian() [size + 1]f32 {
         var buffer: [size + 1]f32 = undefined;
@@ -20,14 +19,6 @@ pub const kernel = struct {
             (@exp((-1.0 / 2.0) * ((x * x) / (sigma * sigma))));
     }
 };
-
-fn getParam(comptime field: @EnumLiteral()) comptime_int {
-    const name = @tagName(field);
-    if (@hasDecl(params, name)) {
-        return @field(params, name);
-    }
-    return @field(config, name);
-}
 
 fn normalize(xs: []f32) void {
     var sum: f32 = 0;

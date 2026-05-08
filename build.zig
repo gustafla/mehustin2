@@ -412,24 +412,32 @@ fn compileShader(
         const genglsl_params = b.addOptions();
         var param_iterator = shader.paramIterator();
         while (param_iterator.next()) |elem| {
-            const name, const value = elem;
-            genglsl_params.addOption(i32, name, value orelse continue);
+            const name, const val_opt = elem;
+            const val_str = val_opt orelse continue;
+            const val_union = Shader.ParamValue.parse(val_str) catch {
+                std.log.err("Invalid: {s}={s}", .{ name, val_str });
+                @panic("Invalid value");
+            };
+            switch (val_union) {
+                inline else => |v| genglsl_params.addOption(@TypeOf(v), name, v),
+            }
         }
         const genglsl_data_mod = b.createModule(.{
             .root_source_file = b.path(data_path),
+        });
+        const genglsl_exe_mod = b.createModule(.{
+            .root_source_file = d.path("src/genglsl.zig"),
+            .target = b.resolveTargetQuery(.{}), // Native
+            .optimize = .Debug,
             .imports = &.{
+                .{ .name = "data", .module = genglsl_data_mod },
                 .{ .name = "params", .module = genglsl_params.createModule() },
                 .{ .name = "config", .module = b.createModule(.{
                     .root_source_file = b.path("src/config.zon"),
                 }) },
             },
         });
-        const genglsl_exe_mod = b.createModule(.{
-            .root_source_file = d.path("src/genglsl.zig"),
-            .target = b.resolveTargetQuery(.{}), // Native
-            .optimize = .Debug,
-            .imports = &.{.{ .name = "data", .module = genglsl_data_mod }},
-        });
+        genglsl_data_mod.addImport("genglsl", genglsl_exe_mod);
         const genglsl_exe = b.addExecutable(.{
             .name = "genglsl",
             .root_module = genglsl_exe_mod,
@@ -497,10 +505,10 @@ fn compileShader(
     // Add parameter macros
     var param_iterator = shader.paramIterator();
     while (param_iterator.next()) |elem| {
-        const name, const value = elem;
+        const name, const val_str = elem;
         const upper = toUpper(arena, name);
-        if (value) |val| {
-            shaderc_run.addArg(b.fmt("-D{s}={}", .{ upper, val }));
+        if (val_str) |val| {
+            shaderc_run.addArg(b.fmt("-D{s}={s}", .{ upper, val }));
         } else {
             shaderc_run.addArg(b.fmt("-D{s}", .{upper}));
         }

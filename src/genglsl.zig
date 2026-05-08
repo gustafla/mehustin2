@@ -1,6 +1,8 @@
 const std = @import("std");
 
+const config = @import("config");
 const data = @import("data");
+const params = @import("params");
 
 pub fn main(init: std.process.Init) !void {
     var buffer: [1024]u8 = undefined;
@@ -72,4 +74,14 @@ fn serializeGlsl(
         try writer.print("{}", .{value});
     }
     try writer.writeAll(";\n");
+}
+
+pub fn getParam(comptime field: []const u8) if (@hasDecl(params, field))
+    @TypeOf(@field(params, field))
+else
+    @TypeOf(@field(config, field)) {
+    return if (@hasDecl(params, field))
+        @field(params, field)
+    else
+        @field(config, field);
 }
