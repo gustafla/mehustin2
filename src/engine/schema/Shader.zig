@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
 
 file: []const u8,
-params: []const Parameter = &.{},
+params: []const []const u8 = &.{},
 
 const Shader = @This();
 
@@ -25,17 +25,6 @@ pub const Graphics = union(enum) {
             },
             .stages => |stages| stages,
         };
-    }
-};
-
-pub const Parameter = struct {
-    name: []const u8,
-    value: ?i32 = null,
-
-    pub fn format(self: Parameter, writer: *Writer) Writer.Error!void {
-        try writer.writeAll(self.name);
-        const value = self.value orelse return;
-        try writer.print("={}", .{value});
     }
 };
 
@@ -89,13 +78,33 @@ pub fn spvFilename(
 ) Writer.Error![]const u8 {
     var alloc_writer: Writer.Allocating = .init(arena);
     const writer = &alloc_writer.writer;
-    try writer.print("{s}_{s}", .{ self.file, @tagName(stage) });
+    try writer.print("{s}.{s}", .{ self.file, @tagName(stage) });
     for (self.params) |param| {
-        try writer.print("_{f}", .{param});
+        try writer.print(".{s}", .{param});
     }
     if (threads) |t| {
-        try writer.print("_{}_{}_{}", .{ t.x, t.y, t.z });
+        try writer.print(".{}.{}.{}", .{ t.x, t.y, t.z });
     }
     try writer.writeAll(".spv");
     return alloc_writer.written();
+}
+
+pub const ParamIterator = struct {
+    shader: *const Shader,
+    i: usize = 0,
+
+    pub fn next(self: *ParamIterator) ?struct { []const u8, ?i32 } {
+        if (self.i >= self.shader.params.len) return null;
+        const param = self.shader.params[self.i];
+        self.i += 1;
+        const name, const val_str = std.mem.cutScalarLast(u8, param, '=') orelse
+            return .{ param, null };
+        const val = std.fmt.parseInt(i32, val_str, 10) catch
+            return .{ name, null };
+        return .{ name, val };
+    }
+};
+
+pub fn paramIterator(self: *const Shader) ParamIterator {
+    return .{ .shader = self };
 }

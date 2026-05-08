@@ -27,7 +27,7 @@
                     .pipelines = .{.{
                         .shader = .{ .all = .{
                             .file = "shaders.glsl",
-                            .params = .{.{ .name = "main" }},
+                            .params = .{"main"},
                         } },
                         .depth_test = .{},
                     }},
@@ -47,7 +47,7 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .params = .{.{ .name = "naive" }},
+                    .params = .{ "naive", "blur_radius=20", "blur_sigma=5" },
                 },
                 .dimensions = .{
                     .threads = .{ .x = 8, .y = 8 },
@@ -62,7 +62,7 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .params = .{.{ .name = "horizontal" }},
+                    .params = .{"horizontal"},
                 },
                 .dimensions = .{
                     .threads = .{ .x = 8, .y = 8 },
@@ -77,7 +77,7 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .params = .{.{ .name = "vertical" }},
+                    .params = .{"vertical"},
                 },
                 .dimensions = .{
                     .threads = .{ .x = 8, .y = 8 },
@@ -92,7 +92,7 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .params = .{ .{ .name = "horizontal" }, .{ .name = "cache" } },
+                    .params = .{ "horizontal", "cache" },
                 },
                 .dimensions = .{
                     .threads = .{ .x = 8, .y = 8 },
@@ -107,7 +107,7 @@
             .dispatches = .{.{
                 .comp = .{
                     .file = "bloom.glsl",
-                    .params = .{ .{ .name = "vertical" }, .{ .name = "cache" } },
+                    .params = .{ "vertical", "cache" },
                 },
                 .dimensions = .{
                     .threads = .{ .x = 8, .y = 8 },
@@ -123,7 +123,7 @@
                     .pipelines = .{.{
                         .shader = .{ .stages = .{ .frag = .{
                             .file = "shaders.glsl",
-                            .params = .{.{ .name = "post" }},
+                            .params = .{"post"},
                         } } },
                     }},
                     .fragment_samplers = .{

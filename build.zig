@@ -410,9 +410,10 @@ fn compileShader(
     const data_path = b.pathJoin(&.{ config.shader_dir, "data.zig" });
     if (b.build_root.handle.access(b.graph.io, data_path, .{})) {
         const genglsl_params = b.addOptions();
-        for (shader.params) |param| {
-            const value = param.value orelse continue;
-            genglsl_params.addOption(i32, param.name, value);
+        var param_iterator = shader.paramIterator();
+        while (param_iterator.next()) |elem| {
+            const name, const value = elem;
+            genglsl_params.addOption(i32, name, value orelse continue);
         }
         const genglsl_data_mod = b.createModule(.{
             .root_source_file = b.path(data_path),
@@ -494,10 +495,12 @@ fn compileShader(
     }
 
     // Add parameter macros
-    for (shader.params) |param| {
-        const upper = toUpper(arena, param.name);
-        if (param.value) |value| {
-            shaderc_run.addArg(b.fmt("-D{s}={}", .{ upper, value }));
+    var param_iterator = shader.paramIterator();
+    while (param_iterator.next()) |elem| {
+        const name, const value = elem;
+        const upper = toUpper(arena, name);
+        if (value) |val| {
+            shaderc_run.addArg(b.fmt("-D{s}={}", .{ upper, val }));
         } else {
             shaderc_run.addArg(b.fmt("-D{s}", .{upper}));
         }
