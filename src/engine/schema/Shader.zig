@@ -64,7 +64,7 @@ pub fn Dimensions(config: anytype) type {
     };
 }
 
-const Vec = struct {
+pub const Vec = struct {
     x: u32,
     y: u32 = 1,
     z: u32 = 1,
@@ -78,12 +78,12 @@ pub fn spvFilename(
 ) Writer.Error![]const u8 {
     var alloc_writer: Writer.Allocating = .init(arena);
     const writer = &alloc_writer.writer;
-    try writer.print("{s}.{s}", .{ self.file, @tagName(stage) });
+    try writer.print("{s},{s}", .{ self.file, @tagName(stage) });
     for (self.params) |param| {
-        try writer.print(".{s}", .{param});
+        try writer.print(",{s}", .{param});
     }
     if (threads) |t| {
-        try writer.print(".{}.{}.{}", .{ t.x, t.y, t.z });
+        try writer.print(",{},{},{}", .{ t.x, t.y, t.z });
     }
     try writer.writeAll(".spv");
     return alloc_writer.written();
