@@ -397,6 +397,7 @@ pub fn UsageFlags(comptime config: schema.Render) type {
         storage_buffers: [@typeInfo(script.StorageBuffer).@"enum".fields.len]BufferUsageFlags,
 
         pub const init: @This() = blk: {
+            @setEvalBranchQuota(1000 * config.passes.len);
             var f = std.mem.zeroes(@This());
 
             for (config.passes) |pass| switch (pass) {
