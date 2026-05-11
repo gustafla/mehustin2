@@ -13,6 +13,7 @@
 - [ ] 3D text
 - [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
   - [ ] Overrides for pipeline parameters and binds
+- [ ] Bind with fewer API calls, replace num=1 binds with array binds
 
 # Backlog
 
