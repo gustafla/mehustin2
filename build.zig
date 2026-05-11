@@ -3,8 +3,6 @@ const std = @import("std");
 const Shader = @import("src/engine/schema/Shader.zig");
 const Font = @import("src/engine/schema/Font.zig");
 
-pub const PresentationMode = enum { vsync, mailbox };
-
 pub const Options = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -68,6 +66,8 @@ pub const Options = struct {
         options_mod.addOption(PresentationMode, "present_mode", self.present_mode);
         return options_mod.createModule();
     }
+
+    const PresentationMode = enum { vsync, mailbox };
 };
 
 pub fn build(b: *std.Build) void {
@@ -220,6 +220,18 @@ pub fn importScript(d: *std.Build.Dependency, script_mod: *std.Build.Module) voi
     addScript(engine_mod, render_mod, exe_mod, script_mod);
 }
 
+fn addScript(
+    engine_mod: *std.Build.Module,
+    render_mod: *std.Build.Module,
+    exe_mod: *std.Build.Module,
+    script_mod: *std.Build.Module,
+) void {
+    script_mod.addImport("engine", engine_mod);
+    engine_mod.addImport("script", script_mod);
+    render_mod.addImport("script", script_mod);
+    exe_mod.addImport("script", script_mod);
+}
+
 /// Sets up glslc steps for all shader combinations in the caller project's render.zon
 pub fn compileShaders(
     b: *std.Build,
@@ -267,127 +279,6 @@ pub fn compileShaders(
             },
         }
     }
-}
-
-pub fn bakeFontAtlases(
-    b: *std.Build,
-    d: *std.Build.Dependency,
-    comptime config: anytype,
-) void {
-    const arena = b.allocator;
-    const msdf_atlas_gen = d.artifact("msdf-atlas-gen");
-
-    // Load and parse timeline.zon at runtime
-    const timeline = parseZon(struct {
-        text: struct {
-            fonts: []const Font,
-        },
-    }, b, "src/timeline.zon");
-
-    for (timeline.text.fonts, 0..) |font, i| {
-        const input_path, const project_font = blk: {
-            const path = b.pathJoin(&.{ config.font_dir, font.file });
-            if (b.build_root.handle.access(b.graph.io, path, .{}) == error.FileNotFound) {
-                break :blk .{ b.pathJoin(&.{ "font_lib", font.file }), false };
-            }
-            break :blk .{ path, true };
-        };
-
-        const output_path = b.pathJoin(&.{ config.data_dir, b.fmt("font{}", .{i}) });
-        const output_path_json = b.fmt("{s}.json", .{output_path});
-        const output_path_png = b.fmt("{s}.png", .{output_path});
-
-        const msdf_run = b.addRunArtifact(msdf_atlas_gen);
-        msdf_run.setCwd(if (project_font) b.path("") else d.path(""));
-        _ = msdf_run.captureStdErr(.{});
-        _ = msdf_run.captureStdOut(.{});
-
-        msdf_run.addFileInput(if (project_font) b.path(input_path) else d.path(input_path));
-        if (font.variables.len == 0) {
-            msdf_run.addArgs(&.{ "-font", input_path });
-        } else {
-            const variables = std.mem.join(arena, "&", font.variables) catch @panic("OOM");
-            const spec = b.fmt("{s}?{s}", .{ input_path, variables });
-            msdf_run.addArgs(&.{ "-varfont", spec });
-        }
-        msdf_run.addArgs(&.{ "-type", "mtsdf" });
-        msdf_run.addArg("-potr");
-        msdf_run.addArgs(&.{ "-size", b.fmt("{}", .{font.size}) });
-        msdf_run.addArgs(&.{ "-emrange", "1" });
-        msdf_run.addArgs(&.{ "-empadding", b.fmt("{}", .{font.padding_em}) });
-        msdf_run.addArg("-scanline");
-
-        msdf_run.addArg("-json");
-        const json_output = msdf_run.addOutputFileArg(output_path_json);
-        const json_install = b.addInstallBinFile(json_output, output_path_json);
-        json_install.step.dependOn(&msdf_run.step);
-        b.getInstallStep().dependOn(&json_install.step);
-
-        msdf_run.addArg("-imageout");
-        const png_output = msdf_run.addOutputFileArg(output_path_png);
-        const png_install = b.addInstallBinFile(png_output, output_path_png);
-        png_install.step.dependOn(&msdf_run.step);
-        b.getInstallStep().dependOn(&png_install.step);
-    }
-}
-
-// Sets up shader and asset compilation in the caller project's build graph.
-pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
-    // Add data files to bin
-    const install_data_dir = b.addInstallDirectory(.{
-        .source_dir = b.path("data"),
-        .install_dir = .bin,
-        .install_subdir = "data",
-    });
-    b.getInstallStep().dependOn(&install_data_dir.step);
-
-    // Add README.md to bin
-    b.getInstallStep().dependOn(&b.addInstallBinFile(
-        b.path("README.md"),
-        "README.md",
-    ).step);
-
-    // Add THIRD-PARTY-LICENSES.md to bin
-    b.getInstallStep().dependOn(&b.addInstallBinFile(
-        d.path("vendor/LICENSES.md"),
-        "THIRD-PARTY-LICENSES.md",
-    ).step);
-
-    // Set exe rpath
-    if (options.render_dynlib) {
-        const exe_mod = d.module("exe");
-        const lib_path = b.getInstallPath(.lib, "");
-        exe_mod.addRPath(.{ .cwd_relative = lib_path });
-    }
-
-    // Add exe to bin
-    const exe = d.artifact(options.exe_name);
-    b.installArtifact(exe);
-
-    // Add lib to lib
-    if (options.render_dynlib) {
-        const render_lib = d.artifact("render");
-        b.installArtifact(render_lib);
-    }
-
-    // Add run step
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.setCwd(.{ .cwd_relative = b.exe_dir });
-    run_cmd.step.dependOn(b.getInstallStep());
-    const run_step = b.step("run", "Run the demo");
-    run_step.dependOn(&run_cmd.step);
-}
-
-fn addScript(
-    engine_mod: *std.Build.Module,
-    render_mod: *std.Build.Module,
-    exe_mod: *std.Build.Module,
-    script_mod: *std.Build.Module,
-) void {
-    script_mod.addImport("engine", engine_mod);
-    engine_mod.addImport("script", script_mod);
-    render_mod.addImport("script", script_mod);
-    exe_mod.addImport("script", script_mod);
 }
 
 fn compileShader(
@@ -536,6 +427,115 @@ fn compileShader(
     );
     shader_install.step.dependOn(&shaderc_run.step);
     b.getInstallStep().dependOn(&shader_install.step);
+}
+
+pub fn bakeFontAtlases(
+    b: *std.Build,
+    d: *std.Build.Dependency,
+    comptime config: anytype,
+) void {
+    const arena = b.allocator;
+    const msdf_atlas_gen = d.artifact("msdf-atlas-gen");
+
+    // Load and parse timeline.zon at runtime
+    const timeline = parseZon(struct {
+        text: struct {
+            fonts: []const Font,
+        },
+    }, b, "src/timeline.zon");
+
+    for (timeline.text.fonts, 0..) |font, i| {
+        const input_path, const project_font = blk: {
+            const path = b.pathJoin(&.{ config.font_dir, font.file });
+            if (b.build_root.handle.access(b.graph.io, path, .{}) == error.FileNotFound) {
+                break :blk .{ b.pathJoin(&.{ "font_lib", font.file }), false };
+            }
+            break :blk .{ path, true };
+        };
+
+        const output_path = b.pathJoin(&.{ config.data_dir, b.fmt("font{}", .{i}) });
+        const output_path_json = b.fmt("{s}.json", .{output_path});
+        const output_path_png = b.fmt("{s}.png", .{output_path});
+
+        const msdf_run = b.addRunArtifact(msdf_atlas_gen);
+        msdf_run.setCwd(if (project_font) b.path("") else d.path(""));
+        _ = msdf_run.captureStdErr(.{});
+        _ = msdf_run.captureStdOut(.{});
+
+        msdf_run.addFileInput(if (project_font) b.path(input_path) else d.path(input_path));
+        if (font.variables.len == 0) {
+            msdf_run.addArgs(&.{ "-font", input_path });
+        } else {
+            const variables = std.mem.join(arena, "&", font.variables) catch @panic("OOM");
+            const spec = b.fmt("{s}?{s}", .{ input_path, variables });
+            msdf_run.addArgs(&.{ "-varfont", spec });
+        }
+        msdf_run.addArgs(&.{ "-type", "mtsdf" });
+        msdf_run.addArg("-potr");
+        msdf_run.addArgs(&.{ "-size", b.fmt("{}", .{font.size}) });
+        msdf_run.addArgs(&.{ "-emrange", "1" });
+        msdf_run.addArgs(&.{ "-empadding", b.fmt("{}", .{font.padding_em}) });
+        msdf_run.addArg("-scanline");
+
+        msdf_run.addArg("-json");
+        const json_output = msdf_run.addOutputFileArg(output_path_json);
+        const json_install = b.addInstallBinFile(json_output, output_path_json);
+        json_install.step.dependOn(&msdf_run.step);
+        b.getInstallStep().dependOn(&json_install.step);
+
+        msdf_run.addArg("-imageout");
+        const png_output = msdf_run.addOutputFileArg(output_path_png);
+        const png_install = b.addInstallBinFile(png_output, output_path_png);
+        png_install.step.dependOn(&msdf_run.step);
+        b.getInstallStep().dependOn(&png_install.step);
+    }
+}
+
+// Sets up shader and asset compilation in the caller project's build graph.
+pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
+    // Add data files to bin
+    const install_data_dir = b.addInstallDirectory(.{
+        .source_dir = b.path("data"),
+        .install_dir = .bin,
+        .install_subdir = "data",
+    });
+    b.getInstallStep().dependOn(&install_data_dir.step);
+
+    // Add README.md to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
+        b.path("README.md"),
+        "README.md",
+    ).step);
+
+    // Add THIRD-PARTY-LICENSES.md to bin
+    b.getInstallStep().dependOn(&b.addInstallBinFile(
+        d.path("vendor/LICENSES.md"),
+        "THIRD-PARTY-LICENSES.md",
+    ).step);
+
+    // Set exe rpath
+    if (options.render_dynlib) {
+        const exe_mod = d.module("exe");
+        const lib_path = b.getInstallPath(.lib, "");
+        exe_mod.addRPath(.{ .cwd_relative = lib_path });
+    }
+
+    // Add exe to bin
+    const exe = d.artifact(options.exe_name);
+    b.installArtifact(exe);
+
+    // Add lib to lib
+    if (options.render_dynlib) {
+        const render_lib = d.artifact("render");
+        b.installArtifact(render_lib);
+    }
+
+    // Add run step
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.setCwd(.{ .cwd_relative = b.exe_dir });
+    run_cmd.step.dependOn(b.getInstallStep());
+    const run_step = b.step("run", "Run the demo");
+    run_step.dependOn(&run_cmd.step);
 }
 
 fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
