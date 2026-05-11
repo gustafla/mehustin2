@@ -118,3 +118,87 @@ void main() {
 }
 #endif // CACHE and (HORIZONTAL or VERTICAL)
 #endif // COMPUTE
+
+#if defined(FRAGMENT)
+layout(location = 0) in vec2 in_uv;
+
+layout(location = 0) out vec4 out_color;
+
+layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
+
+#if defined(NAIVE)
+void main() {
+    const ivec2 img_size = textureSize(u_input_texture, 0);
+
+    vec4 sum = vec4(0.0);
+
+    for (int y = 0; y < N; y++) {
+        for (int x = 0; x < N; x++) {
+            ivec2 offset = ivec2(x - M, y - M);
+            ivec2 sample_coord = ivec2(gl_FragCoord.xy) + offset;
+            sample_coord = clamp(sample_coord, ivec2(0, 0), img_size - 1);
+            sum += kernel_gaussian[abs(offset.x)] *
+                    kernel_gaussian[abs(offset.y)] *
+                    texelFetch(u_input_texture, sample_coord, 0);
+        }
+    }
+
+    out_color = sum;
+}
+#endif // NAIVE
+
+#if defined(HORIZONTAL) || defined(VERTICAL)
+void main() {
+    const ivec2 img_size = textureSize(u_input_texture, 0);
+
+    vec4 sum = vec4(0.0);
+
+    for (int i = 0; i < N; i++) {
+        int i_minus_m = i - M;
+
+        #if defined(HORIZONTAL)
+        ivec2 sample_coord = ivec2(gl_FragCoord.x + i_minus_m, gl_FragCoord.y);
+        #else
+        ivec2 sample_coord = ivec2(gl_FragCoord.x, gl_FragCoord.y + i_minus_m);
+        #endif
+
+        sample_coord = clamp(sample_coord, ivec2(0, 0), img_size - 1);
+        sum += kernel_gaussian[abs(i_minus_m)] *
+                texelFetch(u_input_texture, sample_coord, 0);
+    }
+
+    out_color = sum;
+}
+#endif // HORIZONTAL or VERTICAL
+
+#if defined(KAWASE)
+void main() {
+    vec2 o = 0.5 / textureSize(u_input_texture, 0);
+
+    vec4 sum = vec4(0.0);
+
+    #if defined(UP)
+    const float weight = 1.0 / 12;
+    sum += texture(u_input_texture, in_uv + vec2(-o.x * 2.0, 0.0));
+    sum += texture(u_input_texture, in_uv + vec2(o.x * 2.0, 0.0));
+    sum += texture(u_input_texture, in_uv + vec2(0.0, -o.y * 2.0));
+    sum += texture(u_input_texture, in_uv + vec2(0.0, o.y * 2.0));
+    sum += texture(u_input_texture, in_uv + vec2(-o.x, o.y)) * 2.0;
+    sum += texture(u_input_texture, in_uv + vec2(o.x, o.y)) * 2.0;
+    sum += texture(u_input_texture, in_uv + vec2(-o.x, -o.y)) * 2.0;
+    sum += texture(u_input_texture, in_uv + vec2(o.x, -o.y)) * 2.0;
+    #elif defined(DOWN)
+    const float weight = 1.0 / 8;
+    sum += texture(u_input_texture, in_uv) * 4.0;
+    sum += texture(u_input_texture, in_uv + vec2(-o.x, -o.y));
+    sum += texture(u_input_texture, in_uv + vec2(o.x, -o.y));
+    sum += texture(u_input_texture, in_uv + vec2(-o.x, o.y));
+    sum += texture(u_input_texture, in_uv + vec2(o.x, o.y));
+    #else
+    #error "Either UP or DOWN must be defined"
+    #endif // UP elif DOWN
+
+    out_color = sum * weight;
+}
+#endif // KAWASE
+#endif // FRAGMENT
