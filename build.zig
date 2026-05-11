@@ -232,12 +232,37 @@ fn addScript(
     exe_mod.addImport("script", script_mod);
 }
 
+fn ShaderCompile(comptime config: anytype) type {
+    return struct {
+        shader: Shader,
+        stage: Shader.Stage,
+        threads: ?Shader.Vec,
+        spv_filename: []const u8,
+
+        pub fn init(
+            arena: std.mem.Allocator,
+            shader: Shader,
+            stage: Shader.Stage,
+            dimensions: ?Shader.Dimensions(config),
+        ) @This() {
+            const threads = if (dimensions) |dim| dim.resolve().threads else null;
+            return .{
+                .shader = shader,
+                .stage = stage,
+                .threads = threads,
+                .spv_filename = shader.spvFilename(arena, stage, threads) catch @panic("OOM"),
+            };
+        }
+    };
+}
+
 /// Sets up glslc steps for all shader combinations in the caller project's render.zon
 pub fn compileShaders(
     b: *std.Build,
     d: *std.Build.Dependency,
     comptime config: anytype,
 ) void {
+    const arena = b.allocator;
 
     // Load and parse render.zon at runtime
     const render = parseZon(struct { passes: []const union(enum) {
@@ -258,50 +283,56 @@ pub fn compileShaders(
     }, b, "src/timeline.zon");
 
     // Find tag indices
-    var tag_set: std.StringHashMapUnmanaged(u32) = .empty;
+    var tag_map: std.StringHashMapUnmanaged(u32) = .empty;
     for (timeline.tags) |tag| {
-        const num_tags = tag_set.count();
-        _ = tag_set.getOrPutValue(b.allocator, tag.name, num_tags) catch @panic("OOM");
+        const num_tags = tag_map.count();
+        _ = tag_map.getOrPutValue(arena, tag.name, num_tags) catch @panic("OOM");
     }
 
     // Traverse the render.zon tree
+    var compile_set: std.StringHashMapUnmanaged(ShaderCompile(config)) = .empty;
     for (render.passes) |pass| {
         switch (pass) {
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    compileShader(b, d, stages.vert, .vertex, config, &tag_set, null);
-                    compileShader(b, d, stages.frag, .fragment, config, &tag_set, null);
+                    const vert: ShaderCompile(config) = .init(arena, stages.vert, .vertex, null);
+                    _ = compile_set.getOrPutValue(arena, vert.spv_filename, vert) catch @panic("OOM");
+                    const frag: ShaderCompile(config) = .init(arena, stages.frag, .fragment, null);
+                    _ = compile_set.getOrPutValue(arena, frag.spv_filename, frag) catch @panic("OOM");
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                compileShader(b, d, disp.comp, .compute, config, &tag_set, disp.dimensions);
+                const comp: ShaderCompile(config) = .init(arena, disp.comp, .compute, disp.dimensions);
+                _ = compile_set.getOrPutValue(arena, comp.spv_filename, comp) catch @panic("OOM");
             },
         }
+    }
+
+    var iterator = compile_set.valueIterator();
+    while (iterator.next()) |compile| {
+        compileShader(b, d, config, &tag_map, compile);
     }
 }
 
 fn compileShader(
     b: *std.Build,
     d: *std.Build.Dependency,
-    shader: Shader,
-    comptime stage: Shader.Stage,
     comptime config: anytype,
     tag_map: *const std.StringHashMapUnmanaged(u32),
-    dimensions: ?Shader.Dimensions(config),
+    compile: *const ShaderCompile(config),
 ) void {
     const arena = b.allocator;
-    const threads = if (dimensions) |dim| dim.resolve().threads else null;
 
     var include_paths: std.ArrayList(std.Build.LazyPath) = .empty;
-    include_paths.append(b.allocator, b.path(config.shader_dir)) catch @panic("OOM");
-    include_paths.append(b.allocator, d.path("shader_lib")) catch @panic("OOM");
+    include_paths.append(arena, b.path(config.shader_dir)) catch @panic("OOM");
+    include_paths.append(arena, d.path("shader_lib")) catch @panic("OOM");
 
     // Compile and run genglsl
     const data_path = b.pathJoin(&.{ config.shader_dir, "data.zig" });
     if (b.build_root.handle.access(b.graph.io, data_path, .{})) {
         const genglsl_params = b.addOptions();
-        var param_iterator = shader.paramIterator();
+        var param_iterator = compile.shader.paramIterator();
         while (param_iterator.next()) |elem| {
             const name, const val_opt = elem;
             const val_str = val_opt orelse continue;
@@ -337,20 +368,17 @@ fn compileShader(
         const stdout = genglsl_run.captureStdOut(.{
             .basename = "generated.glsl",
         });
-        include_paths.append(b.allocator, stdout.dirname()) catch @panic("OOM");
+        include_paths.append(arena, stdout.dirname()) catch @panic("OOM");
     } else |_| {}
 
     const input_path = blk: {
-        const path = b.pathJoin(&.{ config.shader_dir, shader.file });
+        const path = b.pathJoin(&.{ config.shader_dir, compile.shader.file });
         if (b.build_root.handle.access(b.graph.io, path, .{}) == error.FileNotFound) {
-            break :blk d.path(b.pathJoin(&.{ "shader_lib", shader.file }));
+            break :blk d.path(b.pathJoin(&.{ "shader_lib", compile.shader.file }));
         }
         break :blk b.path(path);
     };
-    const output_path = b.pathJoin(&.{
-        config.data_dir,
-        shader.spvFilename(arena, stage, threads) catch @panic("OOM"),
-    });
+    const output_path = b.pathJoin(&.{ config.data_dir, compile.spv_filename });
 
     // Create run step
     const shaderc_run = b.addSystemCommand(&.{
@@ -366,18 +394,18 @@ fn compileShader(
     }
 
     // Set the stage
-    shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{@tagName(stage)}));
+    shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{@tagName(compile.stage)}));
 
     // Add stage macros
-    const STAGE = toUpper(arena, @tagName(stage));
+    const STAGE = toUpper(arena, @tagName(compile.stage));
     shaderc_run.addArg(b.fmt("-D{s}", .{STAGE}));
-    switch (stage) {
+    switch (compile.stage) {
         .vertex => shaderc_run.addArg("-DIO=out"),
         .fragment => shaderc_run.addArg("-DIO=in"),
         .compute => {
-            shaderc_run.addArg(b.fmt("-DDIM_X={}", .{threads.?.x}));
-            shaderc_run.addArg(b.fmt("-DDIM_Y={}", .{threads.?.y}));
-            shaderc_run.addArg(b.fmt("-DDIM_Z={}", .{threads.?.z}));
+            shaderc_run.addArg(b.fmt("-DDIM_X={}", .{compile.threads.?.x}));
+            shaderc_run.addArg(b.fmt("-DDIM_Y={}", .{compile.threads.?.y}));
+            shaderc_run.addArg(b.fmt("-DDIM_Z={}", .{compile.threads.?.z}));
         },
     }
 
@@ -394,7 +422,7 @@ fn compileShader(
     }
 
     // Add parameter macros
-    var param_iterator = shader.paramIterator();
+    var param_iterator = compile.shader.paramIterator();
     while (param_iterator.next()) |elem| {
         const name, const val_str = elem;
         const upper = toUpper(arena, name);
