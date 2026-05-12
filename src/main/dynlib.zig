@@ -11,7 +11,7 @@ const log = std.log.scoped(.dynlib);
 var dynlib: ?std.DynLib = null;
 
 var dynlib_ok: bool = false;
-var state_ptr: *anyopaque = undefined;
+var state_ptr: ?*anyopaque = null;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
 
@@ -34,7 +34,7 @@ var api: struct {
 
 pub fn deinit() void {
     if (dynlib_ok) {
-        api.deinit(state_ptr);
+        api.deinit(state_ptr.?);
     }
     dynlib_ok = false;
     dynlibUnload();
@@ -51,37 +51,33 @@ pub fn init(
         log.err("{}", .{e});
         return;
     };
-    if (api.init(win, dev)) |ptr| {
-        state_ptr = ptr;
-        dynlib_ok = true;
-    } else {
-        dynlib_ok = false;
-    }
+
+    state_ptr = api.init(win, dev);
+    dynlib_ok = state_ptr != null;
 }
 
 pub fn reload() void {
     if (dynlib_ok) {
-        api.unload(state_ptr);
+        api.unload(state_ptr.?);
     }
-    const ptr_valid = dynlib_ok;
+
     dynlib_ok = false;
     dynlibUnload();
     dynlibLoad() catch |e| {
         log.err("{}", .{e});
         return;
     };
-    if (ptr_valid) {
-        dynlib_ok = api.load(state_ptr);
+
+    if (state_ptr) |ptr| {
+        dynlib_ok = api.load(ptr);
     } else {
-        if (api.init(window, device)) |ptr| {
-            state_ptr = ptr;
-            dynlib_ok = true;
-        }
+        state_ptr = api.init(window, device);
+        dynlib_ok = state_ptr != null;
     }
 }
 
 pub fn render() !void {
-    if (dynlib_ok and api.render(state_ptr)) return;
+    if (dynlib_ok and api.render(state_ptr.?)) return;
 
     // Fill window red when render is not succeeding
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
@@ -118,22 +114,22 @@ pub fn render() !void {
 
 pub fn pause(state: bool) void {
     if (!dynlib_ok) return;
-    api.pause(state_ptr, state);
+    api.pause(state_ptr.?, state);
 }
 
 pub fn isPaused() bool {
     if (!dynlib_ok) return true;
-    return api.isPaused(state_ptr);
+    return api.isPaused(state_ptr.?);
 }
 
 pub fn seek(to: f32) void {
     if (!dynlib_ok) return;
-    api.seek(state_ptr, to);
+    api.seek(state_ptr.?, to);
 }
 
 pub fn getTime() f32 {
     if (!dynlib_ok) return 0.0;
-    return api.getTime(state_ptr);
+    return api.getTime(state_ptr.?);
 }
 
 fn dynlibUnload() void {
