@@ -63,13 +63,21 @@ pub fn reload() void {
     if (dynlib_ok) {
         api.unload(state_ptr);
     }
+    const ptr_valid = dynlib_ok;
     dynlib_ok = false;
     dynlibUnload();
     dynlibLoad() catch |e| {
         log.err("{}", .{e});
         return;
     };
-    dynlib_ok = api.load(state_ptr);
+    if (ptr_valid) {
+        dynlib_ok = api.load(state_ptr);
+    } else {
+        if (api.init(window, device)) |ptr| {
+            state_ptr = ptr;
+            dynlib_ok = true;
+        }
+    }
 }
 
 pub fn render() !void {
