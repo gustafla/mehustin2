@@ -35,9 +35,11 @@ const InitStep = enum {
     }
 };
 
-var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
-const gpa = if (builtin.mode == .Debug) debug_allocator.allocator() else std.heap.c_allocator;
-var arena: std.heap.ArenaAllocator = .init(gpa);
+var gpa: std.mem.Allocator = undefined;
+var arena: *std.heap.ArenaAllocator = undefined;
+
+var tags_override: ?std.ArrayList([*:0]const u8) = null;
+var duration_override: ?f32 = null;
 
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
@@ -155,7 +157,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
 
     // Init audio
     if (@hasField(@TypeOf(config.main), "audio")) {
-        if (audio.init(std.heap.c_allocator, config.main.audio)) {
+        if (audio.init(gpa, config.main.audio)) {
             InitStep.push(.audio);
         } else |err| {
             audio.log.warn("Can't play {s}: {}", .{ config.main.audio, err });
@@ -272,16 +274,84 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     }
 
     c.SDL_Quit();
+    mainDeinit();
+}
 
-    arena.deinit();
-    if (builtin.mode == .Debug) {
-        _ = debug_allocator.deinit();
+fn mainDeinit() void {
+    if (tags_override) |*t| {
+        for (t.items) |ptr| {
+            const slice = std.mem.span(ptr);
+            gpa.free(slice);
+        }
+        t.deinit(gpa);
     }
 }
 
-pub fn main() !u8 {
+pub fn main(init: std.process.Init) !u8 {
+    // Global allocators
+    gpa = init.gpa;
+    arena = init.arena;
+
+    // Main errdefer
+    errdefer mainDeinit();
+
     // Initialize error store
     app_err.reset();
+
+    // Process CLI args
+    const Cli = enum {
+        @"tags-override",
+        @"duration-override",
+    };
+    var state: ?Cli = null;
+    var iterator = init.minimal.args.iterate();
+    _ = iterator.skip();
+    outer: while (iterator.next()) |arg| {
+        if (state) |s| {
+            switch (s) {
+                .@"tags-override" => {
+                    if (tags_override == null) {
+                        tags_override = .empty;
+                    }
+
+                    var num_tags: usize = 0;
+                    var spliterator = std.mem.splitScalar(u8, arg, ',');
+                    while (spliterator.next()) |_| num_tags += 1;
+
+                    try tags_override.?.ensureUnusedCapacity(gpa, num_tags);
+
+                    spliterator = std.mem.splitScalar(u8, arg, ',');
+                    while (spliterator.next()) |tag| {
+                        if (std.meta.stringToEnum(timeline.Tag, tag) == null) {
+                            std.log.info("Tags in this build:", .{});
+                            inline for (@typeInfo(timeline.Tag).@"enum".fields) |field| {
+                                std.log.info("    {s}", .{field.name});
+                            }
+                            return error.InvalidTag;
+                        }
+                        const sentinel = try gpa.dupeSentinel(u8, tag, 0);
+                        tags_override.?.appendAssumeCapacity(sentinel.ptr);
+                    }
+                },
+                .@"duration-override" => {
+                    duration_override = std.fmt.parseFloat(f32, arg) catch |e| {
+                        std.log.err("Failed to parse argument", .{});
+                        return e;
+                    };
+                },
+            }
+            state = null;
+        } else {
+            inline for (@typeInfo(Cli).@"enum".fields) |field| {
+                if (std.mem.eql(u8, arg, "--" ++ field.name)) {
+                    state = @field(Cli, field.name);
+                    continue :outer;
+                }
+            }
+            std.log.err("Invalid option: {s}", .{arg});
+            return error.InvalidCliArg;
+        }
+    }
 
     // Start SDL
     var empty_argv: [0:null]?[*:0]u8 = .{};
