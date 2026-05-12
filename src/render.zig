@@ -971,7 +971,7 @@ fn computePass(
                     else
                         textures[@intFromEnum(@field(script.Texture, tex.texture))],
                     .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
-                }, 1);
+                }, 1); // TODO: bind with n=1
             }
 
             inline for (dispatch.readonly_storage_textures, 0..) |name, slot| {
@@ -985,7 +985,7 @@ fn computePass(
                     else
                         &textures[@intFromEnum(@field(script.Texture, name))],
                     1,
-                );
+                ); // TODO: bind with n=1
             }
 
             inline for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
@@ -995,7 +995,7 @@ fn computePass(
                     @intCast(slot),
                     &storage_buffers[idx],
                     1,
-                );
+                ); // TODO: bind with n=1
             }
 
             const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch);
@@ -1185,7 +1185,7 @@ fn renderPass(
                         else
                             textures[@intFromEnum(@field(script.Texture, tex.texture))],
                         .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
-                    }, 1);
+                    }, 1); // TODO: bind with n=1
                 }
             }
 
@@ -1202,6 +1202,7 @@ fn renderPass(
             }) |stage| {
                 inline for (stage.storage_buffers, 0..) |name, slot| {
                     const idx = @intFromEnum(@field(script.StorageBuffer, name));
+                    // TODO: bind with n=1
                     stage.bind(render_pass, @intCast(slot), &storage_buffers[idx], 1);
                 }
             }
