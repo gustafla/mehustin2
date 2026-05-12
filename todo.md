@@ -1,6 +1,5 @@
 # High priority
 
-- [ ] Implement text antialiasing by https://github.com/Chlumsky/msdfgen
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
@@ -46,6 +45,8 @@
   - [ ] Cascading
 - [ ] SDL_shadercross support
 - [ ] zig shaders (.zig file extension compiled with zig instead of glslc)
+- [ ] Correct text antialiasing by https://github.com/Chlumsky/msdfgen
+- [ ] Build/vendor glslc instead of system command
 
 # Done
 
