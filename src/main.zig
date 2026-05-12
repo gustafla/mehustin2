@@ -35,8 +35,8 @@ const InitStep = enum {
     }
 };
 
+var arena: std.mem.Allocator = undefined;
 var gpa: std.mem.Allocator = undefined;
-var arena: *std.heap.ArenaAllocator = undefined;
 
 var tags_override: ?std.ArrayList([*:0]const u8) = null;
 var duration_override: ?f32 = null;
@@ -165,7 +165,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     }
 
     // Init render
-    try render.init(&arena.allocator(), @ptrCast(window), @ptrCast(device));
+    try render.init(arena, window, device);
     InitStep.push(.render);
 
     // Go fullscreen if release build
@@ -225,20 +225,9 @@ fn sdlAppEvent(event: *c.SDL_Event) !c.SDL_AppResult {
                 c.SDL_SCANCODE_PAGEUP => seek(render.getTime() - 8 * timeline.spb),
                 c.SDL_SCANCODE_PAGEDOWN => seek(render.getTime() + 8 * timeline.spb),
                 c.SDL_SCANCODE_HOME => seek(0),
-                c.SDL_SCANCODE_R => if (builtin.mode == .Debug) {
-                    // Save runtime state
-                    const paused = render.isPaused();
-                    const time = render.getTime();
-
-                    // Reload (the dynlib.zig handles loading transparently)
-                    render.deinit();
-                    _ = arena.reset(.retain_capacity);
-                    try render.init(&arena.allocator(), @ptrCast(window), @ptrCast(device));
-
-                    // Restore state
-                    render.seek(time);
-                    render.pause(paused);
-
+                c.SDL_SCANCODE_R => if (builtin.mode == .Debug and options.render_dynlib) {
+                    // Reload (dynlib.zig handles loading transparently)
+                    render.reload();
                     // Show update if paused
                     step_frame = true;
                 },
@@ -288,9 +277,9 @@ fn mainDeinit() void {
 }
 
 pub fn main(init: std.process.Init) !u8 {
-    // Global allocators
+    // Global allocator (for the executable compilation unit)
+    arena = init.arena.allocator();
     gpa = init.gpa;
-    arena = init.arena;
 
     // Main errdefer
     errdefer mainDeinit();

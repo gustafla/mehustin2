@@ -627,7 +627,7 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 }
 
 pub fn init(
-    arena_ptr: *const Allocator,
+    arena: Allocator,
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
 ) !void {
@@ -641,7 +641,6 @@ pub fn init(
     const io = threaded_io.io();
 
     // Pass arena to script
-    const arena = arena_ptr.*;
     script.init(arena);
 
     // Initialize resources and update transfer buffer
@@ -1366,6 +1365,22 @@ pub fn render() !void {
     try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
 }
 
+pub fn pause(state: bool) void {
+    time.pause(state);
+}
+
+pub fn isPaused() bool {
+    return time.paused;
+}
+
+pub fn seek(to_sec: f32) void {
+    time.seek(to_sec);
+}
+
+pub fn getTime() f32 {
+    return time.getTime();
+}
+
 fn viewport(target_width: u32, target_height: u32) c.SDL_GPUViewport {
     if (target_width == 0 or target_height == 0) {
         return std.mem.zeroes(c.SDL_GPUViewport);
@@ -1394,38 +1409,80 @@ fn viewport(target_width: u32, target_height: u32) c.SDL_GPUViewport {
     };
 }
 
-fn deinitC() callconv(.c) void {
+const ReloadState = struct {
+    arena: std.heap.ArenaAllocator,
+    window: *c.SDL_Window,
+    device: *c.SDL_GPUDevice,
+    paused: bool,
+    time_sec: f32,
+};
+
+fn deinitC(state_ptr: *anyopaque) callconv(.c) void {
+    const reload_state: *ReloadState = @ptrCast(@alignCast(state_ptr));
     deinit();
+    reload_state.arena.deinit();
+    std.heap.c_allocator.destroy(reload_state);
 }
 
 fn initC(
-    arena: *const Allocator,
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
-) callconv(.c) bool {
-    init(arena, win, dev) catch return false;
+) callconv(.c) ?*anyopaque {
+    const reload_state = std.heap.c_allocator.create(ReloadState) catch return null;
+    reload_state.* = .{
+        .arena = .init(std.heap.c_allocator),
+        .window = win,
+        .device = dev,
+        .paused = time.paused,
+        .time_sec = time.getTime(),
+    };
+    init(reload_state.arena.allocator(), win, dev) catch {
+        reload_state.arena.deinit();
+        std.heap.c_allocator.destroy(reload_state);
+        return null;
+    };
+    return reload_state;
+}
+
+fn unloadC(state_ptr: *anyopaque) callconv(.c) void {
+    const reload_state: *ReloadState = @ptrCast(@alignCast(state_ptr));
+    reload_state.paused = time.paused;
+    reload_state.time_sec = time.getTime();
+    deinit();
+    _ = reload_state.arena.reset(.retain_capacity);
+}
+
+fn loadC(state_ptr: *anyopaque) callconv(.c) bool {
+    const reload_state: *ReloadState = @ptrCast(@alignCast(state_ptr));
+    init(
+        reload_state.arena.allocator(),
+        reload_state.window,
+        reload_state.device,
+    ) catch return false;
+    time.seek(reload_state.time_sec);
+    time.pause(reload_state.paused);
     return true;
 }
 
-fn renderC() callconv(.c) bool {
+fn renderC(_: *anyopaque) callconv(.c) bool {
     render() catch return false;
     return true;
 }
 
-pub fn pause(state: bool) callconv(.c) void {
-    time.pause(state);
+fn pauseC(_: *anyopaque, state: bool) callconv(.c) void {
+    pause(state);
 }
 
-pub fn isPaused() callconv(.c) bool {
-    return time.paused;
+pub fn isPausedC(_: *anyopaque) callconv(.c) bool {
+    return isPaused();
 }
 
-pub fn seek(to_sec: f32) callconv(.c) void {
-    time.seek(to_sec);
+pub fn seekC(_: *anyopaque, to_sec: f32) callconv(.c) void {
+    seek(to_sec);
 }
 
-pub fn getTime() callconv(.c) f32 {
-    return time.getTime();
+pub fn getTimeC(_: *anyopaque) callconv(.c) f32 {
+    return getTime();
 }
 
 // Export symbols if build configuration requires
@@ -1433,11 +1490,13 @@ comptime {
     if (options.render_dynlib) {
         @export(&deinitC, .{ .name = "deinit" });
         @export(&initC, .{ .name = "init" });
+        @export(&unloadC, .{ .name = "unload" });
+        @export(&loadC, .{ .name = "load" });
         @export(&renderC, .{ .name = "render" });
-        @export(&pause, .{ .name = "pause" });
-        @export(&isPaused, .{ .name = "isPaused" });
-        @export(&seek, .{ .name = "seek" });
-        @export(&getTime, .{ .name = "getTime" });
+        @export(&pauseC, .{ .name = "pause" });
+        @export(&isPausedC, .{ .name = "isPaused" });
+        @export(&seekC, .{ .name = "seek" });
+        @export(&getTimeC, .{ .name = "getTime" });
     }
 }
 
