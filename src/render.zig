@@ -630,7 +630,9 @@ pub fn init(
     arena: Allocator,
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
+    tags: ?[]const [*:0]const u8,
 ) !void {
+    _ = tags;
     errdefer deinit();
 
     window = win;
@@ -1414,6 +1416,7 @@ const ReloadState = struct {
     arena: std.heap.ArenaAllocator,
     window: *c.SDL_Window,
     device: *c.SDL_GPUDevice,
+    tags_slice: ?[]const [*:0]const u8,
     paused: bool,
     time_sec: f32,
 };
@@ -1428,16 +1431,20 @@ fn deinitC(state_ptr: *anyopaque) callconv(.c) void {
 fn initC(
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
+    tags_ptr: ?[*]const [*:0]const u8,
+    tags_len: usize,
 ) callconv(.c) ?*anyopaque {
     const reload_state = std.heap.c_allocator.create(ReloadState) catch return null;
+    const tags_slice = if (tags_ptr) |ptr| ptr[0..tags_len] else null;
     reload_state.* = .{
         .arena = .init(std.heap.c_allocator),
         .window = win,
         .device = dev,
+        .tags_slice = tags_slice,
         .paused = time.paused,
         .time_sec = time.getTime(),
     };
-    init(reload_state.arena.allocator(), win, dev) catch {
+    init(reload_state.arena.allocator(), win, dev, tags_slice) catch {
         reload_state.arena.deinit();
         std.heap.c_allocator.destroy(reload_state);
         return null;
@@ -1459,6 +1466,7 @@ fn loadC(state_ptr: *anyopaque) callconv(.c) bool {
         reload_state.arena.allocator(),
         reload_state.window,
         reload_state.device,
+        reload_state.tags_slice,
     ) catch return false;
     time.seek(reload_state.time_sec);
     time.pause(reload_state.paused);

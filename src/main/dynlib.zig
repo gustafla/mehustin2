@@ -14,11 +14,18 @@ var dynlib_ok: bool = false;
 var state_ptr: ?*anyopaque = null;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
+var tags_ptr: ?[*]const [*:0]const u8 = undefined;
+var tags_len: usize = undefined;
 
 var api: struct {
     // Full initialization and shutdown.
     deinit: *const fn (*anyopaque) callconv(.c) void,
-    init: *const fn (*c.SDL_Window, *c.SDL_GPUDevice) callconv(.c) ?*anyopaque,
+    init: *const fn (
+        window: *c.SDL_Window,
+        device: *c.SDL_GPUDevice,
+        tags_override: ?[*]const [*:0]const u8,
+        num_tags_override: usize,
+    ) callconv(.c) ?*anyopaque,
 
     // Partial unload/load across reloads.
     unload: *const fn (*anyopaque) callconv(.c) void,
@@ -44,6 +51,7 @@ pub fn init(
     _: std.mem.Allocator, // Match render.zig interface, can't pass across ZCUs.
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
+    tags_override: ?[]const [*:0]const u8,
 ) !void {
     window = win;
     device = dev;
@@ -52,7 +60,8 @@ pub fn init(
         return;
     };
 
-    state_ptr = api.init(win, dev);
+    tags_ptr, tags_len = if (tags_override) |t| .{ t.ptr, t.len } else .{ null, 0 };
+    state_ptr = api.init(win, dev, tags_ptr, tags_len);
     dynlib_ok = state_ptr != null;
 }
 
@@ -71,7 +80,7 @@ pub fn reload() void {
     if (state_ptr) |ptr| {
         dynlib_ok = api.load(ptr);
     } else {
-        state_ptr = api.init(window, device);
+        state_ptr = api.init(window, device, tags_ptr, tags_len);
         dynlib_ok = state_ptr != null;
     }
 }

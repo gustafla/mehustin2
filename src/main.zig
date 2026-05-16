@@ -165,7 +165,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     }
 
     // Init render
-    try render.init(arena, window, device);
+    try render.init(arena, window, device, if (tags_override) |t| t.items else null);
     InitStep.push(.render);
 
     // Go fullscreen if release build
@@ -267,12 +267,12 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
 }
 
 fn mainDeinit() void {
-    if (tags_override) |*t| {
-        for (t.items) |ptr| {
+    if (tags_override) |*array_list| {
+        for (array_list.items) |ptr| {
             const slice = std.mem.span(ptr);
             gpa.free(slice);
         }
-        t.deinit(gpa);
+        array_list.deinit(gpa);
     }
 }
 
