@@ -1,21 +1,23 @@
 //! Loading, unloading and calling into librender.so
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const c = @import("c");
 const engine = @import("engine");
 const sdlerr = engine.err.sdlerr;
+const timeline = engine.timeline;
 
 const filename = "librender.so";
 const log = std.log.scoped(.dynlib);
 
-var dynlib: ?std.DynLib = null;
-
-var dynlib_ok: bool = false;
-var state_ptr: ?*anyopaque = null;
+var arena: Allocator = undefined;
 var window: *c.SDL_Window = undefined;
 var device: *c.SDL_GPUDevice = undefined;
-var tags_ptr: ?[*]const [*:0]const u8 = undefined;
-var tags_len: usize = undefined;
+var tags_str_list: ?std.ArrayList([*:0]const u8) = null;
+
+var dynlib: ?std.DynLib = null;
+var dynlib_ok: bool = false;
+var state_ptr: ?*anyopaque = null;
 
 var api: struct {
     // Full initialization and shutdown.
@@ -45,14 +47,22 @@ pub fn deinit() void {
     }
     dynlib_ok = false;
     dynlibUnload();
+    if (tags_str_list) |*array_list| {
+        for (array_list.items) |ptr| {
+            const slice = std.mem.span(ptr);
+            arena.free(slice);
+        }
+        array_list.deinit(arena);
+    }
 }
 
 pub fn init(
-    _: std.mem.Allocator, // Match render.zig interface, can't pass across ZCUs.
+    ar: std.mem.Allocator, // Can't pass across ZCUs.
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
-    tags_override: ?[]const [*:0]const u8,
+    tags_override: ?timeline.TagSet,
 ) !void {
+    arena = ar;
     window = win;
     device = dev;
     dynlibLoad() catch |e| {
@@ -60,7 +70,18 @@ pub fn init(
         return;
     };
 
-    tags_ptr, tags_len = if (tags_override) |t| .{ t.ptr, t.len } else .{ null, 0 };
+    const tags_ptr, const tags_len = if (tags_override) |tag_set| blk: {
+        tags_str_list = .empty;
+        try tags_str_list.?.ensureUnusedCapacity(arena, tag_set.count());
+
+        var tag_iterator = tag_set.iterator();
+        while (tag_iterator.next()) |tag| {
+            const sentinel = try arena.dupeSentinel(u8, @tagName(tag), 0);
+            tags_str_list.?.appendAssumeCapacity(sentinel.ptr);
+        }
+        break :blk .{ tags_str_list.?.items.ptr, tags_str_list.?.items.len };
+    } else .{ null, 0 };
+
     state_ptr = api.init(win, dev, tags_ptr, tags_len);
     dynlib_ok = state_ptr != null;
 }
@@ -80,6 +101,10 @@ pub fn reload() void {
     if (state_ptr) |ptr| {
         dynlib_ok = api.load(ptr);
     } else {
+        const tags_ptr, const tags_len = if (tags_str_list) |*t|
+            .{ t.items.ptr, t.items.len }
+        else
+            .{ null, 0 };
         state_ptr = api.init(window, device, tags_ptr, tags_len);
         dynlib_ok = state_ptr != null;
     }

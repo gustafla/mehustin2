@@ -38,7 +38,7 @@ const InitStep = enum {
 var arena: std.mem.Allocator = undefined;
 var gpa: std.mem.Allocator = undefined;
 
-var tags_override: ?std.ArrayList([*:0]const u8) = null;
+var tags_override: ?timeline.TagSet = null;
 var duration_override: ?f32 = null;
 
 var window: *c.SDL_Window = undefined;
@@ -165,7 +165,7 @@ fn sdlAppInit(argv: [][*:0]u8) !c.SDL_AppResult {
     }
 
     // Init render
-    try render.init(arena, window, device, if (tags_override) |t| t.items else null);
+    try render.init(arena, window, device, tags_override);
     InitStep.push(.render);
 
     // Go fullscreen if release build
@@ -263,26 +263,12 @@ fn sdlAppQuit(result: anyerror!c.SDL_AppResult) void {
     }
 
     c.SDL_Quit();
-    mainDeinit();
-}
-
-fn mainDeinit() void {
-    if (tags_override) |*array_list| {
-        for (array_list.items) |ptr| {
-            const slice = std.mem.span(ptr);
-            gpa.free(slice);
-        }
-        array_list.deinit(gpa);
-    }
 }
 
 pub fn main(init: std.process.Init) !u8 {
     // Global allocator (for the executable compilation unit)
     arena = init.arena.allocator();
     gpa = init.gpa;
-
-    // Main errdefer
-    errdefer mainDeinit();
 
     // Initialize error store
     app_err.reset();
@@ -307,19 +293,17 @@ pub fn main(init: std.process.Init) !u8 {
                     var spliterator = std.mem.splitScalar(u8, arg, ',');
                     while (spliterator.next()) |_| num_tags += 1;
 
-                    try tags_override.?.ensureUnusedCapacity(gpa, num_tags);
-
                     spliterator = std.mem.splitScalar(u8, arg, ',');
-                    while (spliterator.next()) |tag| {
-                        if (std.meta.stringToEnum(timeline.Tag, tag) == null) {
+                    while (spliterator.next()) |token| {
+                        if (std.meta.stringToEnum(timeline.Tag, token)) |tag| {
+                            tags_override.?.insert(tag);
+                        } else {
                             std.log.info("Tags in this build:", .{});
                             inline for (@typeInfo(timeline.Tag).@"enum".fields) |field| {
                                 std.log.info("    {s}", .{field.name});
                             }
                             return error.InvalidTag;
                         }
-                        const sentinel = try gpa.dupeSentinel(u8, tag, 0);
-                        tags_override.?.appendAssumeCapacity(sentinel.ptr);
                     }
                 },
                 .@"duration-override" => {

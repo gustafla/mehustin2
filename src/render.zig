@@ -630,9 +630,9 @@ pub fn init(
     arena: Allocator,
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
-    tags: ?[]const [*:0]const u8,
+    tags_override: ?timeline.TagSet,
 ) !void {
-    _ = tags;
+    _ = tags_override;
     errdefer deinit();
 
     window = win;
