@@ -564,6 +564,7 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     run_cmd.step.dependOn(b.getInstallStep());
     const run_step = b.step("run", "Run the demo");
     run_step.dependOn(&run_cmd.step);
+    if (b.args) |args| run_cmd.addArgs(args);
 }
 
 fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
