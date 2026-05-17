@@ -632,7 +632,6 @@ pub fn init(
     dev: *c.SDL_GPUDevice,
     tags_override: ?timeline.TagSet,
 ) !void {
-    _ = tags_override;
     errdefer deinit();
 
     window = win;
@@ -642,7 +641,8 @@ pub fn init(
     var threaded_io: Io.Threaded = .init_single_threaded;
     const io = threaded_io.io();
 
-    // Pass arena to script
+    // Pass parameters to script
+    timeline.tags_override = tags_override;
     script.init(arena);
 
     // Initialize resources and update transfer buffer
@@ -1416,7 +1416,7 @@ const ReloadState = struct {
     arena: std.heap.ArenaAllocator,
     window: *c.SDL_Window,
     device: *c.SDL_GPUDevice,
-    tags_slice: ?[]const [*:0]const u8,
+    tags_override: ?timeline.TagSet,
     paused: bool,
     time_sec: f32,
 };
@@ -1435,20 +1435,32 @@ fn initC(
     tags_len: usize,
 ) callconv(.c) ?*anyopaque {
     const reload_state = std.heap.c_allocator.create(ReloadState) catch return null;
-    const tags_slice = if (tags_ptr) |ptr| ptr[0..tags_len] else null;
+
+    const tags = if (tags_ptr) |ptr| blk: {
+        var set: timeline.TagSet = .empty;
+        for (ptr[0..tags_len]) |tag_ptr| {
+            const tag_str = std.mem.span(tag_ptr);
+            const tag = std.meta.stringToEnum(timeline.Tag, tag_str) orelse return null;
+            set.insert(tag);
+        }
+        break :blk set;
+    } else null;
+
     reload_state.* = .{
         .arena = .init(std.heap.c_allocator),
         .window = win,
         .device = dev,
-        .tags_slice = tags_slice,
+        .tags_override = tags,
         .paused = time.paused,
         .time_sec = time.getTime(),
     };
-    init(reload_state.arena.allocator(), win, dev, tags_slice) catch {
+
+    init(reload_state.arena.allocator(), win, dev, tags) catch {
         reload_state.arena.deinit();
         std.heap.c_allocator.destroy(reload_state);
         return null;
     };
+
     return reload_state;
 }
 
@@ -1466,7 +1478,7 @@ fn loadC(state_ptr: *anyopaque) callconv(.c) bool {
         reload_state.arena.allocator(),
         reload_state.window,
         reload_state.device,
-        reload_state.tags_slice,
+        reload_state.tags_override,
     ) catch return false;
     time.seek(reload_state.time_sec);
     time.pause(reload_state.paused);

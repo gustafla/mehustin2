@@ -34,6 +34,8 @@ pub const duration = blk: {
     break :blk last * spb;
 };
 
+pub var tags_override: ?TagSet = null;
+
 pub const State = struct {
     time: f32,
     tags: TagSet,
@@ -428,7 +430,16 @@ pub fn resolve(time: f32) State {
     var tag_times: TagVector = .initFill(-1);
     var tag_times_remaining: TagVector = .initFill(-1);
     var tag_durations: TagVector = .initFill(-1);
-    for (timeline.tags, tag_table, tag_time_table) |tag_raw, tag, tag_t| {
+
+    if (tags_override) |set| {
+        tags_active = set;
+        var iterator = set.iterator();
+        while (iterator.next()) |tag| {
+            tag_times.set(tag, time);
+            tag_times_remaining.set(tag, duration - time);
+            tag_durations.set(tag, duration);
+        }
+    } else for (timeline.tags, tag_table, tag_time_table) |tag_raw, tag, tag_t| {
         const tag_time = time - tag_t;
         const tag_duration = tag_raw.duration;
         const tag_time_remaining = tag_duration - tag_time;

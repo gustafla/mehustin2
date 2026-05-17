@@ -193,8 +193,11 @@ fn sdlAppIterate() !c.SDL_AppResult {
     try render.render();
 
     // Quit if done
-    if (builtin.mode != .Debug) {
-        if (render.getTime() >= timeline.duration) {
+    const effective_duration = if (duration_override) |override|
+        if (override <= 0) null else override
+    else if (builtin.mode != .Debug) timeline.duration else null;
+    if (effective_duration) |dur| {
+        if (render.getTime() >= dur) {
             return c.SDL_APP_SUCCESS;
         }
     }

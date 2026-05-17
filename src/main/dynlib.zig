@@ -60,17 +60,17 @@ pub fn init(
     ar: std.mem.Allocator, // Can't pass across ZCUs.
     win: *c.SDL_Window,
     dev: *c.SDL_GPUDevice,
-    tags_override: ?timeline.TagSet,
+    tags: ?timeline.TagSet,
 ) !void {
-    arena = ar;
-    window = win;
-    device = dev;
     dynlibLoad() catch |e| {
         log.err("{}", .{e});
         return;
     };
 
-    const tags_ptr, const tags_len = if (tags_override) |tag_set| blk: {
+    arena = ar;
+    window = win;
+    device = dev;
+    const tags_ptr, const tags_len = if (tags) |tag_set| blk: {
         tags_str_list = .empty;
         try tags_str_list.?.ensureUnusedCapacity(arena, tag_set.count());
 
