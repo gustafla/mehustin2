@@ -69,15 +69,11 @@ layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
-layout(set = 2, binding = 1) uniform sampler2D u_bloom_texture;
 
 #include <color.glsl>
 
 void main() {
-    // vec3 color = texture(u_input_texture, in_uv).rgb;
-
-    // Bloom
-    vec3 color = texture(u_bloom_texture, in_uv).rgb;
-    out_color = vec4(reinhard(max(color, 0.)), 1.);
+    vec3 color = max(texture(u_input_texture, in_uv).rgb, 0.);
+    out_color = vec4(reinhard(color), 1.);
 }
 #endif // FRAGMENT and POST

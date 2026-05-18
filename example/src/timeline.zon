@@ -1,12 +1,6 @@
 .{
     .tags = .{
-        .{ .name = "comp_naive", .duration = 100, .t = .seq },
-        .{ .name = "comp_2pass_separable", .duration = 100, .t = .seq },
-        .{ .name = "comp_2pass_separable_cache", .duration = 100, .t = .seq },
-        .{ .name = "comp_1pass_separable_cache", .duration = 100, .t = .seq },
-        .{ .name = "frag_naive", .duration = 100, .t = .seq },
-        .{ .name = "frag_2pass_separable", .duration = 100, .t = .seq },
-        .{ .name = "frag_dual_kawase", .duration = 100, .t = .seq },
+        .{ .name = "cubes", .duration = 100, .t = .seq },
     },
     .text = .{
         .fonts = .{.{
