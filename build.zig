@@ -567,7 +567,15 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     if (b.args) |args| run_cmd.addArgs(args);
 }
 
-pub fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
+fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
+    var buffer = arena.alloc(u8, str.len) catch @panic("OOM");
+    for (str, 0..) |c, i| {
+        buffer[i] = std.ascii.toUpper(c);
+    }
+    return buffer;
+}
+
+fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
     var buffer: [1024]u8 = undefined;
     const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch @panic("Can't open " ++ path);
     defer file.close(b.graph.io);
@@ -576,12 +584,4 @@ pub fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
     return std.zon.parse.fromSliceAlloc(T, b.allocator, data, null, .{
         .ignore_unknown_fields = true,
     }) catch @panic("Failed to parse " ++ path);
-}
-
-fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
-    var buffer = arena.alloc(u8, str.len) catch @panic("OOM");
-    for (str, 0..) |c, i| {
-        buffer[i] = std.ascii.toUpper(c);
-    }
-    return buffer;
 }
