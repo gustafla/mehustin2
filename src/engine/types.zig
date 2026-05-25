@@ -235,7 +235,7 @@ pub const BlendState = struct {
     dst_alpha: BlendFactor = .one_minus_src_alpha,
     alpha_op: BlendOp = .add,
     color_write_mask: u8 = 0,
-    enable: bool = false,
+    enable: bool = true,
     enable_color_write_mask: bool = false,
 
     pub fn toSDL(self: @This()) c.SDL_GPUColorTargetBlendState {
