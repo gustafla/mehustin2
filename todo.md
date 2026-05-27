@@ -1,5 +1,10 @@
 # High priority
 
+- [ ] Add `variants` to schema/Shader.zig
+  - [ ] `struct{require_all_tags: []const Tag, ..., .params: []const []const u8}`
+  - [ ] Iterate variants in build
+  - [ ] Hook up to pipeline keys
+  - [ ] Linear search at runtime
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
