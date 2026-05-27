@@ -1004,12 +1004,12 @@ fn computePass(
             const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
             c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
 
-            const dimensions = dispatch.dimensions.resolve();
+            const groups = dispatch.groups.resolve(script.config.main, dispatch.threads);
             c.SDL_DispatchGPUCompute(
                 compute_pass,
-                dimensions.groups.x,
-                dimensions.groups.y,
-                dimensions.groups.z,
+                groups.x,
+                groups.y,
+                groups.z,
             );
         }
     }

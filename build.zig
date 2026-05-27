@@ -232,29 +232,26 @@ fn addScript(
     exe_mod.addImport("script", script_mod);
 }
 
-fn ShaderCompile(comptime config: anytype) type {
-    return struct {
+const ShaderCompile = struct {
+    shader: Shader,
+    stage: Shader.Stage,
+    threads: ?Shader.Vec,
+    spv_filename: []const u8,
+
+    pub fn init(
+        arena: std.mem.Allocator,
         shader: Shader,
         stage: Shader.Stage,
         threads: ?Shader.Vec,
-        spv_filename: []const u8,
-
-        pub fn init(
-            arena: std.mem.Allocator,
-            shader: Shader,
-            stage: Shader.Stage,
-            dimensions: ?Shader.Dimensions(config),
-        ) @This() {
-            const threads = if (dimensions) |dim| dim.resolve().threads else null;
-            return .{
-                .shader = shader,
-                .stage = stage,
-                .threads = threads,
-                .spv_filename = shader.spvFilename(arena, stage, threads) catch @panic("OOM"),
-            };
-        }
-    };
-}
+    ) @This() {
+        return .{
+            .shader = shader,
+            .stage = stage,
+            .threads = threads,
+            .spv_filename = shader.spvFilename(arena, stage, threads) catch @panic("OOM"),
+        };
+    }
+};
 
 /// Sets up glslc steps for all shader combinations in the caller project's render.zon
 pub fn compileShaders(
@@ -273,7 +270,7 @@ pub fn compileShaders(
         } },
         compute: struct { dispatches: []const struct {
             comp: Shader,
-            dimensions: Shader.Dimensions(config),
+            threads: Shader.Vec,
         } },
     } }, b, "src/render.zon");
 
@@ -290,20 +287,20 @@ pub fn compileShaders(
     }
 
     // Traverse the render.zon tree
-    var compile_set: std.StringHashMapUnmanaged(ShaderCompile(config)) = .empty;
+    var compile_set: std.StringHashMapUnmanaged(ShaderCompile) = .empty;
     for (render.passes) |pass| {
         switch (pass) {
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    const vert: ShaderCompile(config) = .init(arena, stages.vert, .vertex, null);
+                    const vert: ShaderCompile = .init(arena, stages.vert, .vertex, null);
                     _ = compile_set.getOrPutValue(arena, vert.spv_filename, vert) catch @panic("OOM");
-                    const frag: ShaderCompile(config) = .init(arena, stages.frag, .fragment, null);
+                    const frag: ShaderCompile = .init(arena, stages.frag, .fragment, null);
                     _ = compile_set.getOrPutValue(arena, frag.spv_filename, frag) catch @panic("OOM");
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                const comp: ShaderCompile(config) = .init(arena, disp.comp, .compute, disp.dimensions);
+                const comp: ShaderCompile = .init(arena, disp.comp, .compute, disp.threads);
                 _ = compile_set.getOrPutValue(arena, comp.spv_filename, comp) catch @panic("OOM");
             },
         }
@@ -320,7 +317,7 @@ fn compileShader(
     d: *std.Build.Dependency,
     comptime config: anytype,
     tag_map: *const std.StringHashMapUnmanaged(u32),
-    compile: *const ShaderCompile(config),
+    compile: *const ShaderCompile,
 ) void {
     const arena = b.allocator;
 

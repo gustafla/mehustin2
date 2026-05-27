@@ -34,40 +34,55 @@ pub const Stage = enum {
     compute,
 };
 
-pub fn Dimensions(config: anytype) type {
-    return struct {
-        threads: Vec,
-        groups: union(enum) {
-            vec: Vec,
-            vec_by_threads: Vec,
-            resolution_by_threads,
-        },
+pub const Groups = struct {
+    p: union(enum) {
+        resolution,
+        vec: Vec,
+        // TODO:
+        // sampler: u32,
+        // readonly_storage_texture: u32,
+        // readonly_storage_buffer: u32,
+        // readwrite_storage_texture: u32,
+        // readwrite_storage_buffer: u32,
+    },
+    q: []const union(enum) {
+        threads,
+        scalar: u32,
+    },
 
-        pub fn resolve(self: @This()) struct { threads: Vec, groups: Vec } {
-            return .{
-                .threads = self.threads,
-                .groups = switch (self.groups) {
-                    .vec => |v| v,
-                    .vec_by_threads => |v| .{
-                        .x = (v.x + self.threads.x - 1) / self.threads.x,
-                        .y = (v.y + self.threads.y - 1) / self.threads.y,
-                        .z = (v.z + self.threads.z - 1) / self.threads.z,
-                    },
-                    .resolution_by_threads => .{
-                        .x = (config.width + self.threads.x - 1) / self.threads.x,
-                        .y = (config.height + self.threads.y - 1) / self.threads.y,
-                        .z = 1,
-                    },
-                },
-            };
+    pub fn resolve(self: @This(), config: anytype, threads: Vec) Vec {
+        var groups: Vec = switch (self.p) {
+            .vec => |v| v,
+            .resolution => .{ .x = config.width, .y = config.height },
+            // .sampler => |i|,
+            // .readonly_storage_texture => |i|,
+            // .readonly_storage_buffer => |i|,
+            // .readwrite_storage_texture => |i|,
+            // .readwrite_storage_buffer => |i|,
+        };
+        for (self.q) |q| {
+            groups = groups.divCeil(switch (q) {
+                .threads => threads,
+                .scalar => |n| .{ .x = n, .y = n, .z = n },
+            });
         }
-    };
-}
+
+        return groups;
+    }
+};
 
 pub const Vec = struct {
     x: u32,
     y: u32 = 1,
     z: u32 = 1,
+
+    pub fn divCeil(lhs: Vec, rhs: Vec) Vec {
+        return .{
+            .x = (lhs.x + rhs.x - 1) / rhs.x,
+            .y = (lhs.y + rhs.y - 1) / rhs.y,
+            .z = (lhs.z + rhs.z - 1) / rhs.z,
+        };
+    }
 };
 
 pub fn spvFilename(
