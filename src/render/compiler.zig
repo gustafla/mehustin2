@@ -98,6 +98,8 @@ pub const count_nonnull = struct {
 pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
     return struct {
         pipeline: schema.Render.GraphicsPipeline,
+        vert_spv_filename: []const u8,
+        frag_spv_filename: []const u8,
         vert_info: ShaderInfo,
         frag_info: ShaderInfo,
         vertex_layout: ?type,
@@ -120,10 +122,26 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
             "len",
         }, max_field);
 
+        pub const num_keys = blk: {
+            var n = 0;
+            for (config.passes) |pass| switch (pass) {
+                .render => |rpass| {
+                    for (rpass.drawcalls) |draw| {
+                        for (draw.pipelines) |pipe| {
+                            n += pipe.variants.len + 1;
+                        }
+                    }
+                },
+                else => {},
+            };
+            break :blk n;
+        };
+
         pub const Iterator = struct {
             pass_idx: usize = 0,
             draw_idx: usize = 0,
             pipe_idx: usize = 0,
+            variant_idx: ?usize = null,
 
             pub fn next(self: *@This()) ?GraphicsPipelineKey(config) {
                 while (self.pass_idx < config.passes.len) {
@@ -138,6 +156,7 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
                     if (self.draw_idx >= pass.drawcalls.len) {
                         self.pass_idx += 1;
                         self.draw_idx = 0;
+                        self.variant_idx = null;
                         continue;
                     }
 
@@ -146,18 +165,27 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
                     // Iterate over the pipelines within the drawcall
                     if (self.pipe_idx < drawcall.pipelines.len) {
                         const pipeline = drawcall.pipelines[self.pipe_idx];
+                        const key = init(
+                            pass,
+                            drawcall,
+                            pipeline,
+                            self.variant_idx,
+                        );
 
-                        // Pass the specific pipeline to init
-                        // The drawcall data is shared
-                        const key = init(pass, drawcall, pipeline);
+                        self.variant_idx = if (self.variant_idx) |i| i + 1 else 0;
 
-                        self.pipe_idx += 1;
+                        if (self.variant_idx.? >= pipeline.variants.len) {
+                            self.pipe_idx += 1;
+                            self.variant_idx = null;
+                        }
+
                         return key;
                     }
 
                     // Finished all pipelines for this drawcall, move to next
                     self.pipe_idx = 0;
                     self.draw_idx += 1;
+                    self.variant_idx = null;
                 }
 
                 return null;
@@ -168,6 +196,7 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
             comptime pass: schema.Render.RenderPass,
             comptime drawcall: schema.Render.Drawcall,
             comptime pipeline: schema.Render.GraphicsPipeline,
+            comptime variant: ?usize,
         ) @This() {
             var color_targets = std.mem.zeroes([max_color_targets]types.TextureFormat);
             for (pass.color_targets, 0..) |target, i| {
@@ -185,8 +214,17 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
                 };
             };
 
+            const stages = pipeline.shader.resolve();
+            const variant_params = if (variant) |i| pipeline.variants[i].params else &.{};
+
             return .{
                 .pipeline = pipeline,
+                .vert_spv_filename = std.fmt.comptimePrint("{f}", .{
+                    stages.vert.spvFilenameFmt(.vertex, null, variant_params),
+                }),
+                .frag_spv_filename = std.fmt.comptimePrint("{f}", .{
+                    stages.frag.spvFilenameFmt(.fragment, null, variant_params),
+                }),
                 .vert_info = .{
                     .num_samplers = drawcall.vertex_samplers.len,
                     .num_storage_textures = 0,
@@ -218,7 +256,7 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
 
 pub fn ComputePipelineKey(comptime config: schema.Render) type {
     return struct {
-        comp: schema.Shader,
+        comp_spv_filename: []const u8,
         comp_info: CompInfo,
 
         const CompInfo = struct {
@@ -232,9 +270,21 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
             threadcount_z: u32,
         };
 
+        pub const num_keys = blk: {
+            var n = 0;
+            for (config.passes) |pass| switch (pass) {
+                .compute => |cpass| {
+                    for (cpass.dispatches) |disp| n += disp.variants.len + 1;
+                },
+                else => {},
+            };
+            break :blk n;
+        };
+
         pub const Iterator = struct {
             pass_idx: usize = 0,
             dispatch_idx: usize = 0,
+            variant_idx: ?usize = null,
 
             pub fn next(self: *@This()) ?ComputePipelineKey(config) {
                 while (self.pass_idx < config.passes.len) {
@@ -249,13 +299,20 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
                     if (self.dispatch_idx >= pass.dispatches.len) {
                         self.pass_idx += 1;
                         self.dispatch_idx = 0;
+                        self.variant_idx = null;
                         continue;
                     }
 
                     const dispatch = pass.dispatches[self.dispatch_idx];
-                    const key = init(pass, dispatch);
+                    const key = init(pass, dispatch, self.variant_idx);
 
-                    self.dispatch_idx += 1;
+                    self.variant_idx = if (self.variant_idx) |i| i + 1 else 0;
+
+                    if (self.variant_idx.? >= dispatch.variants.len) {
+                        self.dispatch_idx += 1;
+                        self.variant_idx = null;
+                    }
+
                     return key;
                 }
 
@@ -266,9 +323,13 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
         pub fn init(
             comptime pass: schema.Render.ComputePass,
             comptime dispatch: schema.Render.ComputeDispatch,
+            comptime variant: ?usize,
         ) @This() {
+            const variant_params = if (variant) |i| dispatch.variants[i].params else &.{};
             return .{
-                .comp = dispatch.comp,
+                .comp_spv_filename = std.fmt.comptimePrint("{f}", .{
+                    dispatch.comp.spvFilenameFmt(.compute, dispatch.threads, variant_params),
+                }),
                 .comp_info = .{
                     .num_samplers = dispatch.samplers.len,
                     .num_readonly_storage_textures = dispatch.readonly_storage_textures.len,
@@ -324,23 +385,18 @@ fn serialize(key: anytype, writer: *std.Io.Writer) !void {
 pub fn ComptimeSet(comptime T: type) type {
     const max_len = 1024;
 
-    // Count total number of keys
-    var count_iter: T.Iterator = .{};
-    var max_count = 0;
-    while (count_iter.next()) |_| : (max_count += 1) {}
-
-    @setEvalBranchQuota(max_count * max_len * 2);
+    @setEvalBranchQuota(T.num_keys * max_len * 4);
 
     // Deduplicate keys, serialize to strings
-    var keys_buf: [max_count]T = undefined;
-    var string_buffers: [max_count][max_len]u8 = undefined;
-    var serialized_buf: [max_count][]const u8 = undefined;
+    var keys_buf: [T.num_keys]T = undefined;
+    var string_buffers: [T.num_keys][max_len]u8 = undefined;
+    var serialized_buf: [T.num_keys][]const u8 = undefined;
     var unique_count = 0;
 
     var collect_iter: T.Iterator = .{};
     outer: while (collect_iter.next()) |candidate| {
         var writer = std.Io.Writer.fixed(&string_buffers[unique_count]);
-        serialize(candidate, &writer) catch unreachable;
+        serialize(candidate, &writer) catch @compileError("Key too long");
         const string = writer.buffered();
         for (serialized_buf[0..unique_count]) |existing| {
             if (std.mem.eql(u8, existing, string)) continue :outer;

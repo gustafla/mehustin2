@@ -232,14 +232,17 @@ fn addScript(
     exe_mod.addImport("script", script_mod);
 }
 
+const Variant = struct { params: []const []const u8 };
+
 const ShaderCompile = struct {
     shader: Shader,
     stage: Shader.Stage,
     threads: ?Shader.Vec,
+    variant_params: []const []const u8,
     spv_filename: []const u8,
 
     pub fn init(
-        arena: std.mem.Allocator,
+        b: *std.Build,
         shader: Shader,
         stage: Shader.Stage,
         threads: ?Shader.Vec,
@@ -248,9 +251,40 @@ const ShaderCompile = struct {
             .shader = shader,
             .stage = stage,
             .threads = threads,
-            .spv_filename = shader.spvFilename(arena, stage, threads) catch @panic("OOM"),
+            .variant_params = &.{},
+            .spv_filename = b.fmt("{f}", .{shader.spvFilenameFmt(stage, threads, &.{})}),
         };
     }
+
+    pub fn variantIterator(self: *const ShaderCompile, variants: []const Variant) VariantIterator {
+        return .{
+            .base = self,
+            .variants = variants,
+            .i = 0,
+        };
+    }
+
+    const VariantIterator = struct {
+        base: *const ShaderCompile,
+        variants: []const Variant,
+        i: usize,
+
+        pub fn next(self: *VariantIterator, b: *std.Build) ?ShaderCompile {
+            if (self.i >= self.variants.len) return null;
+
+            var copy = self.base.*;
+            copy.variant_params = self.variants[self.i].params;
+            copy.spv_filename = b.fmt("{f}", .{copy.shader.spvFilenameFmt(
+                copy.stage,
+                copy.threads,
+                copy.variant_params,
+            )});
+
+            self.i += 1;
+
+            return copy;
+        }
+    };
 };
 
 /// Sets up glslc steps for all shader combinations in the caller project's render.zon
@@ -266,10 +300,12 @@ pub fn compileShaders(
         render: struct { drawcalls: []const struct {
             pipelines: []const struct {
                 shader: Shader.Graphics,
+                variants: []const Variant = &.{},
             },
         } },
         compute: struct { dispatches: []const struct {
             comp: Shader,
+            variants: []const Variant = &.{},
             threads: Shader.Vec,
         } },
     } }, b, "src/render.zon");
@@ -287,25 +323,44 @@ pub fn compileShaders(
     }
 
     // Traverse the render.zon tree
-    var compile_set: std.StringHashMapUnmanaged(ShaderCompile) = .empty;
+    var compiles: std.ArrayList(struct { ShaderCompile, []const Variant }) = .empty;
     for (render.passes) |pass| {
         switch (pass) {
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    const vert: ShaderCompile = .init(arena, stages.vert, .vertex, null);
-                    _ = compile_set.getOrPutValue(arena, vert.spv_filename, vert) catch @panic("OOM");
-                    const frag: ShaderCompile = .init(arena, stages.frag, .fragment, null);
-                    _ = compile_set.getOrPutValue(arena, frag.spv_filename, frag) catch @panic("OOM");
+                    const vert: ShaderCompile = .init(b, stages.vert, .vertex, null);
+                    compiles.append(arena, .{ vert, pipe.variants }) catch @panic("OOM");
+                    const frag: ShaderCompile = .init(b, stages.frag, .fragment, null);
+                    compiles.append(arena, .{ frag, pipe.variants }) catch @panic("OOM");
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                const comp: ShaderCompile = .init(arena, disp.comp, .compute, disp.threads);
-                _ = compile_set.getOrPutValue(arena, comp.spv_filename, comp) catch @panic("OOM");
+                const comp: ShaderCompile = .init(b, disp.comp, .compute, disp.threads);
+                compiles.append(arena, .{ comp, disp.variants }) catch @panic("OOM");
             },
         }
     }
 
+    // Expand variants
+    var variants: std.ArrayList(ShaderCompile) = .empty;
+    for (compiles.items) |compile| {
+        var variant_iterator = compile[0].variantIterator(compile[1]);
+        while (variant_iterator.next(b)) |variant_compile| {
+            variants.append(arena, variant_compile) catch @panic("OOM");
+        }
+    }
+
+    // Deduplicate by filename
+    var compile_set: std.StringHashMapUnmanaged(ShaderCompile) = .empty;
+    for (compiles.items) |compile| {
+        _ = compile_set.getOrPutValue(arena, compile[0].spv_filename, compile[0]) catch @panic("OOM");
+    }
+    for (variants.items) |compile| {
+        _ = compile_set.getOrPutValue(arena, compile.spv_filename, compile) catch @panic("OOM");
+    }
+
+    // Compile
     var iterator = compile_set.valueIterator();
     while (iterator.next()) |compile| {
         compileShader(b, d, config, &tag_map, compile);
@@ -329,7 +384,7 @@ fn compileShader(
     const data_path = b.pathJoin(&.{ config.shader_dir, "data.zig" });
     if (b.build_root.handle.access(b.graph.io, data_path, .{})) {
         const genglsl_params = b.addOptions();
-        var param_iterator = compile.shader.paramIterator();
+        var param_iterator = compile.shader.paramIterator(compile.variant_params);
         while (param_iterator.next()) |elem| {
             const name, const val_opt = elem;
             const val_str = val_opt orelse continue;
@@ -419,7 +474,7 @@ fn compileShader(
     }
 
     // Add parameter macros
-    var param_iterator = compile.shader.paramIterator();
+    var param_iterator = compile.shader.paramIterator(compile.variant_params);
     while (param_iterator.next()) |elem| {
         const name, const val_str = elem;
         const upper = toUpper(arena, name);

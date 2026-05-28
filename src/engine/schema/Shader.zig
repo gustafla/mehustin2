@@ -85,23 +85,38 @@ pub const Vec = struct {
     }
 };
 
-pub fn spvFilename(
-    self: @This(),
-    arena: Allocator,
+pub fn spvFilenameFmt(
+    self: *const Shader,
     stage: Stage,
     threads: ?Vec,
-) Writer.Error![]const u8 {
-    var alloc_writer: Writer.Allocating = .init(arena);
-    const writer = &alloc_writer.writer;
-    try writer.print("{s},{s}", .{ self.file, @tagName(stage) });
-    for (self.params) |param| {
-        try writer.print(",{s}", .{param});
+    variant_params: []const []const u8,
+) struct {
+    shader: *const Shader,
+    stage: Stage,
+    threads: ?Vec,
+    variant_params: []const []const u8,
+
+    pub fn format(s: @This(), writer: *std.Io.Writer) Writer.Error!void {
+        try writer.print("{s},{s}", .{ s.shader.file, @tagName(s.stage) });
+        var iterator = s.shader.paramIterator(s.variant_params);
+        while (iterator.next()) |param| {
+            try writer.print(",{s}", .{param[0]});
+            if (param[1]) |value| {
+                try writer.print("={s}", .{value});
+            }
+        }
+        if (s.threads) |t| {
+            try writer.print(",{},{},{}", .{ t.x, t.y, t.z });
+        }
+        try writer.writeAll(".spv");
     }
-    if (threads) |t| {
-        try writer.print(",{},{},{}", .{ t.x, t.y, t.z });
-    }
-    try writer.writeAll(".spv");
-    return alloc_writer.written();
+} {
+    return .{
+        .shader = self,
+        .stage = stage,
+        .threads = threads,
+        .variant_params = variant_params,
+    };
 }
 
 pub const ParamValue = union(enum) {
@@ -158,17 +173,39 @@ pub const ParamValue = union(enum) {
 };
 
 pub const ParamIterator = struct {
-    shader: *const Shader,
-    i: usize = 0,
+    base: []const []const u8,
+    variant: []const []const u8,
+    i: usize,
+
+    fn get(self: *const ParamIterator, i: usize) ?[]const u8 {
+        if (i < self.base.len) return self.base[i];
+        const ii = i - self.base.len;
+        if (ii < self.variant.len) return self.variant[ii];
+        return null;
+    }
 
     pub fn next(self: *ParamIterator) ?struct { []const u8, ?[]const u8 } {
-        if (self.i >= self.shader.params.len) return null;
-        const param = self.shader.params[self.i];
-        self.i += 1;
-        return if (std.mem.cutScalarLast(u8, param, '=')) |s| s else .{ param, null };
+        outer: while (self.get(self.i)) |param| {
+            self.i += 1;
+            const kv = if (std.mem.cutScalar(u8, param, '=')) |s| s else .{ param, null };
+
+            // Omit if later key overrides
+            for (self.i..self.base.len + self.variant.len) |j| {
+                const p = self.get(j).?;
+                const k = if (std.mem.cutScalar(u8, p, '=')) |s| s[0] else p;
+                if (std.mem.eql(u8, kv[0], k)) continue :outer;
+            }
+
+            return kv;
+        }
+        return null;
     }
 };
 
-pub fn paramIterator(self: *const Shader) ParamIterator {
-    return .{ .shader = self };
+pub fn paramIterator(self: *const Shader, variant_params: []const []const u8) ParamIterator {
+    return .{
+        .base = self.params,
+        .variant = variant_params,
+        .i = 0,
+    };
 }

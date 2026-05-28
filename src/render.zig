@@ -130,15 +130,8 @@ fn initComputePipeline(
     arena: Allocator,
     comptime key: ComputePipelineKey,
 ) !*c.SDL_GPUComputePipeline {
-    // Allocate SPIR-V file name
-    const spirv_name = try key.comp.spvFilename(arena, .compute, .{
-        .x = key.comp_info.threadcount_x,
-        .y = key.comp_info.threadcount_y,
-        .z = key.comp_info.threadcount_z,
-    });
-
     // Load SPIR-V binary
-    const path = try resource.dataFilePath(arena, spirv_name);
+    const path = try resource.dataFilePath(arena, key.comp_spv_filename);
     const data = try resource.loadFileZ(io, arena, path);
 
     var create_info = std.mem.zeroInit(c.SDL_GPUComputePipelineCreateInfo, key.comp_info);
@@ -155,11 +148,10 @@ fn initGraphicsPipeline(
     comptime key: GraphicsPipelineKey,
 ) !*c.SDL_GPUGraphicsPipeline {
     const pipeline = key.pipeline;
-    const stages = pipeline.shader.resolve();
 
-    const vert = try shader.loadShader(io, arena, device, .vertex, stages.vert, key.vert_info);
+    const vert = try shader.loadShader(io, arena, device, .vertex, key.vert_spv_filename, key.vert_info);
     defer c.SDL_ReleaseGPUShader(device, vert);
-    const frag = try shader.loadShader(io, arena, device, .fragment, stages.frag, key.frag_info);
+    const frag = try shader.loadShader(io, arena, device, .fragment, key.frag_spv_filename, key.frag_info);
     defer c.SDL_ReleaseGPUShader(device, frag);
 
     var color_target_descs: [GraphicsPipelineKey.max_color_targets]c.SDL_GPUColorTargetDescription = undefined;
@@ -1000,9 +992,22 @@ fn computePass(
                 ); // TODO: bind with n=1
             }
 
-            const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch);
-            const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
-            c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
+            var variant_pipeline = false;
+            inline for (dispatch.variants, 0..) |variant, i| {
+                if (tagsRender(variant, tags)) {
+                    const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch, i);
+                    const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
+                    c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
+                    variant_pipeline = true;
+                    break;
+                }
+            }
+
+            if (!variant_pipeline) {
+                const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch, null);
+                const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
+                c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
+            }
 
             const groups = dispatch.groups.resolve(script.config.main, dispatch.threads);
             c.SDL_DispatchGPUCompute(
@@ -1210,10 +1215,25 @@ fn renderPass(
             }
 
             inline for (drawcall.pipelines) |pipeline| {
-                // Find matching pipeline index from pipeline_keys at compile time
-                const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline);
-                const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
-                c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
+                // Resolve pipeline variant from tags
+                var variant_pipeline: bool = false;
+                inline for (pipeline.variants, 0..) |variant, i| {
+                    if (tagsRender(variant, tags)) {
+                        const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline, i);
+                        const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
+                        c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
+
+                        variant_pipeline = true;
+                        break;
+                    }
+                }
+
+                if (!variant_pipeline) {
+                    const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline, null);
+                    const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
+                    c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
+                }
+
                 if (drawcall.index_buffer == null) {
                     c.SDL_DrawGPUPrimitives(
                         render_pass,

@@ -28,15 +28,33 @@ pub const Render = struct {
 
     pub const GraphicsPipeline = struct {
         shader: Shader.Graphics,
+        variants: []const Variant = &.{},
         primitive_type: PrimitiveType = .trianglelist,
         rasterizer_state: RasterizerState = .{},
         enable_alpha_to_coverage: bool = false,
-        depth_test: ?struct { // TODO: Consider implementing full DepthStencilState
+        depth_test: ?struct { // TODO: Add full DepthStencilState
             compare_op: CompareOp = .less_or_equal,
             enable: bool = true,
             write: bool = true,
         } = null,
         blend_states: []const BlendState = &.{},
+
+        pub const Variant = struct {
+            require_all_tags: []const timeline.Tag = &.{},
+            require_any_tags: []const timeline.Tag = &.{},
+            params: []const []const u8,
+
+            // TODO: Implement more overrides
+            // primitive_type: ?PrimitiveType = null,
+            // rasterizer_state: ?RasterizerState = null,
+            // enable_alpha_to_coverage: ?bool = null,
+            // depth_test: ?struct { // TODO: Add full DepthStencilState
+            //     compare_op: CompareOp = .less_or_equal,
+            //     enable: bool = true,
+            //     write: bool = true,
+            // } = null,
+            // blend_states: ?[]const BlendState = null,
+        };
     };
 
     pub const ColorTarget = union(enum) {
@@ -94,11 +112,18 @@ pub const Render = struct {
         require_all_tags: []const timeline.Tag = &.{},
         require_any_tags: []const timeline.Tag = &.{},
         comp: Shader,
+        variants: []const Variant = &.{},
         threads: Shader.Vec,
         groups: Shader.Groups,
         samplers: []const TextureSamplerBinding = &.{},
         readonly_storage_textures: []const []const u8 = &.{},
         readonly_storage_buffers: []const []const u8 = &.{},
+
+        pub const Variant = struct {
+            require_all_tags: []const timeline.Tag = &.{},
+            require_any_tags: []const timeline.Tag = &.{},
+            params: []const []const u8,
+        };
     };
 
     pub const Pass = union(enum) {

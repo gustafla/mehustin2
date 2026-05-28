@@ -17,14 +17,11 @@ pub fn loadShader(
     arena: Allocator,
     device: *c.SDL_GPUDevice,
     comptime stage: Shader.Stage,
-    shader: Shader,
+    spv_filename: []const u8,
     info: anytype,
 ) Error!*c.SDL_GPUShader {
-    // Allocate SPIR-V file name
-    const spirv_name = try shader.spvFilename(arena, stage, null);
-
     // Load SPIR-V binary
-    const path = try resource.dataFilePath(arena, spirv_name);
+    const path = try resource.dataFilePath(arena, spv_filename);
     const data = try resource.loadFileZ(io, arena, path);
 
     var create_info = std.mem.zeroInit(c.SDL_GPUShaderCreateInfo, info);
