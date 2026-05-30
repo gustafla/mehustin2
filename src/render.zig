@@ -1047,7 +1047,7 @@ fn renderPass(
                 else
                     null,
                 .cycle = target.load_op != .load,
-                .cycle_resolve_texture = target.load_op != .load, // TODO: ?
+                .cycle_resolve_texture = true,
             };
         }
         break :blk infos;
