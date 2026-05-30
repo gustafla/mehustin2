@@ -50,6 +50,10 @@
                             .file = "shaders.glsl",
                             .params = .{"post"},
                         } } },
+                        .variants = .{.{
+                            .require_all_tags = .{.negative_color},
+                            .params = .{"negative"},
+                        }},
                     }},
                     .fragment_samplers = .{
                         .{ .texture = "color_targets[1]", .sampler = "nearest" },

@@ -1,6 +1,7 @@
 .{
     .tags = .{
         .{ .name = "cubes", .duration = 100, .t = .seq },
+        .{ .name = "negative_color", .duration = 10, .t = .{ .abs = 10 } },
     },
     .text = .{
         .fonts = .{.{

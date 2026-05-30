@@ -73,7 +73,13 @@ layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
 #include <color.glsl>
 
 void main() {
-    vec3 color = max(texture(u_input_texture, in_uv).rgb, 0.);
-    out_color = vec4(reinhard(color), 1.);
+    vec3 in_color = max(texture(u_input_texture, in_uv).rgb, 0.);
+    vec3 tone_mapped_color = reinhard(in_color);
+
+    #if defined(NEGATIVE)
+    tone_mapped_color = vec3(1.0) - tone_mapped_color;
+    #endif
+
+    out_color = vec4(tone_mapped_color, 1.);
 }
 #endif // FRAGMENT and POST
