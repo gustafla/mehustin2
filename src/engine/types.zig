@@ -223,7 +223,6 @@ pub const RasterizerState = struct {
     }
 };
 
-pub const CompareOp = EnumFromC("CompareOp", .{});
 pub const BlendFactor = EnumFromC("BlendFactor", .{});
 pub const BlendOp = EnumFromC("BlendOp", .{});
 
@@ -250,6 +249,64 @@ pub const BlendState = struct {
             .enable_blend = self.enable,
             .enable_color_write_mask = self.enable_color_write_mask,
         };
+    }
+};
+
+pub const CompareOp = EnumFromC("CompareOp", .{});
+pub const StencilOp = EnumFromC("StencilOp", .{});
+
+pub const StencilOpState = struct {
+    fail_op: StencilOp,
+    pass_op: StencilOp,
+    depth_fail_op: StencilOp,
+    compare_op: CompareOp,
+
+    pub fn toSDL(self: @This()) c.SDL_GPUStencilOpState {
+        return .{
+            .fail_op = @intFromEnum(self.fail_op),
+            .pass_op = @intFromEnum(self.pass_op),
+            .depth_fail_op = @intFromEnum(self.depth_fail_op),
+            .compare_op = @intFromEnum(self.compare_op),
+        };
+    }
+};
+
+pub const DepthStencilState = struct {
+    depth: ?struct {
+        compare_op: CompareOp = .less_or_equal,
+        enable_write: bool = true,
+    } = null,
+    stencil: ?struct {
+        back_stencil_state: StencilOpState,
+        front_stencil_state: StencilOpState,
+        compare_mask: u8,
+        write_mask: u8,
+    } = null,
+
+    pub fn toSDL(self: @This()) c.SDL_GPUDepthStencilState {
+        const T = c.SDL_GPUDepthStencilState;
+        return if (self.depth) |d|
+            if (self.stencil) |s| .{
+                .compare_op = @intFromEnum(d.compare_op),
+                .back_stencil_state = s.back_stencil_state.toSDL(),
+                .front_stencil_state = s.front_stencil_state.toSDL(),
+                .compare_mask = s.compare_mask,
+                .write_mask = s.write_mask,
+                .enable_depth_test = true,
+                .enable_depth_write = d.enable_write,
+                .enable_stencil_test = true,
+            } else std.mem.zeroInit(T, .{
+                .compare_op = @intFromEnum(d.compare_op),
+                .enable_depth_test = true,
+                .enable_depth_write = d.enable_write,
+            })
+        else if (self.stencil) |s| std.mem.zeroInit(T, .{
+            .back_stencil_state = s.back_stencil_state.toSDL(),
+            .front_stencil_state = s.front_stencil_state.toSDL(),
+            .compare_mask = s.compare_mask,
+            .write_mask = s.write_mask,
+            .enable_stencil_test = true,
+        }) else std.mem.zeroInit(T, .{});
     }
 };
 

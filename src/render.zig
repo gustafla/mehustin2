@@ -218,16 +218,7 @@ fn initGraphicsPipeline(
             .sample_count = @intFromEnum(key.sample_count),
             .enable_alpha_to_coverage = pipeline.enable_alpha_to_coverage,
         },
-        .depth_stencil_state = if (pipeline.depth_test) |state| .{
-            .compare_op = @intFromEnum(state.compare_op),
-            .enable_depth_test = state.enable,
-            .enable_depth_write = state.write,
-            .enable_stencil_test = false,
-        } else .{
-            .enable_depth_test = false,
-            .enable_depth_write = false,
-            .enable_stencil_test = false,
-        },
+        .depth_stencil_state = pipeline.depth_stencil_state.toSDL(),
         .target_info = .{
             .num_color_targets = key.num_color_targets,
             .color_target_descriptions = &color_target_descs,

@@ -27,7 +27,7 @@
                             .file = "shaders.glsl",
                             .params = .{"main"},
                         } },
-                        .depth_test = .{},
+                        .depth_stencil_state = .{ .depth = .{} },
                     }},
                     .vertex_buffer = "cube",
                     .instance_buffer = "cube_instances",

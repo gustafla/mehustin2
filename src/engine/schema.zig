@@ -19,6 +19,7 @@ const SamplerMipmapMode = types.SamplerMipmapMode;
 const SamplerAddressMode = types.SamplerAddressMode;
 const TextureFormat = types.TextureFormat;
 const SampleCount = types.SampleCount;
+const DepthStencilState = types.DepthStencilState;
 
 pub const Render = struct {
     color_targets: []const TargetTexture = &.{},
@@ -32,11 +33,7 @@ pub const Render = struct {
         primitive_type: PrimitiveType = .trianglelist,
         rasterizer_state: RasterizerState = .{},
         enable_alpha_to_coverage: bool = false,
-        depth_test: ?struct { // TODO: Add full DepthStencilState
-            compare_op: CompareOp = .less_or_equal,
-            enable: bool = true,
-            write: bool = true,
-        } = null,
+        depth_stencil_state: DepthStencilState = .{},
         blend_states: []const BlendState = &.{},
 
         pub const Variant = struct {
@@ -48,11 +45,7 @@ pub const Render = struct {
             // primitive_type: ?PrimitiveType = null,
             // rasterizer_state: ?RasterizerState = null,
             // enable_alpha_to_coverage: ?bool = null,
-            // depth_test: ?struct { // TODO: Add full DepthStencilState
-            //     compare_op: CompareOp = .less_or_equal,
-            //     enable: bool = true,
-            //     write: bool = true,
-            // } = null,
+            // depth_stencil_state: ?DepthStencilState = null,
             // blend_states: ?[]const BlendState = null,
         };
     };

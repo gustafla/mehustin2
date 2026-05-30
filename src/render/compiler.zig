@@ -68,6 +68,7 @@ pub fn fold(
         }
         return acc;
     }
+
     @compileError(fields[0] ++ " not found in " ++ @typeName(Parent));
 }
 
