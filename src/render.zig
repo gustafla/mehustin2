@@ -989,18 +989,17 @@ fn computePass(
                 },
             });
 
-            inline for (dispatch.variants, 0..) |variant, i| {
+            const pipeline_index = inline for (dispatch.variants, 0..) |variant, i| {
                 if (tagsRender(variant, tags)) {
-                    const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch, i);
-                    const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
-                    c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
-                    break;
+                    break comptime compute_pipeline_set.getIndex(
+                        ComputePipelineKey.init(pass, dispatch, i),
+                    );
                 }
-            } else {
-                const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch, null);
-                const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
-                c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
-            }
+            } else comptime compute_pipeline_set.getIndex(
+                ComputePipelineKey.init(pass, dispatch, null),
+            );
+
+            c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
 
             const groups = dispatch.groups.resolve(script.config.main, dispatch.threads);
             c.SDL_DispatchGPUCompute(
@@ -1199,18 +1198,17 @@ fn renderPass(
             });
 
             inline for (drawcall.pipelines) |pipeline| {
-                inline for (pipeline.variants, 0..) |variant, i| {
+                const pipeline_index = inline for (pipeline.variants, 0..) |variant, i| {
                     if (tagsRender(variant, tags)) {
-                        const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline, i);
-                        const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
-                        c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
-                        break;
+                        break comptime graphics_pipeline_set.getIndex(
+                            GraphicsPipelineKey.init(pass, drawcall, pipeline, i),
+                        );
                     }
-                } else {
-                    const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline, null);
-                    const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
-                    c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
-                }
+                } else comptime graphics_pipeline_set.getIndex(
+                    GraphicsPipelineKey.init(pass, drawcall, pipeline, null),
+                );
+
+                c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
 
                 if (drawcall.index_buffer == null) {
                     c.SDL_DrawGPUPrimitives(
