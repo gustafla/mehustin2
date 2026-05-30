@@ -13,7 +13,6 @@
 - [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
   - [ ] Overrides for pipeline parameters and binds
 - [ ] Bind with fewer API calls, replace num=1 binds with array binds
-- [ ] Implement graphics storage textures
 
 # Backlog
 
@@ -51,6 +50,7 @@
 
 # Done
 
+- [X] Implement graphics storage textures
 - [X] Add `variants` to schema
   - [X] `struct{require_all_tags: []const Tag, ..., .params: []const []const u8}`
   - [X] Iterate variants in build

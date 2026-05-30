@@ -904,6 +904,36 @@ const RenderParameters = struct {
     resolution_match: bool,
 };
 
+fn mapTextureBinding(comptime tb: []const u8) ?*c.SDL_GPUTexture {
+    const reference = comptime compiler.parseIndex(tb) catch |e|
+        @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+    return if (reference) |result|
+        @field(@This(), result.ref)[result.idx]
+    else
+        textures[@intFromEnum(@field(script.Texture, tb))];
+}
+
+fn mapTextureSamplerBinding(comptime tsb: schema.Render.TextureSamplerBinding) c.SDL_GPUTextureSamplerBinding {
+    return .{
+        .texture = mapTextureBinding(tsb.texture),
+        .sampler = samplers[@intFromEnum(@field(SamplerEnum, tsb.sampler))],
+    };
+}
+
+fn mapStorageBufferBinding(comptime sbb: []const u8) ?*c.SDL_GPUBuffer {
+    return storage_buffers[@intFromEnum(@field(script.StorageBuffer, sbb))];
+}
+
+fn bindResources(pass: anytype, comptime resource_bindings: anytype) void {
+    inline for (resource_bindings) |res| {
+        if (res.list.len == 0) continue;
+        const Binding = @typeInfo(@TypeOf(res.map)).@"fn".return_type.?;
+        var bindings: [res.list.len]Binding = undefined;
+        inline for (res.list, &bindings) |r, *b| b.* = res.map(r);
+        res.bind(pass, 0, &bindings, bindings.len);
+    }
+}
+
 fn computePass(
     comptime pass: schema.Render.ComputePass,
     cmdbuf: *c.SDL_GPUCommandBuffer,
@@ -912,89 +942,61 @@ fn computePass(
     // Filter pass by tag requirements list
     if (!tagsRender(pass, tags)) return;
 
-    var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
-    inline for (pass.readwrite_storage_textures, &storage_texture_bindings) |rwst, *texture| {
-        const reference = comptime compiler.parseIndex(rwst.texture) catch |e|
-            @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-        texture.* = .{
-            .texture = if (reference) |result|
-                @field(@This(), result.ref)[result.idx]
-            else
-                textures[@intFromEnum(@field(script.Texture, rwst.texture))],
+    var rw_storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
+    inline for (pass.readwrite_storage_textures, &rw_storage_texture_bindings) |rwst, *stb| {
+        stb.* = .{
+            .texture = mapTextureBinding(rwst.texture),
             .layer = rwst.layer,
             .mip_level = rwst.mip_level,
             .cycle = true,
         };
     }
 
-    var storage_buffer_bindings: [pass.readwrite_storage_buffers.len]c.SDL_GPUStorageBufferReadWriteBinding = undefined;
-    inline for (pass.readwrite_storage_buffers, &storage_buffer_bindings) |name, *buffer| {
-        const idx = @intFromEnum(@field(script.StorageBuffer, name));
-        buffer.* = .{
-            .buffer = storage_buffers[idx],
+    var rw_storage_buffer_bindings: [pass.readwrite_storage_buffers.len]c.SDL_GPUStorageBufferReadWriteBinding = undefined;
+    inline for (pass.readwrite_storage_buffers, &rw_storage_buffer_bindings) |name, *sbb| {
+        sbb.* = .{
+            .buffer = mapStorageBufferBinding(name),
             .cycle = true,
         };
     }
 
     const compute_pass = c.SDL_BeginGPUComputePass(
         cmdbuf,
-        &storage_texture_bindings,
-        storage_texture_bindings.len,
-        &storage_buffer_bindings,
-        storage_buffer_bindings.len,
+        &rw_storage_texture_bindings,
+        rw_storage_texture_bindings.len,
+        &rw_storage_buffer_bindings,
+        rw_storage_buffer_bindings.len,
     );
 
     inline for (pass.dispatches) |dispatch| {
         // Filter dispatch by tag requirements list
         if (tagsRender(dispatch, tags)) {
-            inline for (dispatch.samplers, 0..) |tex, slot| {
-                const reference = comptime compiler.parseIndex(tex.texture) catch |e|
-                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-                c.SDL_BindGPUComputeSamplers(compute_pass, @intCast(slot), &.{
-                    .texture = if (reference) |result|
-                        @field(@This(), result.ref)[result.idx]
-                    else
-                        textures[@intFromEnum(@field(script.Texture, tex.texture))],
-                    .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
-                }, 1); // TODO: bind with n=1
-            }
+            bindResources(compute_pass, &.{
+                .{
+                    .list = dispatch.samplers,
+                    .map = mapTextureSamplerBinding,
+                    .bind = c.SDL_BindGPUComputeSamplers,
+                },
+                .{
+                    .list = dispatch.readonly_storage_textures,
+                    .map = mapTextureBinding,
+                    .bind = c.SDL_BindGPUComputeStorageTextures,
+                },
+                .{
+                    .list = dispatch.readonly_storage_buffers,
+                    .map = mapStorageBufferBinding,
+                    .bind = c.SDL_BindGPUComputeStorageBuffers,
+                },
+            });
 
-            inline for (dispatch.readonly_storage_textures, 0..) |name, slot| {
-                const reference = comptime compiler.parseIndex(name) catch |e|
-                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-                c.SDL_BindGPUComputeStorageTextures(
-                    compute_pass,
-                    @intCast(slot),
-                    if (reference) |result|
-                        &@field(@This(), result.ref)[result.idx]
-                    else
-                        &textures[@intFromEnum(@field(script.Texture, name))],
-                    1,
-                ); // TODO: bind with n=1
-            }
-
-            inline for (dispatch.readonly_storage_buffers, 0..) |name, slot| {
-                const idx = @intFromEnum(@field(script.StorageBuffer, name));
-                c.SDL_BindGPUComputeStorageBuffers(
-                    compute_pass,
-                    @intCast(slot),
-                    &storage_buffers[idx],
-                    1,
-                ); // TODO: bind with n=1
-            }
-
-            var variant_pipeline = false;
             inline for (dispatch.variants, 0..) |variant, i| {
                 if (tagsRender(variant, tags)) {
                     const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch, i);
                     const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
                     c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
-                    variant_pipeline = true;
                     break;
                 }
-            }
-
-            if (!variant_pipeline) {
+            } else {
                 const pipeline_key = comptime ComputePipelineKey.init(pass, dispatch, null);
                 const pipeline_index = comptime compute_pipeline_set.getIndex(pipeline_key);
                 c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
@@ -1163,63 +1165,48 @@ fn renderPass(
                 first_vertex = buffer_infos[idx].first_element;
             }
 
-            // Bind textures
-            inline for (.{
+            bindResources(render_pass, &.{
                 .{
+                    .list = drawcall.vertex_samplers,
+                    .map = mapTextureSamplerBinding,
                     .bind = c.SDL_BindGPUVertexSamplers,
-                    .tex = drawcall.vertex_samplers,
                 },
                 .{
+                    .list = drawcall.fragment_samplers,
+                    .map = mapTextureSamplerBinding,
                     .bind = c.SDL_BindGPUFragmentSamplers,
-                    .tex = drawcall.fragment_samplers,
                 },
-            }) |stage| {
-                inline for (stage.tex, 0..) |tex, slot| {
-                    const reference = comptime compiler.parseIndex(tex.texture) catch |e|
-                        @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
-                    stage.bind(render_pass, @intCast(slot), &.{
-                        .texture = if (reference) |result|
-                            @field(@This(), result.ref)[result.idx]
-                        else
-                            textures[@intFromEnum(@field(script.Texture, tex.texture))],
-                        .sampler = samplers[@intFromEnum(@field(SamplerEnum, tex.sampler))],
-                    }, 1); // TODO: bind with n=1
-                }
-            }
-
-            // Bind storage buffers
-            inline for (.{
                 .{
+                    .list = drawcall.vertex_storage_textures,
+                    .map = mapTextureBinding,
+                    .bind = c.SDL_BindGPUVertexStorageTextures,
+                },
+                .{
+                    .list = drawcall.fragment_storage_textures,
+                    .map = mapTextureBinding,
+                    .bind = c.SDL_BindGPUFragmentStorageTextures,
+                },
+                .{
+                    .list = drawcall.vertex_storage_buffers,
+                    .map = mapTextureBinding,
                     .bind = c.SDL_BindGPUVertexStorageBuffers,
-                    .storage_buffers = drawcall.vertex_storage_buffers,
                 },
                 .{
+                    .list = drawcall.fragment_storage_buffers,
+                    .map = mapTextureBinding,
                     .bind = c.SDL_BindGPUFragmentStorageBuffers,
-                    .storage_buffers = drawcall.fragment_storage_buffers,
                 },
-            }) |stage| {
-                inline for (stage.storage_buffers, 0..) |name, slot| {
-                    const idx = @intFromEnum(@field(script.StorageBuffer, name));
-                    // TODO: bind with n=1
-                    stage.bind(render_pass, @intCast(slot), &storage_buffers[idx], 1);
-                }
-            }
+            });
 
             inline for (drawcall.pipelines) |pipeline| {
-                // Resolve pipeline variant from tags
-                var variant_pipeline: bool = false;
                 inline for (pipeline.variants, 0..) |variant, i| {
                     if (tagsRender(variant, tags)) {
                         const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline, i);
                         const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
                         c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
-
-                        variant_pipeline = true;
                         break;
                     }
-                }
-
-                if (!variant_pipeline) {
+                } else {
                     const pipeline_key = comptime GraphicsPipelineKey.init(pass, drawcall, pipeline, null);
                     const pipeline_index = comptime graphics_pipeline_set.getIndex(pipeline_key);
                     c.SDL_BindGPUGraphicsPipeline(render_pass, graphics_pipelines[pipeline_index]);
