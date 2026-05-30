@@ -913,16 +913,16 @@ fn computePass(
     if (!tagsRender(pass, tags)) return;
 
     var storage_texture_bindings: [pass.readwrite_storage_textures.len]c.SDL_GPUStorageTextureReadWriteBinding = undefined;
-    inline for (pass.readwrite_storage_textures, &storage_texture_bindings) |name, *texture| {
-        const reference = comptime compiler.parseIndex(name) catch |e|
+    inline for (pass.readwrite_storage_textures, &storage_texture_bindings) |rwst, *texture| {
+        const reference = comptime compiler.parseIndex(rwst.texture) catch |e|
             @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
         texture.* = .{
             .texture = if (reference) |result|
                 @field(@This(), result.ref)[result.idx]
             else
-                textures[@intFromEnum(@field(script.Texture, name))],
-            .layer = 0, // TODO: allow configuration
-            .mip_level = 0, // TODO: allow configuration
+                textures[@intFromEnum(@field(script.Texture, rwst.texture))],
+            .layer = rwst.layer,
+            .mip_level = rwst.mip_level,
             .cycle = true,
         };
     }

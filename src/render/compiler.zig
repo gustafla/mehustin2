@@ -493,13 +493,13 @@ pub fn UsageFlags(comptime config: schema.Render) type {
                     }
                 },
                 .compute => |cpass| {
-                    for (cpass.readwrite_storage_textures) |rw_tex| {
-                        const result = parseIndex(rw_tex) catch unreachable;
+                    for (cpass.readwrite_storage_textures) |rwst| {
+                        const result = parseIndex(rwst.texture) catch unreachable;
                         if (result) |r| {
                             @field(f, r.ref)[r.idx].compute_storage_read = true;
                             @field(f, r.ref)[r.idx].compute_storage_write = true;
                         } else {
-                            const idx = @intFromEnum(@field(script.Texture, rw_tex));
+                            const idx = @intFromEnum(@field(script.Texture, rwst.texture));
                             f.textures[idx].compute_storage_read = true;
                             f.textures[idx].compute_storage_write = true;
                         }

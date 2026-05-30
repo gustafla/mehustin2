@@ -136,7 +136,11 @@ pub const Render = struct {
         require_all_tags: []const timeline.Tag = &.{},
         require_any_tags: []const timeline.Tag = &.{},
         dispatches: []const ComputeDispatch,
-        readwrite_storage_textures: []const []const u8 = &.{},
+        readwrite_storage_textures: []const struct {
+            texture: []const u8,
+            layer: u32 = 0,
+            mip_level: u32 = 0,
+        } = &.{},
         readwrite_storage_buffers: []const []const u8 = &.{},
     };
 
