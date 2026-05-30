@@ -495,7 +495,8 @@ pub fn resolve(time: f32) State {
             getAnchor(to)
         else
             @as(Vec3, @splat(0));
-        pos_offset = math.vec3.lerp(pos_offset, next_offset, blend_alpha);
+        const ba: Vec3 = @splat(blend_alpha);
+        pos_offset = std.math.lerp(pos_offset, next_offset, ba);
     }
 
     // Apply rig offset to state
@@ -514,7 +515,8 @@ pub fn resolve(time: f32) State {
             getAnchor(to)
         else
             track_target_world;
-        look_target = math.vec3.lerp(look_target, next_look, blend_alpha);
+        const ba: Vec3 = @splat(blend_alpha);
+        look_target = std.math.lerp(look_target, next_look, ba);
     }
 
     cam_state.target = look_target;
@@ -816,7 +818,8 @@ pub const text_instances = struct {
                         pos += offset * @as(Vec2, @splat(factor));
                     },
                     .fade => |start_color| {
-                        color = math.vec4.lerp(start_color, track.color, in_progress);
+                        const ip: math.Vec4 = @splat(in_progress);
+                        color = std.math.lerp(start_color, track.color, ip);
                     },
                 }
             }

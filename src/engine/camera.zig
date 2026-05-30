@@ -11,18 +11,19 @@ pub const State = struct {
     roll: f32 = 0,
 
     pub fn lerp(a: State, b: State, t: f32) State {
+        const tv: Vec3 = @splat(t);
         return .{
-            .pos = vec3.lerp(a.pos, b.pos, t),
-            .target = vec3.lerp(a.target, b.target, t),
+            .pos = std.math.lerp(a.pos, b.pos, tv),
+            .target = std.math.lerp(a.target, b.target, tv),
             .fov = std.math.lerp(a.fov, b.fov, t),
             .roll = std.math.lerp(a.roll, b.roll, t),
         };
     }
 
     pub fn getBasis(self: State) struct { right: Vec3, up: Vec3, fwd: Vec3 } {
-        const fwd = vec3.normalize(self.target - self.pos);
-        const world_up = if (@abs(fwd[1]) > 0.999) vec3.ZUP else vec3.YUP;
-        const right = vec3.normalize(vec3.cross(fwd, world_up));
+        const fwd = math.normalize(self.target - self.pos);
+        const world_up = if (@abs(fwd[1]) > 0.999) vec3.zup else vec3.yup;
+        const right = math.normalize(vec3.cross(fwd, world_up));
         const up = vec3.cross(right, fwd);
         return .{ .right = right, .up = up, .fwd = fwd };
     }
@@ -40,7 +41,7 @@ pub const fns = struct {
             strafe: bool = false,
         },
     ) State {
-        const v = vec3.normalize(p.axis);
+        const v = math.normalize(p.axis);
         const offset = v * @as(Vec3, @splat(t * p.speed));
         return .{
             .pos = e.pos + offset,
@@ -57,7 +58,7 @@ pub const fns = struct {
             speed: f32 = 1,
         },
     ) State {
-        const v = vec3.normalize(e.target - e.pos);
+        const v = math.normalize(e.target - e.pos);
         const offset = v * @as(Vec3, @splat(t * p.speed));
         return .{
             .pos = e.pos + offset,
@@ -75,7 +76,7 @@ pub const fns = struct {
             speed: f32 = 1,
         },
     ) State {
-        const axis = vec3.normalize(p.axis);
+        const axis = math.normalize(p.axis);
         const rel_pos = e.pos - e.target;
         const rotated = vec3.rotate(rel_pos, axis, t * p.speed);
 
@@ -96,18 +97,18 @@ pub const fns = struct {
         },
     ) State {
         const rel_pos = e.pos - e.target;
-        const view_dir = vec3.normalize(rel_pos);
-        const param_axis = vec3.normalize(p.axis);
+        const view_dir = math.normalize(rel_pos);
+        const param_axis = math.normalize(p.axis);
 
         // Remove the part of the axis that points towards the camera
-        const proj = view_dir * @as(Vec3, @splat(vec3.dot(param_axis, view_dir)));
+        const proj = view_dir * @as(Vec3, @splat(math.dot(param_axis, view_dir)));
         var axis = param_axis - proj;
 
         // Fallback: If axis aligns with view, use original axis
-        if (vec3.lengthSq(axis) < 0.001) {
+        if (math.lengthSq(axis) < 0.001) {
             axis = param_axis;
         } else {
-            axis = vec3.normalize(axis);
+            axis = math.normalize(axis);
         }
 
         const rotated = vec3.rotate(rel_pos, axis, t * p.speed);
@@ -157,7 +158,7 @@ pub const fns = struct {
         },
     ) State {
         const basis = e.getBasis();
-        const axis = if (p.axis) |a| vec3.normalize(a) else blk: {
+        const axis = if (p.axis) |a| math.normalize(a) else blk: {
             break :blk switch (p.local) {
                 .vertical => basis.up,
                 .lateral => basis.right,
@@ -227,7 +228,7 @@ pub const fns = struct {
             strafe: bool = false,
         },
     ) State {
-        const axis = if (p.axis) |a| vec3.normalize(a) else blk: {
+        const axis = if (p.axis) |a| math.normalize(a) else blk: {
             const basis = e.getBasis();
             break :blk switch (p.local) {
                 .lateral => basis.right,

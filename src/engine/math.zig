@@ -8,28 +8,31 @@ pub const Vec2 = @Vector(2, f32);
 /// A 3-component vector.
 pub const Vec3 = @Vector(3, f32);
 
+/// A 4-component vector.
+pub const Vec4 = @Vector(4, f32);
+
+pub fn dot(a: anytype, b: anytype) f32 {
+    return @reduce(.Add, a * b);
+}
+
+pub fn lengthSq(v: anytype) f32 {
+    return dot(v, v);
+}
+
+pub fn length(v: anytype) f32 {
+    return @sqrt(lengthSq(v));
+}
+
+pub fn normalize(v: anytype) @TypeOf(v) {
+    const len: @TypeOf(v) = @splat(length(v));
+    return v / len;
+}
+
 /// Operations on `Vec3`.
 pub const vec3 = struct {
-    pub const XUP: Vec3 = .{ 1.0, 0.0, 0.0 };
-    pub const YUP: Vec3 = .{ 0.0, 1.0, 0.0 };
-    pub const ZUP: Vec3 = .{ 0.0, 0.0, 1.0 };
-
-    pub fn dot(a: Vec3, b: Vec3) f32 {
-        return @reduce(.Add, a * b);
-    }
-
-    pub fn lengthSq(v: Vec3) f32 {
-        return dot(v, v);
-    }
-
-    pub fn length(v: Vec3) f32 {
-        return @sqrt(lengthSq(v));
-    }
-
-    pub fn normalize(v: Vec3) Vec3 {
-        const len: Vec3 = @splat(length(v));
-        return v / len;
-    }
+    pub const xup: Vec3 = .{ 1.0, 0.0, 0.0 };
+    pub const yup: Vec3 = .{ 0.0, 1.0, 0.0 };
+    pub const zup: Vec3 = .{ 0.0, 0.0, 1.0 };
 
     pub fn cross(a: Vec3, b: Vec3) Vec3 {
         return Vec3{
@@ -37,11 +40,6 @@ pub const vec3 = struct {
             a[2] * b[0] - a[0] * b[2],
             a[0] * b[1] - a[1] * b[0],
         };
-    }
-
-    pub fn lerp(a: Vec3, b: Vec3, t: f32) Vec3 {
-        const t_vec: Vec3 = @splat(t);
-        return a + (b - a) * t_vec;
     }
 
     /// Rotates vector 'v' around normalized axis 'k' by 'angle' (radians).
@@ -52,22 +50,11 @@ pub const vec3 = struct {
         const term1 = v * cos_v;
         const term2 = vec3.cross(k, v) * sin_v;
 
-        const dot_val = vec3.dot(k, v);
+        const dot_val = dot(k, v);
         const one_minus_cos = @as(Vec3, @splat(1.0)) - cos_v;
         const term3 = k * @as(Vec3, @splat(dot_val)) * one_minus_cos;
 
         return term1 + term2 + term3;
-    }
-};
-
-/// A 4-component vector.
-pub const Vec4 = @Vector(4, f32);
-
-pub const vec4 = struct {
-    // TODO: implement anytype-generic versions of these
-    pub fn lerp(a: Vec4, b: Vec4, t: f32) Vec4 {
-        const t_vec: Vec4 = @splat(t);
-        return a + (b - a) * t_vec;
     }
 };
 
@@ -159,9 +146,9 @@ pub const Mat4 = extern struct {
     ///
     /// This matrix transforms coordinates from world space to camera space.
     pub fn lookAt(pos: Vec3, target: Vec3, roll: f32) Mat4 {
-        const f = vec3.normalize(target - pos);
-        const world_up = if (@abs(f[1]) > 0.999) vec3.ZUP else vec3.YUP;
-        const r_base = vec3.normalize(vec3.cross(f, world_up));
+        const f = normalize(target - pos);
+        const world_up = if (@abs(f[1]) > 0.999) vec3.zup else vec3.yup;
+        const r_base = normalize(vec3.cross(f, world_up));
         const u_base = vec3.cross(r_base, f);
 
         const c: Vec3 = @splat(std.math.cos(roll));
@@ -174,7 +161,7 @@ pub const Mat4 = extern struct {
                 .{ r[0], u[0], -f[0], 0 },
                 .{ r[1], u[1], -f[1], 0 },
                 .{ r[2], u[2], -f[2], 0 },
-                .{ -vec3.dot(r, pos), -vec3.dot(u, pos), vec3.dot(f, pos), 1 },
+                .{ -dot(r, pos), -dot(u, pos), dot(f, pos), 1 },
             },
         };
     }
@@ -186,7 +173,7 @@ pub const Quat = @Vector(4, f32);
 /// Operations on `Quat`.
 pub const quat = struct {
     /// The identity quaternion (no rotation).
-    pub const IDENTITY: Quat = .{ 0.0, 0.0, 0.0, 1.0 }; // TODO: lowercase these
+    pub const identity: Quat = .{ 0.0, 0.0, 0.0, 1.0 };
 
     /// Creates a rotation from an axis and an angle (in radians).
     ///
@@ -213,12 +200,12 @@ pub const quat = struct {
         if (cos_theta < -1.0 + 0.001) {
             // Corner case: vectors are exactly opposite
             // We need to rotate 180 degrees around any arbitrary perpendicular axis
-            axis = vec3.cross(vec3.ZUP, start);
-            if (vec3.lengthSq(axis) < 0.01) {
+            axis = vec3.cross(vec3.zup, start);
+            if (lengthSq(axis) < 0.01) {
                 // If start was parallel to Z, try X
-                axis = vec3.cross(vec3.XUP, start);
+                axis = vec3.cross(vec3.xup, start);
             }
-            axis = vec3.normalize(axis);
+            axis = normalize(axis);
             // Construct 180 degree quaternion (w=0, axis=normalized)
             return .{ axis[0], axis[1], axis[2], 0.0 };
         }
@@ -235,14 +222,6 @@ pub const quat = struct {
             axis[2] * invs,
             s * 0.5,
         };
-    }
-
-    /// Normalizes the quaternion.
-    ///
-    /// Rotations must always be unit length.
-    pub fn normalize(q: Quat) Quat {
-        const dot = @reduce(.Add, q * q);
-        return q / @as(Quat, @splat(@sqrt(dot)));
     }
 
     /// Combines two rotations (equivalent to `lhs * rhs`).
