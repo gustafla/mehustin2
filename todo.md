@@ -12,11 +12,11 @@
 - [ ] 3D text
 - [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
   - [ ] Overrides for pipeline parameters and binds
-- [ ] Bind with fewer API calls, replace num=1 binds with array binds
 
 # Backlog
 
-- [ ] Add reserved global bind slots (tag times etc.) and user slot starting index
+- [ ] Use inotify to trigger automatic reloads
+- [ ] DVUI-based timeline.zon editor (offline)
 - [ ] Add win32 icon resource
 - [ ] Reorganize uniforms
   - 128 bytes per uniform slot per shader stage (4 slots per stage)
@@ -50,6 +50,7 @@
 
 # Done
 
+- [X] Bind with fewer API calls, replace num=1 binds with array binds
 - [X] Implement graphics storage textures
 - [X] Add `variants` to schema
   - [X] `struct{require_all_tags: []const Tag, ..., .params: []const []const u8}`
@@ -129,6 +130,7 @@
 
 # Stash of Long Term Development Ideas
 
+- [ ] Add reserved global bind slots (tag times etc.) and user slot starting index
 - [ ] Marching cubes (https://gist.github.com/dwilliamson/c041e3454a713e58baf6e4f8e5fffecd)
 - [ ] Use (games-by-mason) libraries?
   - [ ] Zex
@@ -148,7 +150,7 @@
   - [ ] Remember to synchronize access to all mutable state
 - [ ] Text mesh rendering
   - [ ] libtess2
-- [ ] imgui (dear_imgui_zig)
+- [ ] DVUI-based render.zon editor (offline)
 - [ ] DoF
   - [ ] Bokeh sprites
 - [ ] More physically accurate chromatic aberration
