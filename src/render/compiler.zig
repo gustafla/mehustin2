@@ -122,20 +122,18 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
             "len",
         }, max_field);
 
-        pub const num_keys = blk: {
-            var n = 0;
-            for (config.passes) |pass| switch (pass) {
-                .render => |rpass| {
-                    for (rpass.drawcalls) |draw| {
-                        for (draw.pipelines) |pipe| {
-                            n += pipe.variants.len + 1;
-                        }
-                    }
-                },
-                else => {},
-            };
-            break :blk n;
-        };
+        pub const num_keys = fold(config.passes, &.{
+            "render",
+            "drawcalls",
+            "pipelines",
+            "len",
+        }, sum_field) + fold(config.passes, &.{
+            "render",
+            "drawcalls",
+            "pipelines",
+            "variants",
+            "len",
+        }, sum_field);
 
         pub const Iterator = struct {
             pass_idx: usize = 0,
@@ -270,16 +268,16 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
             threadcount_z: u32,
         };
 
-        pub const num_keys = blk: {
-            var n = 0;
-            for (config.passes) |pass| switch (pass) {
-                .compute => |cpass| {
-                    for (cpass.dispatches) |disp| n += disp.variants.len + 1;
-                },
-                else => {},
-            };
-            break :blk n;
-        };
+        pub const num_keys = fold(config.passes, &.{
+            "compute",
+            "dispatches",
+            "len",
+        }, sum_field) + fold(config.passes, &.{
+            "compute",
+            "dispatches",
+            "variants",
+            "len",
+        }, sum_field);
 
         pub const Iterator = struct {
             pass_idx: usize = 0,

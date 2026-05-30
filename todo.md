@@ -126,7 +126,6 @@
   - [ ] Improve error handling
     - [X] Keep running when errors
     - [ ] Report error codes over FFI boundary
-  - [ ] TODO: https://github.com/ziglang/zig/issues/25026
 
 # Stash of Long Term Development Ideas
 
