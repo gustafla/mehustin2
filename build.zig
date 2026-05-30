@@ -232,7 +232,17 @@ fn addScript(
     exe_mod.addImport("script", script_mod);
 }
 
-const Variant = struct { params: []const []const u8 };
+const Variant = struct {
+    vert_params: []const []const u8 = &.{},
+    frag_params: []const []const u8 = &.{},
+    comp_params: []const []const u8 = &.{},
+
+    pub fn get(self: Variant, stage: Shader.Stage) []const []const u8 {
+        return switch (stage) {
+            inline else => |s| @field(self, @tagName(s)[0..4] ++ "_params"),
+        };
+    }
+};
 
 const ShaderCompile = struct {
     shader: Shader,
@@ -273,7 +283,7 @@ const ShaderCompile = struct {
             if (self.i >= self.variants.len) return null;
 
             var copy = self.base.*;
-            copy.variant_params = self.variants[self.i].params;
+            copy.variant_params = self.variants[self.i].get(copy.stage);
             copy.spv_filename = b.fmt("{f}", .{copy.shader.spvFilenameFmt(
                 copy.stage,
                 copy.threads,

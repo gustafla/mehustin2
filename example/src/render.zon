@@ -52,7 +52,7 @@
                         } } },
                         .variants = .{.{
                             .require_all_tags = .{.negative_color},
-                            .params = .{"negative"},
+                            .frag_params = .{"negative"},
                         }},
                     }},
                     .fragment_samplers = .{

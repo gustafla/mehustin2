@@ -39,7 +39,8 @@ pub const Render = struct {
         pub const Variant = struct {
             require_all_tags: []const timeline.Tag = &.{},
             require_any_tags: []const timeline.Tag = &.{},
-            params: []const []const u8,
+            vert_params: []const []const u8 = &.{},
+            frag_params: []const []const u8 = &.{},
 
             // TODO: Implement more overrides
             // primitive_type: ?PrimitiveType = null,
@@ -117,7 +118,7 @@ pub const Render = struct {
         pub const Variant = struct {
             require_all_tags: []const timeline.Tag = &.{},
             require_any_tags: []const timeline.Tag = &.{},
-            params: []const []const u8,
+            comp_params: []const []const u8,
         };
     };
 

@@ -214,15 +214,18 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
             };
 
             const stages = pipeline.shader.resolve();
-            const variant_params = if (variant) |i| pipeline.variants[i].params else &.{};
+            const vert_params, const frag_params = if (variant) |i| .{
+                pipeline.variants[i].vert_params,
+                pipeline.variants[i].frag_params,
+            } else .{ &.{}, &.{} };
 
             return .{
                 .pipeline = pipeline,
                 .vert_spv_filename = std.fmt.comptimePrint("{f}", .{
-                    stages.vert.spvFilenameFmt(.vertex, null, variant_params),
+                    stages.vert.spvFilenameFmt(.vertex, null, vert_params),
                 }),
                 .frag_spv_filename = std.fmt.comptimePrint("{f}", .{
-                    stages.frag.spvFilenameFmt(.fragment, null, variant_params),
+                    stages.frag.spvFilenameFmt(.fragment, null, frag_params),
                 }),
                 .vert_info = .{
                     .num_samplers = drawcall.vertex_samplers.len,
@@ -324,10 +327,10 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
             comptime dispatch: schema.Render.ComputeDispatch,
             comptime variant: ?usize,
         ) @This() {
-            const variant_params = if (variant) |i| dispatch.variants[i].params else &.{};
+            const comp_params = if (variant) |i| dispatch.variants[i].comp_params else &.{};
             return .{
                 .comp_spv_filename = std.fmt.comptimePrint("{f}", .{
-                    dispatch.comp.spvFilenameFmt(.compute, dispatch.threads, variant_params),
+                    dispatch.comp.spvFilenameFmt(.compute, dispatch.threads, comp_params),
                 }),
                 .comp_info = .{
                     .num_samplers = dispatch.samplers.len,
