@@ -63,14 +63,14 @@ var depth_targets: [config.depth_targets.len]?*c.SDL_GPUTexture = @splat(null);
 
 var textures: [texture_ids.len]?*c.SDL_GPUTexture = @splat(null);
 var texture_infos: [texture_ids.len]TextureInfo = undefined;
-var texture_sizes: [texture_ids.len]u32 = undefined;
+var texture_sizes: [texture_ids.len]u32 = @splat(0);
 
 var buffers: [buffer_ids.len]?*c.SDL_GPUBuffer = @splat(null);
 var buffer_infos: [buffer_ids.len]BufferInfo = undefined;
-var buffer_sizes: [buffer_ids.len]u32 = undefined;
+var buffer_sizes: [buffer_ids.len]u32 = @splat(0);
 
 var storage_buffers: [storage_buffer_ids.len]?*c.SDL_GPUBuffer = @splat(null);
-var storage_buffer_sizes: [storage_buffer_ids.len]u32 = undefined;
+var storage_buffer_sizes: [storage_buffer_ids.len]u32 = @splat(0);
 
 fn resolveTextureFormat(format: TextureFormat) c.SDL_GPUTextureFormat {
     return switch (format) {
@@ -242,6 +242,8 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         &texture_infos,
         &texture_sizes,
     ) |id, usage, *texture, *info, *size| {
+        if (@as(c.SDL_GPUTextureUsageFlags, @bitCast(usage)) == 0) continue;
+
         const texture_src = @field(script.texture, id.name);
         info.* = if (@hasDecl(texture_src, "info"))
             texture_src.info
@@ -303,8 +305,10 @@ fn initTextures(copy_pass: *c.SDL_GPUCopyPass) !u32 {
     inline for (texture_ids, texture_sizes) |id, size| {
         const texture_src = @field(script.texture, id.name);
         if (!@hasDecl(texture_src, "init")) continue;
-        try texture_src.init(tbp[0..size]);
-        tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        if (size > 0) {
+            try texture_src.init(tbp[0..size]);
+            tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        }
     }
 
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -473,8 +477,8 @@ fn initBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                 },
                 false,
             );
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
         }
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return update_transfer_buffer_size;
@@ -491,6 +495,8 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
         &storage_buffers,
         &storage_buffer_sizes,
     ) |id, usage, *buffer, *size| {
+        if (@as(c.SDL_GPUBufferUsageFlags, @bitCast(usage)) == 0) continue;
+
         const storage_buffer_src = @field(script.storage_buffer, id.name);
         const num_elements =
             if (@hasDecl(storage_buffer_src, "header") and
@@ -558,20 +564,22 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
 
     inline for (storage_buffer_ids, storage_buffer_sizes) |id, size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
-        if (@hasDecl(storage_buffer_src, "header") and
-            @hasDecl(storage_buffer_src, "data"))
-        {
-            util.writeSSBO(
-                storage_buffer_src.Header,
-                storage_buffer_src.Element,
-                tbp[0..size],
-                storage_buffer_src.header,
-                storage_buffer_src.data,
-            );
-        } else if (@hasDecl(storage_buffer_src, "init")) {
-            try storage_buffer_src.init(tbp[0..size]);
-        } else continue;
-        tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        if (size > 0) {
+            if (@hasDecl(storage_buffer_src, "header") and
+                @hasDecl(storage_buffer_src, "data"))
+            {
+                util.writeSSBO(
+                    storage_buffer_src.Header,
+                    storage_buffer_src.Element,
+                    tbp[0..size],
+                    storage_buffer_src.header,
+                    storage_buffer_src.data,
+                );
+            } else if (@hasDecl(storage_buffer_src, "init")) {
+                try storage_buffer_src.init(tbp[0..size]);
+            } else continue;
+            tbp += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        }
     }
 
     c.SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
@@ -602,8 +610,8 @@ fn initStorageBuffers(copy_pass: *c.SDL_GPUCopyPass) !u32 {
                 },
                 false,
             );
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
         }
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return update_transfer_buffer_size;
@@ -692,17 +700,18 @@ pub fn init(
         usage_flags.color_targets,
         &color_targets,
     ) |tex, usage, *texture| {
-        texture.* =
-            try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-                .type = c.SDL_GPU_TEXTURETYPE_2D,
-                .format = resolveTextureFormat(tex.format),
-                .usage = @bitCast(usage),
-                .width = script.config.main.width * tex.p / tex.q,
-                .height = script.config.main.height * tex.p / tex.q,
-                .layer_count_or_depth = 1,
-                .num_levels = 1,
-                .sample_count = @intFromEnum(tex.sample_count),
-            }));
+        if (@as(c.SDL_GPUTextureUsageFlags, @bitCast(usage)) == 0) continue;
+
+        texture.* = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+            .type = c.SDL_GPU_TEXTURETYPE_2D,
+            .format = resolveTextureFormat(tex.format),
+            .usage = @bitCast(usage),
+            .width = script.config.main.width * tex.p / tex.q,
+            .height = script.config.main.height * tex.p / tex.q,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = @intFromEnum(tex.sample_count),
+        }));
     }
 
     for (
@@ -710,17 +719,18 @@ pub fn init(
         usage_flags.depth_targets,
         &depth_targets,
     ) |tex, usage, *texture| {
-        texture.* =
-            try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-                .type = c.SDL_GPU_TEXTURETYPE_2D,
-                .format = resolveTextureFormat(tex.format),
-                .usage = @bitCast(usage),
-                .width = script.config.main.width * tex.p / tex.q,
-                .height = script.config.main.height * tex.p / tex.q,
-                .layer_count_or_depth = 1,
-                .num_levels = 1,
-                .sample_count = @intFromEnum(tex.sample_count),
-            }));
+        if (@as(c.SDL_GPUTextureUsageFlags, @bitCast(usage)) == 0) continue;
+
+        texture.* = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+            .type = c.SDL_GPU_TEXTURETYPE_2D,
+            .format = resolveTextureFormat(tex.format),
+            .usage = @bitCast(usage),
+            .width = script.config.main.width * tex.p / tex.q,
+            .height = script.config.main.height * tex.p / tex.q,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = @intFromEnum(tex.sample_count),
+        }));
     }
 
     inline for (graphics_pipeline_set.keys, &graphics_pipelines) |key, *pipeline| {
@@ -743,8 +753,10 @@ fn updateTextureData(tbp: [*]u8, base: u32) !u32 {
         const texture_src = @field(script.texture, id.name);
         if (!@hasDecl(texture_src, "updateData")) continue;
 
-        try texture_src.updateData(tbp[offset..][0..size]);
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        if (size > 0) {
+            try texture_src.updateData(tbp[offset..][0..size]);
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        }
     }
 
     return offset;
@@ -786,9 +798,8 @@ fn uploadTextures(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
                     .d = if (is_array) 1 else info.depth,
                 }, true);
             }
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
         }
-
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
@@ -801,10 +812,10 @@ fn updateBufferData(tbp: [*]u8, base: u32) !u32 {
     inline for (buffer_ids, buffer_sizes) |id, size| {
         const buffer_src = @field(script.buffer, id.name);
         if (!@hasDecl(buffer_src, "updateData")) continue;
-
-        try buffer_src.updateData(@ptrCast(@alignCast(tbp[offset..][0..size])));
-
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        if (size > 0) {
+            try buffer_src.updateData(@ptrCast(@alignCast(tbp[offset..][0..size])));
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        }
     }
 
     // Update buffer infos
@@ -834,9 +845,8 @@ fn uploadBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
                 .offset = 0,
                 .size = size,
             }, true);
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
         }
-
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
@@ -852,10 +862,10 @@ fn updateStorageBufferData(tbp: [*]u8, base: u32) !u32 {
     ) |id, size| {
         const storage_buffer_src = @field(script.storage_buffer, id.name);
         if (!@hasDecl(storage_buffer_src, "updateData")) continue;
-
-        try storage_buffer_src.updateData(tbp[offset..][0..size]);
-
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        if (size > 0) {
+            try storage_buffer_src.updateData(tbp[offset..][0..size]);
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
+        }
     }
 
     return offset;
@@ -882,9 +892,8 @@ fn uploadStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
                 .offset = 0,
                 .size = size,
             }, true);
+            offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
         }
-
-        offset += std.mem.alignForward(u32, size, transfer_buffer_alignment);
     }
 
     return offset;
