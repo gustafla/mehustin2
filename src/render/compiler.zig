@@ -61,6 +61,7 @@ pub fn fold(
 
     // Finally, try iterating current parent
     if (is_iterable) {
+        @setEvalBranchQuota(1000 * parent.len);
         var acc = opt.init;
         for (parent) |elem| {
             const val = fold(elem, fields, opt);
