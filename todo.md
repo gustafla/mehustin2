@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] Remove the scale factor uniforms, shader params removed the need for this
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
