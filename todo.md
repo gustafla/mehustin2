@@ -12,7 +12,11 @@
       - [ ] Implement resource id resolution ("render"-namespace for internals)
 - [ ] 3D text
 - [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
-  - [ ] Overrides for pipeline parameters and binds
+  - [ ] Overrides for pipeline config at the chain invocation site
+  - [ ] Overrides for resource binds
+  - [ ] Overrides for shader params
+  - [ ] Tag conditions
+  - [ ] Use case: pass chain macro, complex rendering logic
 
 # Backlog
 
@@ -143,7 +147,6 @@
   - [ ] zm
 - [ ] Complete build-time asset pipeline (texture compression, audio encoding etc.)
   - [ ] Build-time buffer & texture information, automatically injected into script/engine (blocks without create()/init() in script)
-- [ ] Add pass chain macro to render.zon syntax
 - [ ] Scene graph (reduced into instance buffers?)
   - [ ] glTF support
 - [ ] k-Curves (Adobe Research) (generalized cylinders etc.)
