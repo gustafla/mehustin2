@@ -10,12 +10,6 @@
       - [ ] depth_targets
       - [ ] Implement resource id resolution ("render"-namespace for internals)
 - [ ] 3D text
-- [ ] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
-  - [ ] Overrides for pipeline config at the chain invocation site
-  - [ ] Overrides for resource binds
-  - [ ] Overrides for shader params
-  - [ ] Tag conditions
-  - [ ] Use case: pass chain macro, complex rendering logic
 
 # Backlog
 
@@ -54,6 +48,12 @@
 
 # Done
 
+- [X] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
+  - [ ] Overrides for pipeline config at the chain invocation site
+  - [X] Overrides for resource binds
+  - [X] Overrides for shader params
+  - [X] Tag conditions
+  - [X] Use case: pass chain macro, complex rendering logic
 - [X] Remove the scale factor uniforms, shader params made it obsolete
 - [X] Bind with fewer API calls, replace num=1 binds with array binds
 - [X] Implement graphics storage textures

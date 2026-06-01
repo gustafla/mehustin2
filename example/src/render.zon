@@ -1,11 +1,20 @@
 .{
+    // Renderer internal target textures.
     .color_targets = .{
-        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" },
-        .{ .format = .r16g16b16a16_float },
+        .{ .format = .r16g16b16a16_float, .sample_count = .@"4" }, // 0
+        .{ .format = .r16g16b16a16_float }, // 1
+        .{ .format = .r16g16b16a16_float }, // 2
+        .{ .format = .r16g16b16a16_float, .q = 2 }, // 3, 1:2-res
+        .{ .format = .r16g16b16a16_float, .q = 4 }, // 4, 1:4-res
+        .{ .format = .r16g16b16a16_float, .q = 8 }, // 5, 1:8-res
+        .{ .format = .r16g16b16a16_float, .q = 16 }, // 6, 1:16-res
+        .{ .format = .r16g16b16a16_float, .q = 32 }, // 7, 1:32-res
     },
     .depth_targets = .{
         .{ .format = .d16_unorm, .sample_count = .@"4" },
     },
+
+    // Texture samplers
     .samplers = .{
         .{ .name = "nearest" },
         .{
@@ -17,6 +26,51 @@
             .address_mode_w = .clamp_to_edge,
         },
     },
+
+    // Templates. These can be used from the passes-section with `unroll`.
+    .templates = .{
+        .{
+            .name = "jimenez_blur_downsample",
+            .params = .{ "TEXTURE_IN", "TEXTURE_OUT" },
+            .passes = .{.{ .render = .{
+                .drawcalls = .{.{
+                    .pipelines = .{.{ .shader = .{ .stages = .{ .frag = .{
+                        .file = "bloom.glsl",
+                        .params = .{ "jimenez", "down" },
+                    } } } }},
+                    .fragment_samplers = .{
+                        .{ .texture = "TEXTURE_IN", .sampler = "linear" },
+                    },
+                }},
+                .color_targets = .{.{ .texture = "TEXTURE_OUT" }},
+            } }},
+        },
+        .{
+            .name = "jimenez_blur_upsample",
+            .params = .{ "TEXTURE_IN", "TEXTURE_OUT" },
+            .passes = .{.{ .render = .{
+                .drawcalls = .{.{
+                    .pipelines = .{.{
+                        .shader = .{ .stages = .{ .frag = .{
+                            .file = "bloom.glsl",
+                            .params = .{ "jimenez", "up", "pixel_scale=2" },
+                        } } },
+                        .blend_states = .{.{
+                            .enable = true,
+                            .src_color = .one,
+                            .dst_color = .one,
+                        }},
+                    }},
+                    .fragment_samplers = .{
+                        .{ .texture = "TEXTURE_IN", .sampler = "linear" },
+                    },
+                }},
+                .color_targets = .{.{ .texture = "TEXTURE_OUT", .load_op = .load }},
+            } }},
+        },
+    },
+
+    // Per-frame render/compute pass order goes here
     .passes = .{
         // Main render pass
         .{ .render = .{
@@ -34,12 +88,42 @@
                 },
             },
             .color_targets = .{.{
-                .target = .{ .index = 0 },
-                .resolve_target = .{ .index = 1 },
+                .texture = "color_targets[0]",
+                .resolve_texture = "color_targets[1]",
                 .store_op = .resolve,
             }},
-            .depth_target = .{ .target = 0, .store_op = .dont_care },
+            .depth_target = .{ .texture = "depth_targets[0]", .store_op = .dont_care },
         } },
+
+        // Bloom prefilter
+        .{ .render = .{
+            .drawcalls = .{.{
+                .pipelines = .{.{ .shader = .{ .stages = .{ .frag = .{
+                    .file = "bloom.glsl",
+                    .params = .{"prefilter"},
+                } } } }},
+                .fragment_samplers = .{
+                    .{ .texture = "color_targets[1]", .sampler = "nearest" },
+                },
+            }},
+            .color_targets = .{.{ .texture = "color_targets[2]" }},
+        } },
+
+        // Bloom jimenez blur filter pyramid
+        .{ .unroll = .{ .template = "jimenez_blur_downsample", .args = .{
+            .{ "color_targets[2]", "color_targets[3]" },
+            .{ "color_targets[3]", "color_targets[4]" },
+            .{ "color_targets[4]", "color_targets[5]" },
+            .{ "color_targets[5]", "color_targets[6]" },
+            .{ "color_targets[6]", "color_targets[7]" },
+        } } },
+        .{ .unroll = .{ .template = "jimenez_blur_upsample", .args = .{
+            .{ "color_targets[7]", "color_targets[6]" },
+            .{ "color_targets[6]", "color_targets[5]" },
+            .{ "color_targets[5]", "color_targets[4]" },
+            .{ "color_targets[4]", "color_targets[3]" },
+            .{ "color_targets[3]", "color_targets[2]" },
+        } } },
 
         // Post processing and output
         .{ .render = .{
@@ -57,6 +141,7 @@
                     }},
                     .fragment_samplers = .{
                         .{ .texture = "color_targets[1]", .sampler = "nearest" },
+                        .{ .texture = "color_targets[2]", .sampler = "nearest" },
                     },
                 },
                 .{

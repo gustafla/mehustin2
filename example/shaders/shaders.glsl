@@ -69,17 +69,23 @@ layout(location = 0) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 
 layout(set = 2, binding = 0) uniform sampler2D u_input_texture;
+layout(set = 2, binding = 1) uniform sampler2D u_bloom_texture;
 
 #include <color.glsl>
 
 void main() {
-    vec3 in_color = max(texture(u_input_texture, in_uv).rgb, 0.);
-    vec3 tone_mapped_color = reinhard(in_color);
+    vec3 color = texture(u_input_texture, in_uv).rgb;
+
+    // Add bloom
+    color += texture(u_bloom_texture, in_uv).rgb;
+
+    // Tone mapping
+    color = reinhard(color);
 
     #if defined(NEGATIVE)
-    tone_mapped_color = vec3(1.0) - tone_mapped_color;
+    color = vec3(1.0) - color;
     #endif
 
-    out_color = vec4(tone_mapped_color, 1.);
+    out_color = vec4(color, 1.);
 }
 #endif // FRAGMENT and POST

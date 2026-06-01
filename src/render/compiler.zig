@@ -97,7 +97,107 @@ pub const count_nonnull = struct {
     }
 };
 
+fn applyTemplateSubstitution(
+    comptime val: anytype,
+    comptime params: []const []const u8,
+    comptime args: []const []const u8,
+) @TypeOf(val) {
+    switch (@typeInfo(@TypeOf(val))) {
+        .@"struct" => |sinfo| {
+            var new_val: @TypeOf(val) = undefined;
+            inline for (sinfo.fields) |field| {
+                @field(new_val, field.name) = applyTemplateSubstitution(
+                    @field(val, field.name),
+                    params,
+                    args,
+                );
+            }
+            return new_val;
+        },
+        .@"union" => {
+            return switch (val) {
+                inline else => |inner, tag| @unionInit(
+                    @TypeOf(val),
+                    @tagName(tag),
+                    applyTemplateSubstitution(inner, params, args),
+                ),
+            };
+        },
+        .pointer => |pinfo| {
+            if (pinfo.size != .slice) @compileError("Pointers aren't supported");
+
+            if (pinfo.child == u8) {
+                // Check if string is param, and substitute with arg if so.
+                for (params, args) |param, arg| {
+                    if (std.mem.eql(u8, val, param)) return arg;
+                }
+                return val;
+            } else {
+                var new_array: [val.len]pinfo.child = undefined;
+                for (&new_array, val) |*new_item, item| {
+                    new_item.* = applyTemplateSubstitution(item, params, args);
+                }
+
+                const final_array = new_array;
+                return &final_array;
+            }
+        },
+        else => return val,
+    }
+}
+
+fn getTemplate(
+    comptime config: schema.Render,
+    comptime name: []const u8,
+) schema.template.Template(schema.Render.Pass) {
+    for (config.templates) |t| {
+        if (std.mem.eql(u8, t.name, name)) return t;
+    }
+    @compileError("Template not found: " ++ name);
+}
+
+pub fn unrollPasses(comptime config: schema.Render) []const schema.Render.Pass {
+    @setEvalBranchQuota(1024 * config.passes.len * config.templates.len);
+    var num_passes = 0;
+    for (config.passes) |pass| {
+        switch (pass) {
+            .unroll => |unroll| {
+                const tmpl = getTemplate(config, unroll.template);
+                num_passes += unroll.args.len * tmpl.passes.len;
+            },
+            else => num_passes += 1,
+        }
+    }
+
+    var unrolled_passes: [num_passes]schema.Render.Pass = undefined;
+    var i = 0;
+
+    for (config.passes) |pass| {
+        switch (pass) {
+            .unroll => |unroll| {
+                const template = getTemplate(config, unroll.template);
+                const params = template.params;
+                for (unroll.args) |args| {
+                    for (template.passes) |tpass| {
+                        unrolled_passes[i] = applyTemplateSubstitution(tpass, params, args);
+                        i += 1;
+                    }
+                }
+            },
+            else => {
+                unrolled_passes[i] = pass;
+                i += 1;
+            },
+        }
+    }
+
+    const final_passes = unrolled_passes;
+    return &final_passes;
+}
+
 pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
+    const passes = unrollPasses(config);
+
     return struct {
         pipeline: schema.Render.GraphicsPipeline,
         vert_spv_filename: []const u8,
@@ -118,18 +218,18 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
             num_uniform_buffers: u32,
         };
 
-        pub const max_color_targets = fold(config.passes, &.{
+        pub const max_color_targets = fold(passes, &.{
             "render",
             "color_targets",
             "len",
         }, max_field);
 
-        pub const num_keys = fold(config.passes, &.{
+        pub const num_keys = fold(passes, &.{
             "render",
             "drawcalls",
             "pipelines",
             "len",
-        }, sum_field) + fold(config.passes, &.{
+        }, sum_field) + fold(passes, &.{
             "render",
             "drawcalls",
             "pipelines",
@@ -144,13 +244,14 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
             variant_idx: ?usize = null,
 
             pub fn next(self: *@This()) ?GraphicsPipelineKey(config) {
-                while (self.pass_idx < config.passes.len) {
-                    const pass = switch (config.passes[self.pass_idx]) {
+                while (self.pass_idx < passes.len) {
+                    const pass = switch (passes[self.pass_idx]) {
                         .render => |render_pass| render_pass,
                         .compute => {
                             self.pass_idx += 1;
                             continue;
                         },
+                        .unroll => @compileError("Cannot use unroll in template"),
                     };
 
                     if (self.draw_idx >= pass.drawcalls.len) {
@@ -200,18 +301,27 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
         ) @This() {
             var color_targets = std.mem.zeroes([max_color_targets]types.TextureFormat);
             for (pass.color_targets, 0..) |target, i| {
-                color_targets[i] = switch (target.target) {
-                    .index => |idx| config.color_targets[idx].format,
-                    .swapchain => .swapchain,
+                color_targets[i] = if (std.mem.eql(u8, target.texture, "swapchain"))
+                    .swapchain
+                else blk: {
+                    const reference = parseIndex(target.texture) catch |e|
+                        @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+                    break :blk if (reference) |result|
+                        @field(config, result.ref)[result.idx].format
+                    else
+                        @field(script.texture, target.texture).format;
                 };
             }
 
             const sample_count: types.SampleCount = blk: {
                 if (pass.color_targets.len == 0) break :blk .@"1";
-                break :blk switch (pass.color_targets[0].target) {
-                    .index => |idx| config.color_targets[idx].sample_count,
-                    .swapchain => .@"1",
-                };
+
+                const reference = parseIndex(pass.color_targets[0].texture) catch |e|
+                    @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+                break :blk if (reference) |result|
+                    @field(config, result.ref)[result.idx].sample_count
+                else
+                    .@"1"; // .swapchain or script texture
             };
 
             const stages = pipeline.shader.resolve();
@@ -250,7 +360,14 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
                     null,
                 .color_targets_buf = color_targets,
                 .num_color_targets = pass.color_targets.len,
-                .depth_target = if (pass.depth_target) |t| config.depth_targets[t.target].format else null,
+                .depth_target = if (pass.depth_target) |t| blk: {
+                    const reference = parseIndex(t.texture) catch |e|
+                        @compileError(std.fmt.comptimePrint("{s}", .{@errorName(e)}));
+                    break :blk if (reference) |result|
+                        @field(config, result.ref)[result.idx].format
+                    else
+                        @field(script.texture, t.texture).format;
+                } else null,
                 .sample_count = sample_count,
             };
         }
@@ -258,6 +375,8 @@ pub fn GraphicsPipelineKey(comptime config: schema.Render) type {
 }
 
 pub fn ComputePipelineKey(comptime config: schema.Render) type {
+    const passes = unrollPasses(config);
+
     return struct {
         comp_spv_filename: []const u8,
         comp_info: CompInfo,
@@ -273,11 +392,11 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
             threadcount_z: u32,
         };
 
-        pub const num_keys = fold(config.passes, &.{
+        pub const num_keys = fold(passes, &.{
             "compute",
             "dispatches",
             "len",
-        }, sum_field) + fold(config.passes, &.{
+        }, sum_field) + fold(passes, &.{
             "compute",
             "dispatches",
             "variants",
@@ -290,13 +409,14 @@ pub fn ComputePipelineKey(comptime config: schema.Render) type {
             variant_idx: ?usize = null,
 
             pub fn next(self: *@This()) ?ComputePipelineKey(config) {
-                while (self.pass_idx < config.passes.len) {
-                    const pass = switch (config.passes[self.pass_idx]) {
+                while (self.pass_idx < passes.len) {
+                    const pass = switch (passes[self.pass_idx]) {
                         .compute => |compute_pass| compute_pass,
                         .render => {
                             self.pass_idx += 1;
                             continue;
                         },
+                        .unroll => @compileError("Cannot use unroll in template"),
                     };
 
                     if (self.dispatch_idx >= pass.dispatches.len) {
@@ -448,6 +568,8 @@ pub fn SamplerEnum(comptime config: schema.Render) type {
 }
 
 pub fn UsageFlags(comptime config: schema.Render) type {
+    const passes = unrollPasses(config);
+
     return struct {
         color_targets: [config.color_targets.len]TextureUsageFlags,
         depth_targets: [config.depth_targets.len]TextureUsageFlags,
@@ -455,26 +577,48 @@ pub fn UsageFlags(comptime config: schema.Render) type {
         storage_buffers: [@typeInfo(script.StorageBuffer).@"enum".fields.len]BufferUsageFlags,
 
         pub const init: @This() = blk: {
-            @setEvalBranchQuota(1000 * config.passes.len);
+            @setEvalBranchQuota(1000 * passes.len);
             var f = std.mem.zeroes(@This());
 
-            for (config.passes) |pass| switch (pass) {
+            for (passes) |pass| switch (pass) {
                 .render => |rpass| {
                     if (rpass.depth_target) |depth_target| {
-                        f.depth_targets[depth_target.target].depth_stencil_target = true;
-                        if (depth_target.resolve_target) |resolve_target| {
-                            f.depth_targets[resolve_target].depth_stencil_target = true;
+                        const result = parseIndex(depth_target.texture) catch unreachable;
+                        if (result) |r| {
+                            @field(f, r.ref)[r.idx].depth_stencil_target = true;
+                        } else {
+                            const idx = @intFromEnum(@field(script.Texture, depth_target.texture));
+                            f.textures[idx].depth_stencil_target = true;
+                        }
+                        if (depth_target.resolve_texture) |resolve_texture| {
+                            const res_result = parseIndex(resolve_texture) catch unreachable;
+                            if (res_result) |r| {
+                                @field(f, r.ref)[r.idx].depth_stencil_target = true;
+                            } else {
+                                const idx = @intFromEnum(@field(script.Texture, resolve_texture));
+                                f.textures[idx].depth_stencil_target = true;
+                            }
                         }
                     }
                     for (rpass.color_targets) |color_target| {
-                        switch (color_target.target) {
-                            .index => |i| f.color_targets[i].color_target = true,
-                            .swapchain => {},
+                        if (!std.mem.eql(u8, color_target.texture, "swapchain")) {
+                            const result = parseIndex(color_target.texture) catch unreachable;
+                            if (result) |r| {
+                                @field(f, r.ref)[r.idx].color_target = true;
+                            } else {
+                                const idx = @intFromEnum(@field(script.Texture, color_target.texture));
+                                f.textures[idx].color_target = true;
+                            }
                         }
-                        if (color_target.resolve_target) |resolve_target| {
-                            switch (resolve_target) {
-                                .index => |i| f.color_targets[i].color_target = true,
-                                .swapchain => {},
+                        if (color_target.resolve_texture) |resolve_texture| {
+                            if (!std.mem.eql(u8, resolve_texture, "swapchain")) {
+                                const res_result = parseIndex(resolve_texture) catch unreachable;
+                                if (res_result) |r| {
+                                    @field(f, r.ref)[r.idx].color_target = true;
+                                } else {
+                                    const idx = @intFromEnum(@field(script.Texture, resolve_texture));
+                                    f.textures[idx].color_target = true;
+                                }
                             }
                         }
                     }
@@ -529,6 +673,7 @@ pub fn UsageFlags(comptime config: schema.Render) type {
                         }
                     }
                 },
+                .unroll => @compileError("Cannot use unroll in template"),
             };
 
             break :blk f;

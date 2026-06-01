@@ -6,6 +6,7 @@ const camera = @import("camera.zig");
 const math = @import("math.zig");
 pub const Font = @import("schema/Font.zig");
 pub const Shader = @import("schema/Shader.zig");
+pub const template = @import("schema/template.zig");
 const timeline = @import("timeline.zig");
 const types = @import("types.zig");
 const PrimitiveType = types.PrimitiveType;
@@ -25,6 +26,7 @@ pub const Render = struct {
     color_targets: []const TargetTexture = &.{},
     depth_targets: []const TargetTexture = &.{},
     samplers: []const Sampler,
+    templates: []const template.Template(Pass),
     passes: []const Pass,
 
     pub const GraphicsPipeline = struct {
@@ -56,14 +58,12 @@ pub const Render = struct {
         swapchain,
     };
 
-    pub fn RenderTarget(T: type) type {
-        return struct {
-            target: T,
-            resolve_target: ?T = null,
-            load_op: LoadOp = .clear,
-            store_op: StoreOp = .store,
-        };
-    }
+    pub const RenderTarget = struct {
+        texture: []const u8,
+        resolve_texture: ?[]const u8 = null,
+        load_op: LoadOp = .clear,
+        store_op: StoreOp = .store,
+    };
 
     pub const Sampler = struct {
         name: []const u8,
@@ -123,6 +123,7 @@ pub const Render = struct {
     };
 
     pub const Pass = union(enum) {
+        unroll: template.Unroll,
         render: RenderPass,
         compute: ComputePass,
     };
@@ -131,8 +132,8 @@ pub const Render = struct {
         require_all_tags: []const timeline.Tag = &.{},
         require_any_tags: []const timeline.Tag = &.{},
         drawcalls: []const Drawcall,
-        color_targets: []const RenderTarget(ColorTarget) = &.{.{ .target = .swapchain }},
-        depth_target: ?RenderTarget(usize) = null,
+        color_targets: []const RenderTarget = &.{.{ .texture = "swapchain" }},
+        depth_target: ?RenderTarget = null,
     };
 
     pub const ComputePass = struct {

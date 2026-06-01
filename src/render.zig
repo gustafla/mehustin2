@@ -1034,26 +1034,26 @@ fn renderPass(
     // Initialize color target infos
     const color_target_infos = blk: {
         var infos: [pass.color_targets.len]c.SDL_GPUColorTargetInfo = undefined;
-        for (pass.color_targets, &infos) |target, *info| {
+        inline for (pass.color_targets, &infos) |target, *info| {
             info.* = .{
-                .texture = switch (target.target) {
-                    .index => |index| color_targets[index],
-                    .swapchain => if (parm.resolution_match)
+                .texture = if (comptime std.mem.eql(u8, target.texture, "swapchain"))
+                    if (parm.resolution_match)
                         parm.swapchain_texture
                     else
-                        output_buffer,
-                },
+                        output_buffer
+                else
+                    mapTextureBinding(target.texture),
                 .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
                 .load_op = @intFromEnum(target.load_op),
                 .store_op = @intFromEnum(target.store_op),
-                .resolve_texture = if (target.resolve_target) |resolve|
-                    switch (resolve) {
-                        .index => |index| color_targets[index],
-                        .swapchain => if (parm.resolution_match)
+                .resolve_texture = if (target.resolve_texture) |resolve|
+                    if (std.mem.eql(u8, resolve, "swapchain"))
+                        if (parm.resolution_match)
                             parm.swapchain_texture
                         else
-                            output_buffer,
-                    }
+                            output_buffer
+                    else
+                        mapTextureBinding(resolve)
                 else
                     null,
                 .cycle = target.load_op != .load,
@@ -1069,7 +1069,7 @@ fn renderPass(
         &color_target_infos,
         @intCast(pass.color_targets.len),
         if (pass.depth_target) |target| &.{
-            .texture = depth_targets[target.target],
+            .texture = mapTextureBinding(target.texture),
             .clear_depth = 1,
             .load_op = @intFromEnum(target.load_op),
             .store_op = @intFromEnum(target.store_op),
@@ -1081,7 +1081,8 @@ fn renderPass(
 
     // Set viewport if necessary
     const target_swapchain = comptime for (pass.color_targets) |target| {
-        if (target.target == .swapchain) break true;
+        if (std.mem.eql(u8, target.texture, "swapchain")) break true;
+        if (std.mem.eql(u8, target.resolve_texture orelse "", "swapchain")) break true;
     } else false;
     if (target_swapchain and parm.resolution_match) {
         c.SDL_SetGPUViewport(render_pass, parm.swapchain_viewport);
@@ -1228,10 +1229,13 @@ fn recordPasses(
     parm: RenderParameters,
     tags: timeline.TagSet,
 ) !void {
-    inline for (config.passes) |pass| {
+    const passes = comptime compiler.unrollPasses(config);
+
+    inline for (passes) |pass| {
         switch (pass) {
             .render => |rpass| try renderPass(rpass, parm, tags),
             .compute => |cpass| try computePass(cpass, parm.cmdbuf, tags),
+            .unroll => @compileError("Cannot use unroll in template"),
         }
     }
 }
