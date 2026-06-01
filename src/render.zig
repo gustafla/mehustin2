@@ -1063,26 +1063,6 @@ fn renderPass(
         break :blk infos;
     };
 
-    // Push pass uniforms
-    const p: f32, const q: f32 = switch (pass.color_targets[0].target) {
-        .index => |index| .{
-            @floatFromInt(config.color_targets[index].p),
-            @floatFromInt(config.color_targets[index].q),
-        },
-        .swapchain => .{ 1, 1 },
-    };
-    const fragment_pass_uniforms: extern struct {
-        target_scale: f32,
-    } = .{
-        .target_scale = p / q,
-    };
-    c.SDL_PushGPUFragmentUniformData(
-        parm.cmdbuf,
-        1,
-        @ptrCast(&fragment_pass_uniforms),
-        @sizeOf(@TypeOf(fragment_pass_uniforms)),
-    );
-
     // Begin render pass
     const render_pass = c.SDL_BeginGPURenderPass(
         parm.cmdbuf,
