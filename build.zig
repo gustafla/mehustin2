@@ -658,7 +658,11 @@ fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
     defer file.close(b.graph.io);
     var reader = file.reader(b.graph.io, &buffer);
     const data = reader.interface.allocRemainingAlignedSentinel(b.allocator, .unlimited, .of(u8), 0) catch @panic("OOM");
-    return std.zon.parse.fromSliceAlloc(T, b.allocator, data, null, .{
+    var diagnostics: std.zon.parse.Diagnostics = .{};
+    return std.zon.parse.fromSliceAlloc(T, b.allocator, data, &diagnostics, .{
         .ignore_unknown_fields = true,
-    }) catch @panic("Failed to parse " ++ path);
+    }) catch {
+        std.log.err("{s}: {f}", .{ path, diagnostics });
+        @panic("Failed to parse " ++ path);
+    };
 }
