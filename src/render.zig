@@ -1047,7 +1047,7 @@ fn renderPass(
                 .load_op = @intFromEnum(target.load_op),
                 .store_op = @intFromEnum(target.store_op),
                 .resolve_texture = if (target.resolve_texture) |resolve|
-                    if (std.mem.eql(u8, resolve, "swapchain"))
+                    if (comptime std.mem.eql(u8, resolve, "swapchain"))
                         if (parm.resolution_match)
                             parm.swapchain_texture
                         else
