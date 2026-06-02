@@ -49,7 +49,7 @@
 # Done
 
 - [X] render.zon indirection, separate the what (i.e. drawcalls) and where (i.e. lists)
-  - [ ] Overrides for pipeline config at the chain invocation site
+  - [ ] Overrides for pipeline config at the template unroll site
   - [X] Overrides for resource binds
   - [X] Overrides for shader params
   - [X] Tag conditions

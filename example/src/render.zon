@@ -135,7 +135,7 @@
                             .params = .{"post"},
                         } } },
                         .variants = .{.{
-                            .require_all_tags = .{.negative_color},
+                            .require_all_tags = .{"negative_color"},
                             .frag_params = .{"negative"},
                         }},
                     }},

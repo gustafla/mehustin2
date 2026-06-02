@@ -7,7 +7,6 @@ const math = @import("math.zig");
 pub const Font = @import("schema/Font.zig");
 pub const Shader = @import("schema/Shader.zig");
 pub const template = @import("schema/template.zig");
-const timeline = @import("timeline.zig");
 const types = @import("types.zig");
 const PrimitiveType = types.PrimitiveType;
 const RasterizerState = types.RasterizerState;
@@ -39,8 +38,8 @@ pub const Render = struct {
         blend_states: []const BlendState = &.{},
 
         pub const Variant = struct {
-            require_all_tags: []const timeline.Tag = &.{},
-            require_any_tags: []const timeline.Tag = &.{},
+            require_all_tags: []const []const u8 = &.{},
+            require_any_tags: []const []const u8 = &.{},
             vert_params: []const []const u8 = &.{},
             frag_params: []const []const u8 = &.{},
 
@@ -88,8 +87,8 @@ pub const Render = struct {
     };
 
     pub const Drawcall = struct {
-        require_all_tags: []const timeline.Tag = &.{},
-        require_any_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const []const u8 = &.{},
+        require_any_tags: []const []const u8 = &.{},
         pipelines: []const GraphicsPipeline,
         index_buffer: ?[]const u8 = null,
         vertex_buffer: ?[]const u8 = null,
@@ -105,8 +104,8 @@ pub const Render = struct {
     };
 
     pub const ComputeDispatch = struct {
-        require_all_tags: []const timeline.Tag = &.{},
-        require_any_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const []const u8 = &.{},
+        require_any_tags: []const []const u8 = &.{},
         comp: Shader,
         variants: []const Variant = &.{},
         threads: Shader.Vec,
@@ -116,8 +115,8 @@ pub const Render = struct {
         readonly_storage_buffers: []const []const u8 = &.{},
 
         pub const Variant = struct {
-            require_all_tags: []const timeline.Tag = &.{},
-            require_any_tags: []const timeline.Tag = &.{},
+            require_all_tags: []const []const u8 = &.{},
+            require_any_tags: []const []const u8 = &.{},
             comp_params: []const []const u8,
         };
     };
@@ -129,16 +128,16 @@ pub const Render = struct {
     };
 
     pub const RenderPass = struct {
-        require_all_tags: []const timeline.Tag = &.{},
-        require_any_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const []const u8 = &.{},
+        require_any_tags: []const []const u8 = &.{},
         drawcalls: []const Drawcall,
         color_targets: []const RenderTarget = &.{.{ .texture = "swapchain" }},
         depth_target: ?RenderTarget = null,
     };
 
     pub const ComputePass = struct {
-        require_all_tags: []const timeline.Tag = &.{},
-        require_any_tags: []const timeline.Tag = &.{},
+        require_all_tags: []const []const u8 = &.{},
+        require_any_tags: []const []const u8 = &.{},
         dispatches: []const ComputeDispatch,
         readwrite_storage_textures: []const struct {
             texture: []const u8,

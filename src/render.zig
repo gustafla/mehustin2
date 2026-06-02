@@ -900,8 +900,16 @@ fn uploadStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
 }
 
 inline fn tagsRender(comptime node: anytype, tags: timeline.TagSet) bool {
-    const all: timeline.TagSet = comptime .initMany(node.require_all_tags);
-    const any: timeline.TagSet = comptime .initMany(node.require_any_tags);
+    const all: timeline.TagSet = comptime blk: {
+        var enums: [node.require_all_tags.len]timeline.Tag = undefined;
+        for (&enums, node.require_all_tags) |*e, str| e.* = @field(timeline.Tag, str);
+        break :blk .initMany(&enums);
+    };
+    const any: timeline.TagSet = comptime blk: {
+        var enums: [node.require_any_tags.len]timeline.Tag = undefined;
+        for (&enums, node.require_any_tags) |*e, str| e.* = @field(timeline.Tag, str);
+        break :blk .initMany(&enums);
+    };
     return all.subsetOf(tags) and
         (any.eql(.empty) or !any.intersectWith(tags).eql(.empty));
 }
