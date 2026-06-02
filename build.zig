@@ -13,7 +13,7 @@ pub const Options = struct {
     show_fps: bool,
     present_mode: PresentationMode,
 
-    pub fn init(b: *std.Build) @This() {
+    pub fn init(b: *std.Build) !@This() {
         // Use standard target options
         const target = b.standardTargetOptions(.{});
 
@@ -29,12 +29,12 @@ pub const Options = struct {
                 "exe_name",
                 "Executable file name",
             ) orelse if (!target.query.isNative()) blk: {
-                const triple = target.result.linuxTriple(b.allocator) catch @panic("OOM");
-                break :blk std.mem.concat(b.allocator, u8, &.{
+                const triple = try target.result.linuxTriple(b.allocator);
+                break :blk try std.mem.concat(b.allocator, u8, &.{
                     "demo",
                     "-",
                     triple,
-                }) catch @panic("OOM");
+                });
             } else "demo",
             .system_sdl = b.option(
                 bool,
@@ -71,8 +71,8 @@ pub const Options = struct {
     const PresentationMode = enum { vsync, mailbox };
 };
 
-pub fn build(b: *std.Build) void {
-    const options = Options.init(b);
+pub fn build(b: *std.Build) !void {
+    const options = try Options.init(b);
     const options_mod = options.createModule(b);
 
     // Get SDL3 dependency from build.zig.zon
@@ -257,15 +257,15 @@ const ShaderCompile = struct {
         shader: Shader,
         stage: Shader.Stage,
         threads: ?Shader.Vec,
-    ) @This() {
+    ) !@This() {
         return .{
             .shader = shader,
             .stage = stage,
             .threads = threads,
             .variant_params = &.{},
-            .spv_filename = std.fmt.allocPrint(arena, "{f}", .{
+            .spv_filename = try std.fmt.allocPrint(arena, "{f}", .{
                 shader.spvFilenameFmt(stage, threads, &.{}),
-            }) catch @panic("OOM"),
+            }),
         };
     }
 };
@@ -282,18 +282,18 @@ const ShaderCompileRoot = struct {
         self: ShaderCompileRoot,
         arena: std.mem.Allocator,
         compiles: *std.ArrayList(ShaderCompile),
-    ) void {
+    ) !void {
         for (self.variants) |variant| {
             var copy = self.compile;
             copy.variant_params = variant.getParams(copy.stage);
-            copy.spv_filename = std.fmt.allocPrint(arena, "{f}", .{
+            copy.spv_filename = try std.fmt.allocPrint(arena, "{f}", .{
                 copy.shader.spvFilenameFmt(
                     copy.stage,
                     copy.threads,
                     copy.variant_params,
                 ),
-            }) catch @panic("OOM");
-            compiles.append(arena, copy) catch @panic("OOM");
+            });
+            try compiles.append(arena, copy);
         }
     }
 };
@@ -317,25 +317,25 @@ const Pass = union(enum) {
         arena: std.mem.Allocator,
         templates: []const template.Template(Pass),
         compiles: *std.ArrayList(ShaderCompileRoot),
-    ) void {
+    ) !void {
         switch (self) {
             .render => |rpass| for (rpass.drawcalls) |draw| {
                 for (draw.pipelines) |pipe| {
                     const stages = pipe.shader.resolve();
-                    const vert: ShaderCompile = .init(arena, stages.vert, .vertex, null);
-                    compiles.append(arena, .init(vert, pipe.variants)) catch @panic("OOM");
-                    const frag: ShaderCompile = .init(arena, stages.frag, .fragment, null);
-                    compiles.append(arena, .init(frag, pipe.variants)) catch @panic("OOM");
+                    const vert = try ShaderCompile.init(arena, stages.vert, .vertex, null);
+                    try compiles.append(arena, .init(vert, pipe.variants));
+                    const frag = try ShaderCompile.init(arena, stages.frag, .fragment, null);
+                    try compiles.append(arena, .init(frag, pipe.variants));
                 }
             },
             .compute => |cpass| for (cpass.dispatches) |disp| {
-                const comp: ShaderCompile = .init(arena, disp.comp, .compute, disp.threads);
-                compiles.append(arena, .init(comp, disp.variants)) catch @panic("OOM");
+                const comp = try ShaderCompile.init(arena, disp.comp, .compute, disp.threads);
+                try compiles.append(arena, .init(comp, disp.variants));
             },
             .unroll => |unroll| {
-                const passes = unroll.unrollAlloc(arena, Pass, templates) catch @panic("OOM");
+                const passes = try unroll.unrollAlloc(arena, Pass, templates);
                 for (passes) |pass| {
-                    pass.emitShaderCompiles(arena, templates, compiles);
+                    try pass.emitShaderCompiles(arena, templates, compiles);
                 }
             },
         }
@@ -347,17 +347,17 @@ pub fn compileShaders(
     b: *std.Build,
     d: *std.Build.Dependency,
     comptime config: anytype,
-) void {
+) !void {
     const arena = b.allocator;
 
     // Load and parse render.zon at runtime
-    const render = parseZon(struct {
+    const render = try parseZon(struct {
         templates: []const template.Template(Pass),
         passes: []const Pass,
     }, b, "src/render.zon");
 
     // Load and parse timeline.zon at runtime
-    const timeline = parseZon(struct {
+    const timeline = try parseZon(struct {
         tags: []const struct { name: []const u8 },
     }, b, "src/timeline.zon");
 
@@ -365,30 +365,30 @@ pub fn compileShaders(
     var tag_map: std.StringHashMapUnmanaged(u32) = .empty;
     for (timeline.tags) |tag| {
         const num_tags = tag_map.count();
-        _ = tag_map.getOrPutValue(arena, tag.name, num_tags) catch @panic("OOM");
+        _ = try tag_map.getOrPutValue(arena, tag.name, num_tags);
     }
 
     // Traverse the render.zon tree
     var compiles: std.ArrayList(ShaderCompileRoot) = .empty;
-    for (render.passes) |pass| pass.emitShaderCompiles(arena, render.templates, &compiles);
+    for (render.passes) |pass| try pass.emitShaderCompiles(arena, render.templates, &compiles);
 
     // Expand variants
     var variants: std.ArrayList(ShaderCompile) = .empty;
-    for (compiles.items) |compile| compile.emitShaderVariantCompiles(arena, &variants);
+    for (compiles.items) |compile| try compile.emitShaderVariantCompiles(arena, &variants);
 
     // Deduplicate by filename
     var compile_set: std.StringHashMapUnmanaged(ShaderCompile) = .empty;
     for (compiles.items) |root| {
-        _ = compile_set.getOrPutValue(arena, root.compile.spv_filename, root.compile) catch @panic("OOM");
+        _ = try compile_set.getOrPutValue(arena, root.compile.spv_filename, root.compile);
     }
     for (variants.items) |compile| {
-        _ = compile_set.getOrPutValue(arena, compile.spv_filename, compile) catch @panic("OOM");
+        _ = try compile_set.getOrPutValue(arena, compile.spv_filename, compile);
     }
 
     // Compile
     var iterator = compile_set.valueIterator();
     while (iterator.next()) |compile| {
-        compileShader(b, d, config, &tag_map, compile);
+        try compileShader(b, d, config, &tag_map, compile);
     }
 }
 
@@ -398,12 +398,12 @@ fn compileShader(
     comptime config: anytype,
     tag_map: *const std.StringHashMapUnmanaged(u32),
     compile: *const ShaderCompile,
-) void {
+) !void {
     const arena = b.allocator;
 
     var include_paths: std.ArrayList(std.Build.LazyPath) = .empty;
-    include_paths.append(arena, b.path(config.shader_dir)) catch @panic("OOM");
-    include_paths.append(arena, d.path("shader_lib")) catch @panic("OOM");
+    try include_paths.append(arena, b.path(config.shader_dir));
+    try include_paths.append(arena, d.path("shader_lib"));
 
     // Compile and run genglsl
     const data_path = b.pathJoin(&.{ config.shader_dir, "data.zig" });
@@ -413,9 +413,13 @@ fn compileShader(
         while (param_iterator.next()) |elem| {
             const name, const val_opt = elem;
             const val_str = val_opt orelse continue;
-            const val_union = Shader.ParamValue.parse(val_str) catch {
-                std.log.err("Invalid: {s}={s}", .{ name, val_str });
-                @panic("Invalid value");
+            const val_union = Shader.ParamValue.parse(val_str) catch |err| {
+                std.log.err("Shader {s} invalid param: {s}={s}", .{
+                    compile.spv_filename,
+                    name,
+                    val_str,
+                });
+                return err;
             };
             switch (val_union) {
                 inline else => |v| genglsl_params.addOption(@TypeOf(v), name, v),
@@ -445,7 +449,7 @@ fn compileShader(
         const stdout = genglsl_run.captureStdOut(.{
             .basename = "generated.glsl",
         });
-        include_paths.append(arena, stdout.dirname()) catch @panic("OOM");
+        try include_paths.append(arena, stdout.dirname());
     } else |_| {}
 
     const input_path = blk: {
@@ -474,7 +478,7 @@ fn compileShader(
     shaderc_run.addArg(b.fmt("-fshader-stage={s}", .{@tagName(compile.stage)}));
 
     // Add stage macros
-    const STAGE = toUpper(arena, @tagName(compile.stage));
+    const STAGE = try toUpper(arena, @tagName(compile.stage));
     shaderc_run.addArg(b.fmt("-D{s}", .{STAGE}));
     switch (compile.stage) {
         .vertex => shaderc_run.addArg("-DIO=out"),
@@ -488,7 +492,7 @@ fn compileShader(
 
     // Add conf macros
     inline for (@typeInfo(@TypeOf(config)).@"struct".fields) |field| {
-        const upper = toUpper(arena, field.name);
+        const upper = try toUpper(arena, field.name);
         const value = @field(config, field.name);
         switch (@typeInfo(field.type)) {
             .comptime_float, .comptime_int, .float, .int => {
@@ -502,7 +506,7 @@ fn compileShader(
     var param_iterator = compile.shader.paramIterator(compile.variant_params);
     while (param_iterator.next()) |elem| {
         const name, const val_str = elem;
-        const upper = toUpper(arena, name);
+        const upper = try toUpper(arena, name);
         if (val_str) |val| {
             shaderc_run.addArg(b.fmt("-D{s}={s}", .{ upper, val }));
         } else {
@@ -516,7 +520,7 @@ fn compileShader(
     while (tag_iterator.next()) |entry| {
         shaderc_run.addArg(b.fmt(
             "-DTAG_{s}={}",
-            .{ toUpper(arena, entry.key_ptr.*), entry.value_ptr.* },
+            .{ try toUpper(arena, entry.key_ptr.*), entry.value_ptr.* },
         ));
         num_tags += 1;
     }
@@ -538,12 +542,12 @@ pub fn bakeFontAtlases(
     b: *std.Build,
     d: *std.Build.Dependency,
     comptime config: anytype,
-) void {
+) !void {
     const arena = b.allocator;
     const msdf_atlas_gen = d.artifact("msdf-atlas-gen");
 
     // Load and parse timeline.zon at runtime
-    const timeline = parseZon(struct {
+    const timeline = try parseZon(struct {
         text: struct {
             fonts: []const Font,
         },
@@ -571,7 +575,7 @@ pub fn bakeFontAtlases(
         if (font.variables.len == 0) {
             msdf_run.addArgs(&.{ "-font", input_path });
         } else {
-            const variables = std.mem.join(arena, "&", font.variables) catch @panic("OOM");
+            const variables = try std.mem.join(arena, "&", font.variables);
             const spec = b.fmt("{s}?{s}", .{ input_path, variables });
             msdf_run.addArgs(&.{ "-varfont", spec });
         }
@@ -644,25 +648,28 @@ pub fn install(b: *std.Build, d: *std.Build.Dependency, options: Options) void {
     if (b.args) |args| run_cmd.addArgs(args);
 }
 
-fn toUpper(arena: std.mem.Allocator, str: []const u8) []const u8 {
-    var buffer = arena.alloc(u8, str.len) catch @panic("OOM");
+fn toUpper(arena: std.mem.Allocator, str: []const u8) ![]const u8 {
+    var buffer = try arena.alloc(u8, str.len);
     for (str, 0..) |c, i| {
         buffer[i] = std.ascii.toUpper(c);
     }
     return buffer;
 }
 
-fn parseZon(T: type, b: *std.Build, comptime path: []const u8) T {
+fn parseZon(T: type, b: *std.Build, comptime path: []const u8) !T {
     var buffer: [1024]u8 = undefined;
-    const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch @panic("Can't open " ++ path);
+    const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch |err| {
+        std.log.err("Can't open {s}", .{path});
+        return err;
+    };
     defer file.close(b.graph.io);
     var reader = file.reader(b.graph.io, &buffer);
-    const data = reader.interface.allocRemainingAlignedSentinel(b.allocator, .unlimited, .of(u8), 0) catch @panic("OOM");
+    const data = try reader.interface.allocRemainingAlignedSentinel(b.allocator, .unlimited, .of(u8), 0);
     var diagnostics: std.zon.parse.Diagnostics = .{};
     return std.zon.parse.fromSliceAlloc(T, b.allocator, data, &diagnostics, .{
         .ignore_unknown_fields = true,
-    }) catch {
+    }) catch |err| {
         std.log.err("{s}: {f}", .{ path, diagnostics });
-        @panic("Failed to parse " ++ path);
+        return err;
     };
 }
