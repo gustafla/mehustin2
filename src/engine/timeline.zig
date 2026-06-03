@@ -76,7 +76,7 @@ pub const State = struct {
     }
 };
 
-const implicit_tags = .{ "never", "always" };
+const implicit_tags: []const []const u8 = &.{ "never", "always" };
 pub const TimelineTag = blk: {
     var field_names: [timeline.tags.len][]const u8 = undefined;
     var num_fields = 0;
@@ -85,6 +85,13 @@ pub const TimelineTag = blk: {
     outer: for (timeline.tags) |tag| {
         for (field_names[0..num_fields]) |name| {
             if (std.mem.eql(u8, tag.name, name)) continue :outer;
+        }
+        for (implicit_tags) |name| {
+            if (std.mem.eql(u8, tag.name, name)) @compileError("Reserved tags: " ++ eblk: {
+                var list = implicit_tags[0];
+                for (implicit_tags[1..]) |t| list = list ++ ", " ++ t;
+                break :eblk list;
+            });
         }
         field_names[num_fields] = tag.name;
         num_fields += 1;
