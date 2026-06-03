@@ -38,37 +38,13 @@ pub const Groups = struct {
     p: union(enum) {
         resolution,
         vec: Vec,
-        // TODO:
-        // sampler: u32,
-        // readonly_storage_texture: u32,
-        // readonly_storage_buffer: u32,
-        // readwrite_storage_texture: u32,
-        // readwrite_storage_buffer: u32,
+        texture_size: []const u8,
+        buffer_elements: []const u8,
     },
-    q: []const union(enum) {
+    q: union(enum) {
         threads,
-        scalar: u32,
+        splat: u32,
     },
-
-    pub fn resolve(self: @This(), config: anytype, threads: Vec) Vec {
-        var groups: Vec = switch (self.p) {
-            .vec => |v| v,
-            .resolution => .{ .x = config.width, .y = config.height },
-            // .sampler => |i|,
-            // .readonly_storage_texture => |i|,
-            // .readonly_storage_buffer => |i|,
-            // .readwrite_storage_texture => |i|,
-            // .readwrite_storage_buffer => |i|,
-        };
-        for (self.q) |q| {
-            groups = groups.divCeil(switch (q) {
-                .threads => threads,
-                .scalar => |n| .{ .x = n, .y = n, .z = n },
-            });
-        }
-
-        return groups;
-    }
 };
 
 pub const Vec = struct {

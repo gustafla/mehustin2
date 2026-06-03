@@ -1018,7 +1018,37 @@ fn computePass(
 
             c.SDL_BindGPUComputePipeline(compute_pass, compute_pipelines[pipeline_index]);
 
-            const groups = dispatch.groups.resolve(script.config.main, dispatch.threads);
+            const groups_p = switch (dispatch.groups.p) {
+                .resolution => .{ .x = script.config.main.width, .y = script.config.main.height },
+                .vec => |v| v,
+                .texture_size => |texture| blk: {
+                    const reference = comptime compiler.parseIndex(texture) catch |e|
+                        @compileError(std.fmt.comptimePrint("{t}", e));
+                    if (reference) |result| {
+                        const targets = @field(config, result.ref);
+                        const p: schema.Shader.Vec = .{
+                            .x = script.config.main.width * targets[result.idx].p,
+                            .y = script.config.main.height * targets[result.idx].p,
+                        };
+                        break :blk p.divCeil(.{
+                            .x = targets[result.idx].q,
+                            .y = targets[result.idx].q,
+                        });
+                    } else {
+                        const idx = @intFromEnum(@field(script.Texture, texture));
+                        break :blk .{ .x = texture_infos[idx].width, .y = texture_infos[idx].height };
+                    }
+                },
+                .buffer_elements => |buffer| blk: {
+                    const idx = @intFromEnum(@field(script.Buffer, buffer));
+                    break :blk .{ .x = buffer_infos[idx].num_elements };
+                },
+            };
+            const groups_q = switch (dispatch.groups.q) {
+                .splat => |n| .{ .x = n, .y = n, .z = n },
+                .threads => dispatch.threads,
+            };
+            const groups = groups_p.divCeil(groups_q);
             c.SDL_DispatchGPUCompute(
                 compute_pass,
                 groups.x,
