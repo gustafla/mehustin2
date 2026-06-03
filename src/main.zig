@@ -298,11 +298,11 @@ pub fn main(init: std.process.Init) !u8 {
 
                     spliterator = std.mem.splitScalar(u8, arg, ',');
                     while (spliterator.next()) |token| {
-                        if (std.meta.stringToEnum(timeline.Tag, token)) |tag| {
-                            tags_override.?.insert(tag);
+                        if (std.meta.stringToEnum(timeline.TimelineTag, token)) |tag| {
+                            tags_override.?.insert(timeline.mapTag(tag));
                         } else {
                             std.log.info("Tags in this build:", .{});
-                            inline for (@typeInfo(timeline.Tag).@"enum".fields) |field| {
+                            inline for (@typeInfo(timeline.TimelineTag).@"enum".fields) |field| {
                                 std.log.info("    {s}", .{field.name});
                             }
                             return error.InvalidTag;

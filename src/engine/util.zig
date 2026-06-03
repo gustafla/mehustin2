@@ -31,8 +31,9 @@ pub fn updateDebugStrings(state: timeline.State, fps_str: *[]const u8, time_str:
         writer.print("t={:.1} ", .{state.time}) catch unreachable;
         var iterator = state.tags.iterator();
         while (iterator.next()) |tag| {
-            const t = state.tag_times.get(tag);
-            writer.print("{t}={:.1} ", .{ tag, t }) catch unreachable;
+            const ttag = timeline.mapTag(tag) orelse continue;
+            const t = state.tag_times.get(ttag);
+            writer.print("{t}={:.1} ", .{ ttag, t }) catch unreachable;
         }
         time_str.* = writer.buffered();
     }

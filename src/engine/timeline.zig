@@ -76,10 +76,12 @@ pub const State = struct {
     }
 };
 
-pub const Tag = blk: {
+const implicit_tags = .{ "never", "always" };
+pub const TimelineTag = blk: {
     var field_names: [timeline.tags.len][]const u8 = undefined;
-
     var num_fields = 0;
+
+    // Add timeline variants
     outer: for (timeline.tags) |tag| {
         for (field_names[0..num_fields]) |name| {
             if (std.mem.eql(u8, tag.name, name)) continue :outer;
@@ -88,18 +90,45 @@ pub const Tag = blk: {
         num_fields += 1;
     }
 
-    const Int = std.math.IntFittingRange(0, @max(num_fields, 2) - 1);
-
+    const TagInt = std.math.IntFittingRange(0, num_fields + implicit_tags.len - 1);
     break :blk @Enum(
-        Int,
+        TagInt,
         .exhaustive,
         field_names[0..num_fields],
-        &std.simd.iota(Int, num_fields),
+        &std.simd.iota(TagInt, num_fields),
     );
 };
 
+pub const Tag = blk: {
+    const info = @typeInfo(TimelineTag).@"enum";
+    var field_names: [info.fields.len + implicit_tags.len][]const u8 = undefined;
+    for (field_names[0..info.fields.len], info.fields) |*name, field| {
+        name.* = field.name;
+    }
+
+    // Add implicit variants
+    for (field_names[info.fields.len..], implicit_tags) |*name, implicit| {
+        name.* = implicit;
+    }
+
+    break :blk @Enum(
+        info.tag_type,
+        .exhaustive,
+        &field_names,
+        &std.simd.iota(info.tag_type, field_names.len),
+    );
+};
+
+pub fn mapTag(tag: anytype) if (@TypeOf(tag) == Tag) ?TimelineTag else Tag {
+    const int = @intFromEnum(tag);
+    if (@TypeOf(tag) == Tag) {
+        if (int >= @typeInfo(TimelineTag).@"enum".fields.len) return null;
+    }
+    return @enumFromInt(int);
+}
+
 pub const TagSet = std.EnumSet(Tag);
-pub const TagVector = std.EnumArray(Tag, f32);
+pub const TagVector = std.EnumArray(TimelineTag, f32);
 
 fn resolveTagTime(comptime i: usize) f32 {
     const tag_raw = timeline.tags[i];
@@ -426,18 +455,19 @@ fn scanNonOverlapping(time_table: []const f32, time: f32) usize {
 }
 
 pub fn resolve(time: f32) State {
-    var tags_active: TagSet = .empty;
+    var tags_active: TagSet = .initOne(.always);
     var tag_times: TagVector = .initFill(-1);
     var tag_times_remaining: TagVector = .initFill(-1);
     var tag_durations: TagVector = .initFill(-1);
 
     if (tags_override) |set| {
-        tags_active = set;
+        tags_active = set.unionWith(.initOne(.always));
         var iterator = set.iterator();
         while (iterator.next()) |tag| {
-            tag_times.set(tag, time);
-            tag_times_remaining.set(tag, duration - time);
-            tag_durations.set(tag, duration);
+            const ttag = mapTag(tag) orelse continue;
+            tag_times.set(ttag, time);
+            tag_times_remaining.set(ttag, duration - time);
+            tag_durations.set(ttag, duration);
         }
     } else for (timeline.tags, tag_table, tag_time_table) |tag_raw, tag, tag_t| {
         const tag_time = time - tag_t;
@@ -445,9 +475,10 @@ pub fn resolve(time: f32) State {
         const tag_time_remaining = tag_duration - tag_time;
         if (tag_time >= 0 and tag_time_remaining > 0) {
             tags_active.insert(tag);
-            tag_times.set(tag, tag_time);
-            tag_times_remaining.set(tag, tag_time_remaining);
-            tag_durations.set(tag, tag_duration);
+            const ttag = mapTag(tag) orelse continue;
+            tag_times.set(ttag, tag_time);
+            tag_times_remaining.set(ttag, tag_time_remaining);
+            tag_durations.set(ttag, tag_duration);
         }
     }
 
