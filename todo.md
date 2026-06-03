@@ -1,5 +1,10 @@
 # High priority
 
+- [ ] Template engine improvements
+  - [ ] Parameter default values (recursively) and argument nulls and trailing omissions
+  - [ ] List null argument elision
+    - if arg == null and default == null and T == []const []const u8, drop the item from the list
+  - [ ] Implement more graphics pipeline variant overrides
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
   - [ ] Render.zon schema changes:
