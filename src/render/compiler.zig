@@ -97,89 +97,44 @@ pub const count_nonnull = struct {
     }
 };
 
-fn applyTemplateSubstitution(
-    comptime val: anytype,
-    comptime params: []const []const u8,
-    comptime args: []const []const u8,
-) @TypeOf(val) {
-    switch (@typeInfo(@TypeOf(val))) {
-        .@"struct" => |sinfo| {
-            var new_val: @TypeOf(val) = undefined;
-            inline for (sinfo.fields) |field| {
-                @field(new_val, field.name) = applyTemplateSubstitution(
-                    @field(val, field.name),
-                    params,
-                    args,
-                );
-            }
-            return new_val;
-        },
-        .@"union" => {
-            return switch (val) {
-                inline else => |inner, tag| @unionInit(
-                    @TypeOf(val),
-                    @tagName(tag),
-                    applyTemplateSubstitution(inner, params, args),
-                ),
-            };
-        },
-        .pointer => |pinfo| {
-            if (pinfo.size != .slice) @compileError("Pointers aren't supported");
-
-            if (pinfo.child == u8) {
-                // Check if string is param, and substitute with arg if so.
-                for (params, args) |param, arg| {
-                    if (std.mem.eql(u8, val, param)) return arg;
-                }
-                return val;
-            } else {
-                var new_array: [val.len]pinfo.child = undefined;
-                for (&new_array, val) |*new_item, item| {
-                    new_item.* = applyTemplateSubstitution(item, params, args);
-                }
-
-                const final_array = new_array;
-                return &final_array;
-            }
-        },
-        else => return val,
-    }
-}
-
-fn getTemplate(
-    comptime config: schema.Render,
-    comptime name: []const u8,
-) schema.template.Template(schema.Render.Pass) {
-    for (config.templates) |t| {
-        if (std.mem.eql(u8, t.name, name)) return t;
-    }
-    @compileError("Template not found: " ++ name);
-}
-
 pub fn unrollPasses(comptime config: schema.Render) []const schema.Render.Pass {
     @setEvalBranchQuota(1024 * config.passes.len * config.templates.len);
     var num_passes = 0;
     for (config.passes) |pass| {
         switch (pass) {
             .unroll => |unroll| {
-                const tmpl = getTemplate(config, unroll.template);
+                const tmpl = schema.template.get(
+                    schema.Render.Pass,
+                    config.templates,
+                    unroll.template,
+                );
                 num_passes += unroll.args.len * tmpl.passes.len;
             },
             else => num_passes += 1,
         }
     }
 
+    @setEvalBranchQuota(10000 * num_passes);
     var unrolled_passes: [num_passes]schema.Render.Pass = undefined;
     var i = 0;
 
     for (config.passes) |pass| {
         switch (pass) {
             .unroll => |unroll| {
-                const template = getTemplate(config, unroll.template);
+                const template = schema.template.get(
+                    schema.Render.Pass,
+                    config.templates,
+                    unroll.template,
+                );
                 const params = template.params;
                 for (unroll.args) |args| {
                     for (template.passes) |tpass| {
-                        unrolled_passes[i] = applyTemplateSubstitution(tpass, params, args);
+                        unrolled_passes[i] = schema.template.applySubstitution(
+                            schema.template.SliceAllocatorComptime,
+                            tpass,
+                            params,
+                            args,
+                        ) catch unreachable;
                         i += 1;
                     }
                 }

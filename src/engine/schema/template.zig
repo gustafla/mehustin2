@@ -19,75 +19,66 @@ pub const Unroll = struct {
         Pass: type,
         templates: []const Template(Pass),
     ) Allocator.Error![]const Pass {
-        const template = for (templates) |template| {
-            if (std.mem.eql(u8, template.name, self.template)) {
-                break template;
-            }
-        } else @panic("No template found!");
+        const template = get(Pass, templates, self.template);
 
+        const slice_alloc: SliceAllocator = .init(allocator);
         var unrolled: std.ArrayList(Pass) = .empty;
         defer unrolled.deinit(allocator);
+
         for (self.args) |args| {
             const passes = try unrolled.addManyAsSlice(allocator, template.passes.len);
-            // Seed the unrolling with top-level template data. Slices point to template.
-            @memcpy(passes, template.passes);
-            // Allocate fresh memory for each pass unrolled.
-            for (passes) |*pass| try deepDupe(allocator, Pass, pass);
-            // Replace strings matching params with given args.
-            for (passes) |*pass| apply(Pass, pass, template.params, args);
+            for (passes, template.passes) |*pass, template_pass| {
+                pass.* = try applySubstitution(slice_alloc, template_pass, template.params, args);
+            }
         }
+
         return unrolled.toOwnedSlice(allocator);
     }
 };
 
-fn deepDupe(
-    allocator: Allocator,
-    T: type,
-    ptr: *T,
-) Allocator.Error!void {
-    switch (@typeInfo(T)) {
-        .@"struct" => |sinfo| inline for (sinfo.fields) |field| {
-            try deepDupe(
-                allocator,
-                field.type,
-                &@field(ptr.*, field.name),
-            );
-        },
-        .@"union" => switch (ptr.*) {
-            inline else => |*inner| try deepDupe(
-                allocator,
-                @TypeOf(inner.*),
-                inner,
-            ),
-        },
-        .pointer => |pinfo| {
-            if (pinfo.size != .slice) @compileError("Pointers aren't supported");
-
-            // Ignore strings. Strings will be substituted.
-            if (pinfo.child == u8) return;
-
-            const slice_dupe = try allocator.dupe(pinfo.child, ptr.*);
-            for (slice_dupe) |*item| {
-                try deepDupe(allocator, pinfo.child, item);
-            }
-            ptr.* = slice_dupe;
-        },
-        else => {},
+pub fn get(
+    Pass: type,
+    templates: []const Template(Pass),
+    name: []const u8,
+) Template(Pass) {
+    for (templates) |t| {
+        if (std.mem.eql(u8, t.name, name)) return t;
+    }
+    if (@inComptime()) {
+        @compileError("Template not found: " ++ name);
+    } else {
+        std.log.err("Template not found: {s}", .{name});
+        @panic("Unresolved template reference");
     }
 }
 
-fn apply(
-    T: type,
-    ptr: *T,
+pub fn applySubstitution(
+    slice_alloc: anytype,
+    val: anytype,
     params: []const []const u8,
     args: []const []const u8,
-) void {
-    switch (@typeInfo(T)) {
-        .@"struct" => |sinfo| inline for (sinfo.fields) |field| {
-            apply(field.type, &@field(ptr.*, field.name), params, args);
+) !@TypeOf(val) {
+    switch (@typeInfo(@TypeOf(val))) {
+        .@"struct" => |sinfo| {
+            var new_val: @TypeOf(val) = undefined;
+            inline for (sinfo.fields) |field| {
+                @field(new_val, field.name) = try applySubstitution(
+                    slice_alloc,
+                    @field(val, field.name),
+                    params,
+                    args,
+                );
+            }
+            return new_val;
         },
-        .@"union" => switch (ptr.*) {
-            inline else => |*inner| apply(@TypeOf(inner.*), inner, params, args),
+        .@"union" => {
+            return switch (val) {
+                inline else => |inner, tag| @unionInit(
+                    @TypeOf(val),
+                    @tagName(tag),
+                    try applySubstitution(slice_alloc, inner, params, args),
+                ),
+            };
         },
         .pointer => |pinfo| {
             if (pinfo.size != .slice) @compileError("Pointers aren't supported");
@@ -95,17 +86,52 @@ fn apply(
             if (pinfo.child == u8) {
                 // Check if string is param, and substitute with arg if so.
                 for (params, args) |param, arg| {
-                    if (std.mem.eql(u8, ptr.*, param)) {
-                        ptr.* = arg;
-                        return;
-                    }
+                    if (std.mem.eql(u8, val, param)) return arg;
                 }
+                return val;
             } else {
-                for (ptr.*) |*item| {
-                    apply(pinfo.child, @constCast(item), params, args);
-                }
+                return try slice_alloc.allocApply(pinfo.child, val, params, args);
             }
         },
-        else => {},
+        else => return val,
     }
 }
+
+pub const SliceAllocator = struct {
+    allocator: Allocator,
+
+    pub fn init(allocator: Allocator) SliceAllocator {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn allocApply(
+        self: *const SliceAllocator,
+        T: type,
+        slice: []const T,
+        params: []const []const u8,
+        args: []const []const u8,
+    ) Allocator.Error![]const T {
+        const new_slice = try self.allocator.alloc(T, slice.len);
+        for (new_slice, slice) |*new_item, item| {
+            new_item.* = try applySubstitution(self, item, params, args);
+        }
+        return new_slice;
+    }
+};
+
+pub const SliceAllocatorComptime = struct {
+    pub fn allocApply(
+        T: type,
+        comptime slice: []const T,
+        comptime params: []const []const u8,
+        comptime args: []const []const u8,
+    ) ![]const T {
+        var new_array: [slice.len]T = undefined;
+        for (&new_array, slice) |*new_item, item| {
+            new_item.* = try applySubstitution(@This(), item, params, args);
+        }
+
+        const final_array = new_array;
+        return &final_array;
+    }
+};
