@@ -85,6 +85,16 @@ pub fn applySubstitution(
                 ),
             };
         },
+        .optional => |oinfo| {
+            if (val) |v| {
+                // Optional strings are allowed to resolve to null
+                if (oinfo.child == []const u8) {
+                    return resolveParam(v, params, args);
+                }
+                return try applySubstitution(slice_alloc, v, params, args);
+            }
+            return null;
+        },
         .pointer => |pinfo| {
             if (pinfo.size != .slice) @compileError("Pointers aren't supported");
 
@@ -147,17 +157,7 @@ pub const SliceAllocatorComptime = struct {
         comptime params: []const Param,
         comptime args: []const ?[]const u8,
     ) ![]const T {
-        var valid_count = 0;
-        for (slice) |item| {
-            if (T == []const u8) {
-                // Null argument elision
-                if (resolveParam(item, params, args) != null) valid_count += 1;
-            } else {
-                valid_count += 1;
-            }
-        }
-
-        var new_array: [valid_count]T = undefined;
+        var new_array: [slice.len]T = undefined;
         var i = 0;
 
         for (slice) |item| {
@@ -173,7 +173,7 @@ pub const SliceAllocatorComptime = struct {
             }
         }
 
-        const final_array = new_array;
+        const final_array = new_array[0..i].*;
         return &final_array;
     }
 };
