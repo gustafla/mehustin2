@@ -31,7 +31,7 @@
     .templates = .{
         .{
             .name = "jimenez_blur_downsample",
-            .params = .{ "TEXTURE_IN", "TEXTURE_OUT" },
+            .params = .{ .{ .name = "TEXTURE_IN" }, .{ .name = "TEXTURE_OUT" } },
             .passes = .{.{ .render = .{
                 .drawcalls = .{.{
                     .pipelines = .{.{ .shader = .{ .stages = .{ .frag = .{
@@ -47,7 +47,7 @@
         },
         .{
             .name = "jimenez_blur_upsample",
-            .params = .{ "TEXTURE_IN", "TEXTURE_OUT" },
+            .params = .{ .{ .name = "TEXTURE_IN" }, .{ .name = "TEXTURE_OUT" } },
             .passes = .{.{ .render = .{
                 .drawcalls = .{.{
                     .pipelines = .{.{

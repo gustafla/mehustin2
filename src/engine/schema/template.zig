@@ -1,17 +1,22 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+pub const Param = struct {
+    name: []const u8,
+    default: ?[]const u8 = null,
+};
+
 pub fn Template(Pass: type) type {
     return struct {
         name: []const u8,
-        params: []const []const u8,
+        params: []const Param,
         passes: []const Pass,
     };
 }
 
 pub const Unroll = struct {
     template: []const u8,
-    args: []const []const []const u8,
+    args: []const []const ?[]const u8,
 
     pub fn unrollAlloc(
         self: Unroll,
@@ -55,8 +60,8 @@ pub fn get(
 pub fn applySubstitution(
     slice_alloc: anytype,
     val: anytype,
-    params: []const []const u8,
-    args: []const []const u8,
+    params: []const Param,
+    args: []const ?[]const u8,
 ) !@TypeOf(val) {
     switch (@typeInfo(@TypeOf(val))) {
         .@"struct" => |sinfo| {
@@ -84,12 +89,15 @@ pub fn applySubstitution(
             if (pinfo.size != .slice) @compileError("Pointers aren't supported");
 
             if (pinfo.child == u8) {
-                // Check if string is param, and substitute with arg if so.
-                for (params, args) |param, arg| {
-                    if (std.mem.eql(u8, val, param)) return arg;
-                }
-                return val;
+                // Single string field
+                return resolveParam(val, params, args) orelse if (@inComptime()) {
+                    @compileError("No match for argument:" ++ val);
+                } else {
+                    std.log.err("No match for argument: {s}", .{val});
+                    @panic("Unresolved template argument");
+                };
             } else {
+                // Delegate slice building to allocators
                 return try slice_alloc.allocApply(pinfo.child, val, params, args);
             }
         },
@@ -108,14 +116,27 @@ pub const SliceAllocator = struct {
         self: *const SliceAllocator,
         T: type,
         slice: []const T,
-        params: []const []const u8,
-        args: []const []const u8,
+        params: []const Param,
+        args: []const ?[]const u8,
     ) Allocator.Error![]const T {
-        const new_slice = try self.allocator.alloc(T, slice.len);
-        for (new_slice, slice) |*new_item, item| {
-            new_item.* = try applySubstitution(self, item, params, args);
+        var list: std.ArrayList(T) = .empty;
+        errdefer list.deinit(self.allocator);
+
+        for (slice) |item| {
+            if (T == []const u8) {
+                // Null argument elision
+                if (resolveParam(item, params, args)) |resolved| {
+                    try list.append(self.allocator, resolved);
+                }
+            } else {
+                try list.append(
+                    self.allocator,
+                    try applySubstitution(self, item, params, args),
+                );
+            }
         }
-        return new_slice;
+
+        return list.toOwnedSlice(self.allocator);
     }
 };
 
@@ -123,15 +144,59 @@ pub const SliceAllocatorComptime = struct {
     pub fn allocApply(
         T: type,
         comptime slice: []const T,
-        comptime params: []const []const u8,
-        comptime args: []const []const u8,
+        comptime params: []const Param,
+        comptime args: []const ?[]const u8,
     ) ![]const T {
-        var new_array: [slice.len]T = undefined;
-        for (&new_array, slice) |*new_item, item| {
-            new_item.* = try applySubstitution(@This(), item, params, args);
+        var valid_count = 0;
+        for (slice) |item| {
+            if (T == []const u8) {
+                // Null argument elision
+                if (resolveParam(item, params, args) != null) valid_count += 1;
+            } else {
+                valid_count += 1;
+            }
+        }
+
+        var new_array: [valid_count]T = undefined;
+        var i = 0;
+
+        for (slice) |item| {
+            if (T == []const u8) {
+                // Null argument elision
+                if (resolveParam(item, params, args)) |resolved| {
+                    new_array[i] = resolved;
+                    i += 1;
+                }
+            } else {
+                new_array[i] = try applySubstitution(@This(), item, params, args);
+                i += 1;
+            }
         }
 
         const final_array = new_array;
         return &final_array;
     }
 };
+
+fn resolveParam(
+    str: []const u8,
+    params: []const Param,
+    args: []const ?[]const u8,
+) ?[]const u8 {
+    for (params, 0..) |param, i| {
+        if (std.mem.eql(u8, str, param.name)) {
+            // A matching positional argument is the first priority.
+            if (i < args.len) if (args[i]) |arg| return arg;
+
+            // Second, recursively resolve the parameter's default.
+            // This either yields the default string itself,
+            // or a value from some other positional argument,
+            // or null if both a matching argument and its default are null.
+            if (param.default) |default| return resolveParam(default, params, args);
+
+            // No arg, no default.
+            return null;
+        }
+    }
+    return str;
+}
