@@ -89,33 +89,24 @@ pub const sum_field = struct {
     }
 };
 
-pub const count_nonnull = struct {
-    const init: usize = 0;
+pub const count = struct {
+    const init = 0;
     const op = sum_field.op;
     pub fn map(field: anytype) usize {
-        return @intFromBool(field != null);
+        const info = @typeInfo(@TypeOf(field));
+        if (info == .optional) return @intFromBool(field != null);
+        return 1;
     }
 };
 
 pub fn unrollPasses(comptime config: schema.Render) []const schema.Render.Pass {
-    @setEvalBranchQuota(1024 * config.passes.len * config.templates.len);
-    var num_passes = 0;
-    for (config.passes) |pass| {
-        switch (pass) {
-            .unroll => |unroll| {
-                const tmpl = schema.template.get(
-                    schema.Render.Pass,
-                    config.templates,
-                    unroll.template,
-                );
-                num_passes += unroll.args.len * tmpl.passes.len;
-            },
-            else => num_passes += 1,
-        }
-    }
+    const max_template = fold(config.templates, &.{ "passes", "len" }, max_field);
+    const max_args = fold(config.passes, &.{ "unroll", "args", "len" }, max_field);
+    const num_unrolls = fold(config.passes, &.{"unroll"}, count);
+    const max_passes = max_template * max_args * num_unrolls + config.passes.len;
+    @setEvalBranchQuota(1024 * max_passes);
 
-    @setEvalBranchQuota(10000 * num_passes);
-    var unrolled_passes: [num_passes]schema.Render.Pass = undefined;
+    var unrolled_passes: [max_passes]schema.Render.Pass = undefined;
     var i = 0;
 
     for (config.passes) |pass| {
@@ -146,7 +137,7 @@ pub fn unrollPasses(comptime config: schema.Render) []const schema.Render.Pass {
         }
     }
 
-    const final_passes = unrolled_passes;
+    const final_passes = unrolled_passes[0..i].*;
     return &final_passes;
 }
 
