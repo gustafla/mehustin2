@@ -1,5 +1,6 @@
 # High priority
 
+- [ ] Implement GLSL // @pass syntax sugar
 - [ ] Implement more graphics pipeline variant overrides
 - [ ] Refactor script resources. Main unit: component. Subunits: zero or more buffers, textures, storage etc.
   - [ ] Refactor text layer system into a single component
