@@ -175,9 +175,11 @@ pub fn build(b: *std.Build) !void {
     const c_write = b.addWriteFiles();
     const stb_image_c = c_write.add("stb_image.c",
         \\#define STB_IMAGE_IMPLEMENTATION
+        \\#define STB_IMAGE_WRITE_IMPLEMENTATION
         \\#define STBI_NO_FAILURE_STRINGS
         \\#define STBI_ASSERT(x)
         \\#include <stb_image.h>
+        \\#include <stb_image_write.h>
         \\
     );
     engine_mod.addIncludePath(stb_dep.path(""));

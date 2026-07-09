@@ -54,8 +54,10 @@ var device: *c.SDL_GPUDevice = undefined;
 const transfer_buffer_alignment = 256;
 
 var update_transfer_buffer: ?*c.SDL_GPUTransferBuffer = null;
+var screenshot_transfer_buffer: ?*c.SDL_GPUTransferBuffer = null;
+var screenshot_texture: ?*c.SDL_GPUTexture = null;
 var samplers: [config.samplers.len]?*c.SDL_GPUSampler = @splat(null);
-var output_buffer: ?*c.SDL_GPUTexture = null;
+var output_texture: ?*c.SDL_GPUTexture = null;
 var graphics_pipelines: [graphics_pipeline_set.keys.len]?*c.SDL_GPUGraphicsPipeline = @splat(null);
 var compute_pipelines: [compute_pipeline_set.keys.len]?*c.SDL_GPUComputePipeline = @splat(null);
 var color_targets: [config.color_targets.len]?*c.SDL_GPUTexture = @splat(null);
@@ -114,7 +116,9 @@ fn resolveVertexFormat(comptime T: type) c.SDL_GPUVertexElementFormat {
 
 pub fn deinit() void {
     if (update_transfer_buffer) |p| c.SDL_ReleaseGPUTransferBuffer(device, p);
-    if (output_buffer) |p| c.SDL_ReleaseGPUTexture(device, p);
+    if (screenshot_transfer_buffer) |p| c.SDL_ReleaseGPUTransferBuffer(device, p);
+    if (screenshot_texture) |p| c.SDL_ReleaseGPUTexture(device, p);
+    if (output_texture) |p| c.SDL_ReleaseGPUTexture(device, p);
     for (depth_targets) |o| if (o) |p| c.SDL_ReleaseGPUTexture(device, p);
     for (color_targets) |o| if (o) |p| c.SDL_ReleaseGPUTexture(device, p);
     for (textures) |o| if (o) |p| c.SDL_ReleaseGPUTexture(device, p);
@@ -683,17 +687,16 @@ pub fn init(
         }));
     }
 
-    output_buffer =
-        try sdlerr(c.SDL_CreateGPUTexture(device, &.{
-            .type = c.SDL_GPU_TEXTURETYPE_2D,
-            .format = resolveTextureFormat(.swapchain),
-            .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-            .width = script.config.main.width,
-            .height = script.config.main.height,
-            .layer_count_or_depth = 1,
-            .num_levels = 1,
-            .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
-        }));
+    output_texture = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+        .type = c.SDL_GPU_TEXTURETYPE_2D,
+        .format = resolveTextureFormat(.swapchain),
+        .usage = c.SDL_GPU_TEXTUREUSAGE_SAMPLER | c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+        .width = script.config.main.width,
+        .height = script.config.main.height,
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+    }));
 
     for (
         config.color_targets,
@@ -899,6 +902,82 @@ fn uploadStorageBuffers(copy_pass: *c.SDL_GPUCopyPass, base: u32) !u32 {
     return offset;
 }
 
+fn downloadScreenshot(cmdbuf: *c.SDL_GPUCommandBuffer) !u32 {
+    // Calculate screenshot size
+    const screenshot_format = c.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    const screenshot_size = c.SDL_CalculateGPUTextureFormatSize(
+        screenshot_format,
+        script.config.main.width,
+        script.config.main.height,
+        1,
+    );
+
+    // Initialize a transfer buffer, lazy
+    if (screenshot_transfer_buffer == null) {
+        screenshot_transfer_buffer = try sdlerr(c.SDL_CreateGPUTransferBuffer(device, &.{
+            .usage = c.SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD,
+            .size = screenshot_size,
+        }));
+    }
+
+    // Initialize a format conversion target texture, lazy
+    if (screenshot_texture == null) {
+        screenshot_texture = try sdlerr(c.SDL_CreateGPUTexture(device, &.{
+            .type = c.SDL_GPU_TEXTURETYPE_2D,
+            .format = screenshot_format,
+            .usage = c.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+            .width = script.config.main.width,
+            .height = script.config.main.height,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = c.SDL_GPU_SAMPLECOUNT_1,
+        }));
+    }
+
+    // Convert swapchain-formatted image to RGBA
+    c.SDL_BlitGPUTexture(cmdbuf, &.{
+        .source = .{
+            .texture = output_texture,
+            .w = script.config.main.width,
+            .h = script.config.main.height,
+        },
+        .destination = .{
+            .texture = screenshot_texture,
+            .x = 0,
+            .y = 0,
+            .w = script.config.main.width,
+            .h = script.config.main.height,
+        },
+        .load_op = c.SDL_GPU_LOADOP_CLEAR,
+        .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
+        .flip_mode = c.SDL_FLIP_NONE,
+        .filter = c.SDL_GPU_FILTER_NEAREST,
+        .cycle = false,
+    });
+
+    // Record a copy pass from GPU memory to transfer buffer
+    const copy_pass = c.SDL_BeginGPUCopyPass(cmdbuf);
+    c.SDL_DownloadFromGPUTexture(copy_pass, &.{
+        .texture = screenshot_texture,
+        .mip_level = 0,
+        .layer = 0,
+        .x = 0,
+        .y = 0,
+        .z = 0,
+        .w = script.config.main.width,
+        .h = script.config.main.height,
+        .d = 1,
+    }, &.{
+        .transfer_buffer = screenshot_transfer_buffer,
+        .offset = 0,
+        .pixels_per_row = script.config.main.width,
+        .rows_per_layer = script.config.main.height,
+    });
+    c.SDL_EndGPUCopyPass(copy_pass);
+
+    return screenshot_size;
+}
+
 inline fn tagsRender(comptime node: anytype, tags: timeline.TagSet) bool {
     const all: timeline.TagSet = comptime blk: {
         var enums: [node.require_all_tags.len]timeline.Tag = undefined;
@@ -1076,7 +1155,7 @@ fn renderPass(
             info.* = .{
                 .texture = if (comptime std.mem.eql(u8, target.texture, "swapchain"))
                     if (parm.buffer_output)
-                        output_buffer
+                        output_texture
                     else
                         parm.swapchain_texture
                 else
@@ -1087,7 +1166,7 @@ fn renderPass(
                 .resolve_texture = if (target.resolve_texture) |resolve|
                     if (comptime std.mem.eql(u8, resolve, "swapchain"))
                         if (parm.buffer_output)
-                            output_buffer
+                            output_texture
                         else
                             parm.swapchain_texture
                     else
@@ -1282,7 +1361,7 @@ pub fn render() !void {
     // Acquire command buffer
     const cmdbuf = try sdlerr(c.SDL_AcquireGPUCommandBuffer(device));
 
-    {
+    const screenshot_size = blk: {
         errdefer _ = c.SDL_CancelGPUCommandBuffer(cmdbuf);
 
         // Acquire swapchain texture
@@ -1375,7 +1454,7 @@ pub fn render() !void {
         if (buffer_output) {
             c.SDL_BlitGPUTexture(cmdbuf, &.{
                 .source = .{
-                    .texture = output_buffer,
+                    .texture = output_texture,
                     .w = script.config.main.width,
                     .h = script.config.main.height,
                 },
@@ -1393,9 +1472,32 @@ pub fn render() !void {
                 .cycle = true,
             });
         }
-    }
 
-    try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+        // Prepare a screenshot when requested
+        if (frame_state.request_screenshot and @hasDecl(script.frame, "screenshot")) {
+            break :blk try downloadScreenshot(cmdbuf);
+        }
+
+        break :blk 0;
+    };
+
+    if (screenshot_size > 0) {
+        // Block the CPU until the GPU finishes everything in this frame
+        const fence = try sdlerr(c.SDL_SubmitGPUCommandBufferAndAcquireFence(cmdbuf));
+        defer c.SDL_ReleaseGPUFence(device, fence);
+        try sdlerr(c.SDL_WaitForGPUFences(device, true, &fence, 1));
+
+        // Read screenshot data back, borrow to script for output
+        const tbp: [*]u8 = @ptrCast(try sdlerr(c.SDL_MapGPUTransferBuffer(
+            device,
+            screenshot_transfer_buffer,
+            false,
+        )));
+        defer c.SDL_UnmapGPUTransferBuffer(device, screenshot_transfer_buffer);
+        try script.frame.screenshot(tbp[0..screenshot_size]);
+    } else {
+        try sdlerr(c.SDL_SubmitGPUCommandBuffer(cmdbuf));
+    }
 }
 
 pub fn pause(state: bool) void {

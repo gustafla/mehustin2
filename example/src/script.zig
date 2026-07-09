@@ -47,6 +47,16 @@ pub const frame = struct {
             .request_screenshot = false,
         };
     }
+
+    pub fn screenshot(rgba_src: []const u8) !void {
+        _ = rgba_src;
+        // This function will be called synchronously if your frame.update
+        // function returns `request_screenshot = true`.
+        //
+        // Screenshots block both the GPU and the main thread, so use them sparingly.
+        // Data in `rgba_src` lives only as long as the function call,
+        // so do not queue or offload the `rgba_src` pointer without memcpy.
+    }
 };
 
 pub const texture = struct {

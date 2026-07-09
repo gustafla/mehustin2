@@ -11,3 +11,4 @@
 
 #include <par_shapes.h>
 #include <stb_image.h>
+#include <stb_image_write.h>
