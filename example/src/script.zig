@@ -36,13 +36,16 @@ pub const Anchor = std.meta.DeclEnum(anchor);
 pub const frame = struct {
     pub var state: timeline.State = undefined;
 
-    pub fn update(time: f32) timeline.State {
+    pub fn update(time: f32) engine.FrameState {
         state = timeline.resolve(time);
 
         // Update strings
         util.updateDebugStrings(state, &string.fps, &string.time);
 
-        return state;
+        return .{
+            .timeline_state = state,
+            .request_screenshot = false,
+        };
     }
 };
 

@@ -13,6 +13,11 @@ pub const timeline = @import("engine/timeline.zig");
 pub const types = @import("engine/types.zig");
 pub const util = @import("engine/util.zig");
 
+pub const FrameState = struct {
+    timeline_state: timeline.State,
+    request_screenshot: bool,
+};
+
 // Compile-time script API assertions
 comptime {
     const script = @import("script");

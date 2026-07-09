@@ -918,7 +918,7 @@ const RenderParameters = struct {
     cmdbuf: *c.SDL_GPUCommandBuffer,
     swapchain_texture: *c.SDL_GPUTexture,
     swapchain_viewport: *const c.SDL_GPUViewport,
-    resolution_match: bool,
+    buffer_output: bool,
 };
 
 fn mapTextureBinding(comptime tb: []const u8) ?*c.SDL_GPUTexture {
@@ -1075,10 +1075,10 @@ fn renderPass(
         inline for (pass.color_targets, &infos) |target, *info| {
             info.* = .{
                 .texture = if (comptime std.mem.eql(u8, target.texture, "swapchain"))
-                    if (parm.resolution_match)
-                        parm.swapchain_texture
-                    else
+                    if (parm.buffer_output)
                         output_buffer
+                    else
+                        parm.swapchain_texture
                 else
                     mapTextureBinding(target.texture),
                 .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 1 },
@@ -1086,10 +1086,10 @@ fn renderPass(
                 .store_op = @intFromEnum(target.store_op),
                 .resolve_texture = if (target.resolve_texture) |resolve|
                     if (comptime std.mem.eql(u8, resolve, "swapchain"))
-                        if (parm.resolution_match)
-                            parm.swapchain_texture
-                        else
+                        if (parm.buffer_output)
                             output_buffer
+                        else
+                            parm.swapchain_texture
                     else
                         mapTextureBinding(resolve)
                 else
@@ -1122,7 +1122,7 @@ fn renderPass(
         if (std.mem.eql(u8, target.texture, "swapchain")) break true;
         if (std.mem.eql(u8, target.resolve_texture orelse "", "swapchain")) break true;
     } else false;
-    if (target_swapchain and parm.resolution_match) {
+    if (target_swapchain and !parm.buffer_output) {
         c.SDL_SetGPUViewport(render_pass, parm.swapchain_viewport);
     }
 
@@ -1314,7 +1314,10 @@ pub fn render() !void {
         const timestamp = time.getTime() * timeline.bps;
 
         // Update script frame
-        const frame_state = script.frame.update(timestamp);
+        const frame_state: engine.FrameState = script.frame.update(timestamp);
+
+        // Determine whether rendering directly to swapchain_texture or via output_buffer
+        const buffer_output = !resolution_match or frame_state.request_screenshot;
 
         // Update dynamic buffers
         if (update_transfer_buffer) |transfer_buffer| {
@@ -1344,7 +1347,7 @@ pub fn render() !void {
         }
 
         // Update frame uniforms
-        const frame_uniforms = frame_state.uniforms();
+        const frame_uniforms = frame_state.timeline_state.uniforms();
         c.SDL_PushGPUVertexUniformData(
             cmdbuf,
             0,
@@ -1365,11 +1368,11 @@ pub fn render() !void {
             .cmdbuf = cmdbuf,
             .swapchain_texture = swapchain_texture,
             .swapchain_viewport = &swapchain_viewport,
-            .resolution_match = resolution_match,
-        }, frame_state.tags);
+            .buffer_output = buffer_output,
+        }, frame_state.timeline_state.tags);
 
         // Blit output_buffer to swapchain when necessary
-        if (!resolution_match) {
+        if (buffer_output) {
             c.SDL_BlitGPUTexture(cmdbuf, &.{
                 .source = .{
                     .texture = output_buffer,
