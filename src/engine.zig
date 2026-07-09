@@ -15,7 +15,7 @@ pub const util = @import("engine/util.zig");
 
 pub const FrameState = struct {
     timeline_state: timeline.State,
-    request_screenshot: bool,
+    request_screenshot: bool = false,
 };
 
 // Compile-time script API assertions
