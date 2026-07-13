@@ -60,7 +60,7 @@ pub const Options = struct {
             .fixed_fps = b.option(
                 f32,
                 "fixed_fps",
-                "Run on a fixed timestep. Causes audio desync.",
+                "Run on a fixed timestep. Causes desync. Implies present_mode=mailbox.",
             ),
         };
     }
@@ -70,7 +70,7 @@ pub const Options = struct {
         options_mod.addOption(bool, "system_sdl", self.system_sdl);
         options_mod.addOption(bool, "render_dynlib", self.render_dynlib);
         options_mod.addOption(bool, "show_fps", self.show_fps);
-        options_mod.addOption(PresentationMode, "present_mode", self.present_mode);
+        options_mod.addOption(PresentationMode, "present_mode", if (self.fixed_fps) |_| .mailbox else self.present_mode);
         options_mod.addOption(?f32, "fixed_fps", self.fixed_fps);
         return options_mod.createModule();
     }

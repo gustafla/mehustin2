@@ -48,7 +48,7 @@
 - [ ] Correct text antialiasing by https://github.com/Chlumsky/msdfgen
 - [ ] Build/vendor glslc instead of system command
 - [ ] Offline render capture improvements
-  - [ ] Make `fixed_fps` imply `present_mode=mailbox`
+  - [X] Make `fixed_fps` imply `present_mode=mailbox`
   - [ ] Keep a queue of N (nproc) captured frames and their transfer buffers
   - [ ] Make the `script.frame.screenshot` function signal the renderer when it's done with the memory
   - [ ] Multi-thread `util.capturePNG` with a thread pool
