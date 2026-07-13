@@ -12,6 +12,7 @@ pub const Options = struct {
     render_dynlib: bool,
     show_fps: bool,
     present_mode: PresentationMode,
+    fixed_fps: ?f32,
 
     pub fn init(b: *std.Build) !@This() {
         // Use standard target options
@@ -56,6 +57,11 @@ pub const Options = struct {
                 "present_mode",
                 "Presentation mode",
             ) orelse .vsync,
+            .fixed_fps = b.option(
+                f32,
+                "fixed_fps",
+                "Run on a fixed timestep. Causes audio desync.",
+            ),
         };
     }
 
@@ -65,6 +71,7 @@ pub const Options = struct {
         options_mod.addOption(bool, "render_dynlib", self.render_dynlib);
         options_mod.addOption(bool, "show_fps", self.show_fps);
         options_mod.addOption(PresentationMode, "present_mode", self.present_mode);
+        options_mod.addOption(?f32, "fixed_fps", self.fixed_fps);
         return options_mod.createModule();
     }
 

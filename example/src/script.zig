@@ -44,19 +44,18 @@ pub const frame = struct {
 
         return .{
             .timeline_state = state,
-            .request_screenshot = false,
+            // Assume fixed timestep == offline rendering, capture all frames.
+            .request_screenshot = engine.options.fixed_fps != null,
         };
     }
 
-    pub fn screenshot(rgba_src: []const u8) !void {
-        _ = rgba_src;
-        // This function will be called synchronously if your frame.update
-        // function returns `request_screenshot = true`.
-        //
-        // Screenshots block both the GPU and the main thread, so use them sparingly.
-        // Data in `rgba_src` lives only as long as the function call,
-        // so do not queue or offload the `rgba_src` pointer without memcpy.
-    }
+    // This function will be called synchronously if your frame.update
+    // function returns `request_screenshot = true`.
+    //
+    // Screenshots block both the GPU and the main thread, so use them sparingly.
+    // Data in `rgba_src` lives only as long as the function call,
+    // so do not queue or offload the `rgba_src` pointer without memcpy.
+    pub const screenshot = util.capturePNG;
 };
 
 pub const texture = struct {

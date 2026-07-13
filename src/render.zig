@@ -1390,6 +1390,7 @@ pub fn render() !void {
         const swapchain_viewport = viewport(swapchain_width, swapchain_height);
 
         // Measure this frame's timestamp after the swapchain acquisition blocked
+        time.stepFrame();
         const timestamp = time.getTime() * timeline.bps;
 
         // Update script frame

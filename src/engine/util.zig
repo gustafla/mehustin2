@@ -3,26 +3,28 @@ const builtin = @import("builtin");
 
 const c = @import("c");
 const options = @import("options");
+const script = @import("script");
 
 const math = @import("math.zig");
 const resource = @import("resource.zig");
 const timeline = @import("timeline.zig");
 
-var frames: u32 = 0;
+var fps_frames: u32 = 0;
 var fps_ticks: u64 = 0;
 var debug_str_buf: [1024]u8 = undefined;
+var captured_frames: std.atomic.Value(u64) = .init(0);
 
 pub fn updateDebugStrings(state: timeline.State, fps_str: *[]const u8, time_str: *[]const u8) void {
     var writer = std.Io.Writer.fixed(&debug_str_buf);
 
     if (options.show_fps) {
-        frames += 1;
+        fps_frames += 1;
         const ticks = c.SDL_GetTicksNS();
         if (fps_ticks + c.SDL_NS_PER_SECOND < ticks) {
-            writer.print("FPS: {}", .{frames}) catch unreachable;
+            writer.print("FPS: {}", .{fps_frames}) catch unreachable;
             fps_str.* = writer.buffered();
             fps_ticks = ticks;
-            frames = 0;
+            fps_frames = 0;
         }
     }
     writer = .fixed(writer.buffer[fps_str.len..]);
@@ -148,4 +150,18 @@ pub fn hslToRgb(hsl: math.Vec3) math.Vec3 {
 
 pub fn aspectRatio(comptime config: anytype) comptime_float {
     return @as(comptime_float, config.width) / @as(comptime_float, config.height);
+}
+
+pub fn capturePNG(rgba_src: []const u8) !void {
+    const frame = captured_frames.fetchAdd(1, .monotonic);
+    var buf: [128]u8 = @splat(0);
+    const filename = std.fmt.bufPrint(&buf, "frame{}.png", .{frame}) catch unreachable;
+    if (c.stbi_write_png(
+        filename.ptr,
+        script.config.main.width,
+        script.config.main.height,
+        4,
+        rgba_src.ptr,
+        script.config.main.width * 4,
+    ) == 0) std.log.err("Failed to save {s}", .{filename});
 }
