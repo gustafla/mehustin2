@@ -35,7 +35,10 @@ void main() {
 }
 #endif // PREFILTER
 
-#if defined(JIMENEZ)
+// Downsample filter based on Jorge Jimenez's dual filter.
+// Upsample filter based on Marius Bjørge's dual filter.
+
+#if defined(DUAL_FILTER)
 void main() {
     vec2 t = 1.0 / textureSize(u_input_texture, 0);
     #if defined(PIXEL_SCALE)
@@ -44,18 +47,7 @@ void main() {
 
     vec4 sum = vec4(0.0);
 
-    #if defined(UP)
-    const float weight = 1.0 / 16.0;
-    sum += texture(u_input_texture, in_uv + vec2(-1.0, 1.0) * t);
-    sum += texture(u_input_texture, in_uv + vec2(0.0, 1.0) * t) * 2.0;
-    sum += texture(u_input_texture, in_uv + vec2(1.0, 1.0) * t);
-    sum += texture(u_input_texture, in_uv + vec2(-1.0, 0.0) * t) * 2.0;
-    sum += texture(u_input_texture, in_uv + vec2(0.0, 0.0) * t) * 4.0;
-    sum += texture(u_input_texture, in_uv + vec2(1.0, 0.0) * t) * 2.0;
-    sum += texture(u_input_texture, in_uv + vec2(-1.0, -1.0) * t);
-    sum += texture(u_input_texture, in_uv + vec2(0.0, -1.0) * t) * 2.0;
-    sum += texture(u_input_texture, in_uv + vec2(1.0, -1.0) * t);
-    #elif defined(DOWN)
+    #if defined(DOWN)
     const float weight = 1.0 / 32.0;
     sum += texture(u_input_texture, in_uv + vec2(-2.0, 2.0) * t);
     sum += texture(u_input_texture, in_uv + vec2(0.0, 2.0) * t) * 2.0;
@@ -70,10 +62,20 @@ void main() {
     sum += texture(u_input_texture, in_uv + vec2(1.0, 1.0) * t) * 4.0;
     sum += texture(u_input_texture, in_uv + vec2(-1.0, -1.0) * t) * 4.0;
     sum += texture(u_input_texture, in_uv + vec2(1.0, -1.0) * t) * 4.0;
+    #elif defined(UP)
+    const float weight = 1.0 / 12.0;
+    sum += texture(u_input_texture, in_uv + vec2(-2.0, 0.0) * t);
+    sum += texture(u_input_texture, in_uv + vec2(2.0, 0.0) * t);
+    sum += texture(u_input_texture, in_uv + vec2(0.0, -2.0) * t);
+    sum += texture(u_input_texture, in_uv + vec2(0.0, 2.0) * t);
+    sum += texture(u_input_texture, in_uv + vec2(-1.0, 1.0) * t) * 2.0;
+    sum += texture(u_input_texture, in_uv + vec2(1.0, 1.0) * t) * 2.0;
+    sum += texture(u_input_texture, in_uv + vec2(-1.0, -1.0) * t) * 2.0;
+    sum += texture(u_input_texture, in_uv + vec2(1.0, -1.0) * t) * 2.0;
     #else
     #error "Either UP or DOWN must be defined"
     #endif // UP elif DOWN
 
     out_color = sum * weight;
 }
-#endif // JIMENEZ
+#endif // DUAL_FILTER

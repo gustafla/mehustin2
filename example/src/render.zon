@@ -9,6 +9,7 @@
         .{ .format = .r16g16b16a16_float, .q = 8 }, // 5, 1:8-res
         .{ .format = .r16g16b16a16_float, .q = 16 }, // 6, 1:16-res
         .{ .format = .r16g16b16a16_float, .q = 32 }, // 7, 1:32-res
+        .{ .format = .r16g16b16a16_float, .q = 64 }, // 7, 1:64-res
     },
     .depth_targets = .{
         .{ .format = .d16_unorm, .sample_count = .@"4" },
@@ -30,13 +31,13 @@
     // Templates. These can be used from the passes-section with `unroll`.
     .templates = .{
         .{
-            .name = "jimenez_blur_downsample",
+            .name = "bloom_downsample",
             .params = .{ .{ .name = "TEXTURE_IN" }, .{ .name = "TEXTURE_OUT" } },
             .passes = .{.{ .render = .{
                 .drawcalls = .{.{
                     .pipelines = .{.{ .shader = .{ .stages = .{ .frag = .{
                         .file = "bloom.glsl",
-                        .params = .{ "jimenez", "down" },
+                        .params = .{ "dual_filter", "down" },
                     } } } }},
                     .fragment_samplers = .{
                         .{ .texture = "TEXTURE_IN", .sampler = "linear" },
@@ -46,14 +47,14 @@
             } }},
         },
         .{
-            .name = "jimenez_blur_upsample",
+            .name = "bloom_upsample",
             .params = .{ .{ .name = "TEXTURE_IN" }, .{ .name = "TEXTURE_OUT" } },
             .passes = .{.{ .render = .{
                 .drawcalls = .{.{
                     .pipelines = .{.{
                         .shader = .{ .stages = .{ .frag = .{
                             .file = "bloom.glsl",
-                            .params = .{ "jimenez", "up", "pixel_scale=2" },
+                            .params = .{ "dual_filter", "up" },
                         } } },
                         .blend_states = .{.{
                             .enable = true,
@@ -110,14 +111,16 @@
         } },
 
         // Bloom jimenez blur filter pyramid
-        .{ .unroll = .{ .template = "jimenez_blur_downsample", .args = .{
+        .{ .unroll = .{ .template = "bloom_downsample", .args = .{
             .{ "color_targets[2]", "color_targets[3]" },
             .{ "color_targets[3]", "color_targets[4]" },
             .{ "color_targets[4]", "color_targets[5]" },
             .{ "color_targets[5]", "color_targets[6]" },
             .{ "color_targets[6]", "color_targets[7]" },
+            .{ "color_targets[7]", "color_targets[8]" },
         } } },
-        .{ .unroll = .{ .template = "jimenez_blur_upsample", .args = .{
+        .{ .unroll = .{ .template = "bloom_upsample", .args = .{
+            .{ "color_targets[8]", "color_targets[7]" },
             .{ "color_targets[7]", "color_targets[6]" },
             .{ "color_targets[6]", "color_targets[5]" },
             .{ "color_targets[5]", "color_targets[4]" },
