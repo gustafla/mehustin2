@@ -8,7 +8,4 @@
     .near = 1,
     .far = 1024,
     .noise_size = 64,
-
-    .blur_radius = 100,
-    .blur_sigma = 30,
 }

@@ -110,7 +110,7 @@
             .color_targets = .{.{ .texture = "color_targets[2]" }},
         } },
 
-        // Bloom jimenez blur filter pyramid
+        // Bloom blur filter pyramid
         .{ .unroll = .{ .template = "bloom_downsample", .args = .{
             .{ "color_targets[2]", "color_targets[3]" },
             .{ "color_targets[3]", "color_targets[4]" },
