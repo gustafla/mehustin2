@@ -282,7 +282,8 @@ pub fn main(init: std.process.Init) !u8 {
         @"duration-override",
     };
     var state: ?Cli = null;
-    var iterator = init.minimal.args.iterate();
+    var iterator = try init.minimal.args.iterateAllocator(arena);
+    defer iterator.deinit();
     _ = iterator.skip();
     outer: while (iterator.next()) |arg| {
         if (state) |s| {
